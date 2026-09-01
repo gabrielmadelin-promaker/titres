@@ -48,21 +48,21 @@ export function valorisationCourante(
 }
 
 /**
- * Pourcentage global du capital de la société cédé, recalculé à la
- * valorisation actuelle (ou à `dateLimite` si fournie) : chaque tranche est
- * repondérée par le ratio (valorisation retenue ÷ valorisation à la date de
- * la tranche). Une tranche ancienne, acquise à une valorisation plus
- * faible, pèse donc davantage une fois le capital revalorisé.
+ * Pourcentage global du capital de la société cédé : simple somme des
+ * pourcentages acquis lors de ses transactions (hypothèse : le nombre de
+ * titres de la société ne change pas dans le temps, donc un % acquis à une
+ * date donnée reste ce même % quelle que soit l'évolution de la
+ * valorisation par la suite).
  */
 export function pourcentageGlobal(
   societe: Societe,
   transactions: Transaction[],
   dateLimite?: string,
 ): number | null {
-  const valorisationRetenue = valorisationCourante(societe, transactions, dateLimite).valeur;
-  if (!valorisationRetenue) return null;
+  const valorisationActuelle = valorisationCourante(societe, transactions, dateLimite).valeur;
+  if (!valorisationActuelle) return null;
 
   return transactions
     .filter((t) => t.cibleId === societe.id && (!dateLimite || t.date <= dateLimite))
-    .reduce((somme, t) => somme + t.pourcentage * (valorisationRetenue / t.valorisation), 0);
+    .reduce((somme, t) => somme + t.pourcentage, 0);
 }

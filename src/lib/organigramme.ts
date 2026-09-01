@@ -32,8 +32,8 @@ const PADDING = 16;
  * Dispose les sociétés en niveaux (une société non détenue est au niveau 0 ;
  * une société détenue est un niveau sous son actionnaire le plus "haut" dans
  * la structure), à la manière d'un organigramme de groupe. Les liens
- * proviennent des participations consolidées (repondérées à la valorisation
- * actuelle), éventuellement limitées à une date.
+ * proviennent des participations consolidées (somme des % acquis),
+ * éventuellement limitées à une date.
  */
 export function calculerOrganigramme(
   societes: Societe[],

@@ -4,9 +4,9 @@ import { valorisationCourante } from "./valorisation";
 export interface Participation {
   acheteurId: string;
   cibleId: string;
-  /** Somme des tranches, chacune repondérée par (valorisation actuelle de la cible ÷ valorisation de la tranche). */
+  /** Somme des pourcentages acquis lors des transactions de ce couple. */
   pourcentageTotal: number;
-  /** Valorisation actuelle de la société cible, servant de base au calcul. */
+  /** Valorisation actuelle de la société détenue (information de contexte). */
   valorisationRetenue: number;
   /** Date de cette valorisation actuelle. */
   dateValorisationRetenue: string | null;
@@ -14,11 +14,11 @@ export interface Participation {
 }
 
 /**
- * Consolide les transactions par couple (actionnaire, société détenue). Le
- * pourcentage détenu est recalculé à la valorisation actuelle de la société
- * cible : chaque tranche est repondérée par (valorisation actuelle ÷
- * valorisation à la date de la tranche), pour rester cohérent avec le %
- * global cédé affiché sur la société.
+ * Consolide les transactions par couple (actionnaire, société détenue) : le
+ * pourcentage détenu est la simple somme des pourcentages acquis (hypothèse :
+ * nombre de titres constant, donc un % acquis reste ce même % quelle que
+ * soit l'évolution de la valorisation). La valorisation actuelle de la
+ * cible est fournie à titre de contexte, pas comme base de calcul du %.
  *
  * Si `dateLimite` est fournie, seules les transactions antérieures ou
  * égales à cette date sont prises en compte — pour reconstituer la
@@ -47,7 +47,6 @@ export function calculerParticipations(
     const vActuelle = valorisationParCible.get(t.cibleId);
     if (!vActuelle) continue;
 
-    const contribution = t.pourcentage * (vActuelle.valeur / t.valorisation);
     const cle = `${t.acheteurId}::${t.cibleId}`;
     const existante = parCouple.get(cle);
 
@@ -55,7 +54,7 @@ export function calculerParticipations(
       parCouple.set(cle, {
         acheteurId: t.acheteurId,
         cibleId: t.cibleId,
-        pourcentageTotal: contribution,
+        pourcentageTotal: t.pourcentage,
         valorisationRetenue: vActuelle.valeur,
         dateValorisationRetenue: vActuelle.date,
         nombreTransactions: 1,
@@ -63,7 +62,7 @@ export function calculerParticipations(
       continue;
     }
 
-    existante.pourcentageTotal += contribution;
+    existante.pourcentageTotal += t.pourcentage;
     existante.nombreTransactions += 1;
   }
 

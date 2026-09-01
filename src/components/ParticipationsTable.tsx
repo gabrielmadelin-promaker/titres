@@ -27,7 +27,7 @@ export function ParticipationsTable({ societes, transactions }: Props) {
         <tr>
           <th>Actionnaire</th>
           <th>Société détenue</th>
-          <th title="Chaque tranche est repondérée par (valorisation actuelle de la cible ÷ valorisation de la tranche).">
+          <th title="Somme des pourcentages acquis lors des transactions de ce couple (nombre de titres supposé constant).">
             % détenu
           </th>
           <th>Valorisation retenue</th>

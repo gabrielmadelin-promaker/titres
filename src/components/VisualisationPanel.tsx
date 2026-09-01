@@ -122,7 +122,7 @@ export function VisualisationPanel({ societes, transactions }: Props) {
         </div>
         <figcaption className="viz-base">
           Structure actionnariale au {formatDate(date)}. Chaque flèche va de la société actionnaire vers la
-          société détenue ; le pourcentage est repondéré à la valorisation actuelle de la société détenue.
+          société détenue ; le pourcentage est la somme des tranches acquises jusqu'à cette date.
         </figcaption>
       </figure>
     </section>
