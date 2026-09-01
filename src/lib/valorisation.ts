@@ -7,26 +7,53 @@ export interface ValorisationCourante {
 }
 
 /**
- * La valorisation retenue pour une société est celle de la transaction la plus
- * récente où cette société est la cible ; à défaut, la valorisation manuelle
- * saisie sur la société ; à défaut, aucune valeur.
+ * La valorisation retenue pour une société est la plus récente parmi :
+ * - les transactions dont elle est la cible ;
+ * - sa valorisation saisie manuellement (à sa date de saisie).
+ * Une valorisation manuelle jamais datée (ancienne donnée) ne sert que de
+ * secours si aucune transaction n'existe.
  */
 export function valorisationCourante(
   societe: Societe,
   transactions: Transaction[],
 ): ValorisationCourante {
-  const transactionsCible = transactions
+  const candidats: ValorisationCourante[] = transactions
     .filter((t) => t.cibleId === societe.id)
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  const derniere = transactionsCible[0];
-  if (derniere) {
-    return { valeur: derniere.valorisation, date: derniere.date, source: "transaction" };
-  }
+    .map((t) => ({ valeur: t.valorisation, date: t.date, source: "transaction" as const }));
 
   if (societe.valorisationInitiale !== null) {
-    return { valeur: societe.valorisationInitiale, date: null, source: "manuelle" };
+    candidats.push({
+      valeur: societe.valorisationInitiale,
+      date: societe.valorisationInitialeDate,
+      source: "manuelle",
+    });
   }
 
-  return { valeur: null, date: null, source: "aucune" };
+  if (candidats.length === 0) {
+    return { valeur: null, date: null, source: "aucune" };
+  }
+
+  return candidats.reduce((plusRecent, courant) =>
+    (courant.date ?? "") > (plusRecent.date ?? "") ? courant : plusRecent,
+  );
+}
+
+/**
+ * Pourcentage global du capital de la société cédé lors de l'ensemble de ses
+ * transactions, ramené à la valorisation actuelle : pour chaque transaction,
+ * le montant investi (valorisation à la date de la transaction × % acquis)
+ * est rapporté à la valorisation la plus récente de la société.
+ */
+export function pourcentageGlobal(
+  societe: Societe,
+  transactions: Transaction[],
+): number | null {
+  const valorisationActuelle = valorisationCourante(societe, transactions).valeur;
+  if (!valorisationActuelle) return null;
+
+  const montantTotal = transactions
+    .filter((t) => t.cibleId === societe.id)
+    .reduce((somme, t) => somme + (t.valorisation * t.pourcentage) / 100, 0);
+
+  return (montantTotal / valorisationActuelle) * 100;
 }

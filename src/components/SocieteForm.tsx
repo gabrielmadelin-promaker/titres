@@ -17,6 +17,9 @@ export function SocieteForm({ onAdd }: Props) {
     onAdd({
       nom: nomPropre,
       valorisationInitiale: valorisation ? Number(valorisation) : null,
+      // Pas de date : cette valorisation de départ ne doit pas l'emporter sur
+      // une transaction déjà existante, seule une modification explicite le peut.
+      valorisationInitialeDate: null,
     });
 
     setNom("");

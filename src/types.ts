@@ -1,8 +1,10 @@
 export interface Societe {
   id: string;
   nom: string;
-  /** Valorisation manuelle, utilisée tant qu'aucune transaction ne concerne cette société. */
+  /** Valorisation saisie manuellement (à la création ou via "Modifier"). */
   valorisationInitiale: number | null;
+  /** Date (ISO yyyy-mm-dd) de la dernière saisie manuelle de valorisation. */
+  valorisationInitialeDate: string | null;
 }
 
 export interface Transaction {

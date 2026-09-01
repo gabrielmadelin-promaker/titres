@@ -224,8 +224,42 @@ h3 {
   border-color: transparent;
 }
 
+.btn-secondary {
+  background: var(--border);
+  color: var(--text-h);
+}
+
 .btn-small {
   padding: 4px 10px;
   font-size: 12px;
   font-weight: 500;
+}
+
+.table td.actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.inline-editor {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.inline-editor input {
+  width: 110px;
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-bg);
+  color: var(--text-h);
+  text-align: right;
+}
+
+.table td.warning {
+  color: var(--danger);
+  font-weight: 600;
 }

@@ -33,6 +33,17 @@ function App() {
     setSocietes((prev) => prev.filter((s) => s.id !== id));
   }
 
+  function changerValorisation(id: string, valeur: number) {
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+    setSocietes((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? { ...s, valorisationInitiale: valeur, valorisationInitialeDate: aujourdHui }
+          : s,
+      ),
+    );
+  }
+
   function ajouterTransaction(transaction: Omit<Transaction, "id">) {
     setTransactions((prev) => [...prev, { ...transaction, id: createId() }]);
   }
@@ -57,6 +68,7 @@ function App() {
             societes={societes}
             transactions={transactions}
             onDelete={supprimerSociete}
+            onChangerValorisation={changerValorisation}
           />
           <h3>Ajouter une société</h3>
           <SocieteForm onAdd={ajouterSociete} />
