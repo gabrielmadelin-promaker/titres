@@ -22,10 +22,10 @@ export interface Organigramme {
   hauteur: number;
 }
 
-export const BOX_W = 176;
-export const BOX_H = 48;
-export const ROW_GAP = 72;
-const COL_GAP = 28;
+export const BOX_W = 148;
+export const BOX_H = 44;
+export const ROW_GAP = 60;
+export const COL_GAP = 20;
 const PADDING = 16;
 
 /**

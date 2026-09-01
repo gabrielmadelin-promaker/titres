@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Societe, Transaction } from "../types";
 import { formatDate, formatPourcentage } from "../lib/format";
-import { BOX_H, BOX_W, ROW_GAP, calculerOrganigramme } from "../lib/organigramme";
+import { BOX_H, BOX_W, COL_GAP, ROW_GAP, calculerOrganigramme } from "../lib/organigramme";
 
 interface Props {
   societes: Societe[];
@@ -73,29 +73,48 @@ export function VisualisationPanel({ societes, transactions }: Props) {
                 const y1 = parent.y + BOX_H;
                 const x2 = enfant.x + BOX_W / 2;
                 const y2 = enfant.y;
-                // Tracé en coude : le segment horizontal (et donc le label)
-                // reste toujours dans la bande vide juste au-dessus de la
-                // société détenue, jamais derrière une boîte intermédiaire.
-                const gutterY = y2 - ROW_GAP / 2;
+
+                let d: string;
+                let labelMx: number;
+                let labelY: number;
+
+                if (enfant.niveau - parent.niveau <= 1) {
+                  // Tracé en coude simple : le segment horizontal (et donc le
+                  // label) reste dans la bande vide juste au-dessus de la
+                  // société détenue.
+                  const gutterY = y2 - ROW_GAP / 2;
+                  d = `M ${x1} ${y1} L ${x1} ${gutterY} L ${x2} ${gutterY} L ${x2} ${y2}`;
+                  labelMx = (x1 + x2) / 2;
+                  labelY = gutterY;
+                } else {
+                  // Lien qui saute au moins un niveau : la portion verticale
+                  // longue est déportée dans le couloir juste à côté de la
+                  // colonne du parent, pour ne jamais passer derrière une
+                  // boîte intermédiaire qui serait alignée sur le trajet.
+                  const laneDroite = parent.x + BOX_W + COL_GAP / 2;
+                  const laneX =
+                    laneDroite + BOX_W / 2 <= organigramme.largeur - 4 ? laneDroite : parent.x - COL_GAP / 2;
+                  const gutter1 = parent.y + BOX_H + ROW_GAP / 2;
+                  const gutterDernier = y2 - ROW_GAP / 2;
+                  d = `M ${x1} ${y1} L ${x1} ${gutter1} L ${laneX} ${gutter1} L ${laneX} ${gutterDernier} L ${x2} ${gutterDernier} L ${x2} ${y2}`;
+                  labelMx = (laneX + x2) / 2;
+                  labelY = gutterDernier;
+                }
+
                 const label = formatPourcentage(lien.pourcentage);
                 const labelWidth = label.length * 6.6 + 8;
                 return (
                   <g key={`${lien.acheteurId}::${lien.cibleId}`}>
-                    <path
-                      d={`M ${x1} ${y1} L ${x1} ${gutterY} L ${x2} ${gutterY} L ${x2} ${y2}`}
-                      className="orgchart-edge-line"
-                      fill="none"
-                      markerEnd="url(#orgchart-arrow)"
-                    />
+                    <path d={d} className="orgchart-edge-line" fill="none" markerEnd="url(#orgchart-arrow)" />
                     <rect
-                      x={(x1 + x2) / 2 - labelWidth / 2}
-                      y={gutterY - 9}
+                      x={labelMx - labelWidth / 2}
+                      y={labelY - 9}
                       width={labelWidth}
                       height={17}
                       rx={3}
                       className="orgchart-edge-label-bg"
                     />
-                    <text x={(x1 + x2) / 2} y={gutterY + 4} textAnchor="middle" className="orgchart-edge-label">
+                    <text x={labelMx} y={labelY + 4} textAnchor="middle" className="orgchart-edge-label">
                       {label}
                     </text>
                   </g>
