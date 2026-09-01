@@ -32,7 +32,7 @@ export function SocietesTable({
           <th>Valorisation actuelle</th>
           <th>Au</th>
           <th>Source</th>
-          <th title="Somme des montants investis (valorisation à la date de chaque transaction × % acquis), rapportée à la valorisation actuelle.">
+          <th title="Chaque tranche est repondérée par (valorisation actuelle ÷ valorisation à la date de la tranche) : une tranche ancienne, acquise moins cher, pèse davantage aujourd'hui.">
             % global cédé
           </th>
           <th aria-label="Actions" />

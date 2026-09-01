@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function ParticipationsTable({ societes, transactions }: Props) {
-  const participations = calculerParticipations(transactions);
+  const participations = calculerParticipations(transactions, societes);
 
   if (participations.length === 0) {
     return <p className="empty">Aucune participation pour le moment.</p>;
@@ -27,7 +27,9 @@ export function ParticipationsTable({ societes, transactions }: Props) {
         <tr>
           <th>Actionnaire</th>
           <th>Société détenue</th>
-          <th>% détenu</th>
+          <th title="Chaque tranche est repondérée par (valorisation actuelle de la cible ÷ valorisation de la tranche).">
+            % détenu
+          </th>
           <th>Valorisation retenue</th>
           <th>Au</th>
         </tr>
@@ -45,8 +47,8 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                 </span>
               )}
             </td>
-            <td className="num">{formatMontant(p.derniereValorisation)}</td>
-            <td>{formatDate(p.derniereDate)}</td>
+            <td className="num">{formatMontant(p.valorisationRetenue)}</td>
+            <td>{p.dateValorisationRetenue ? formatDate(p.dateValorisationRetenue) : "—"}</td>
           </tr>
         ))}
       </tbody>
