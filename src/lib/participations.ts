@@ -19,14 +19,23 @@ export interface Participation {
  * cible : chaque tranche est repondérée par (valorisation actuelle ÷
  * valorisation à la date de la tranche), pour rester cohérent avec le %
  * global cédé affiché sur la société.
+ *
+ * Si `dateLimite` est fournie, seules les transactions antérieures ou
+ * égales à cette date sont prises en compte — pour reconstituer la
+ * répartition du capital telle qu'elle était à cette date.
  */
 export function calculerParticipations(
   transactions: Transaction[],
   societes: Societe[],
+  dateLimite?: string,
 ): Participation[] {
+  const transactionsPertinentes = dateLimite
+    ? transactions.filter((t) => t.date <= dateLimite)
+    : transactions;
+
   const valorisationParCible = new Map<string, { valeur: number; date: string | null }>();
   for (const societe of societes) {
-    const v = valorisationCourante(societe, transactions);
+    const v = valorisationCourante(societe, transactions, dateLimite);
     if (v.valeur !== null) {
       valorisationParCible.set(societe.id, { valeur: v.valeur, date: v.date });
     }
@@ -34,7 +43,7 @@ export function calculerParticipations(
 
   const parCouple = new Map<string, Participation>();
 
-  for (const t of transactions) {
+  for (const t of transactionsPertinentes) {
     const vActuelle = valorisationParCible.get(t.cibleId);
     if (!vActuelle) continue;
 

@@ -12,18 +12,27 @@ export interface ValorisationCourante {
  * - sa valorisation saisie manuellement (à sa date de saisie).
  * Une valorisation manuelle jamais datée (ancienne donnée) ne sert que de
  * secours si aucune transaction n'existe.
+ *
+ * Si `dateLimite` est fournie, seules les transactions et la valorisation
+ * manuelle antérieures ou égales à cette date sont prises en compte — pour
+ * reconstituer la valorisation telle qu'elle était connue à cette date.
  */
 export function valorisationCourante(
   societe: Societe,
   transactions: Transaction[],
+  dateLimite?: string,
 ): ValorisationCourante {
   const candidats: ValorisationCourante[] = transactions
-    .filter((t) => t.cibleId === societe.id)
+    .filter((t) => t.cibleId === societe.id && (!dateLimite || t.date <= dateLimite))
     .map((t) => ({ valeur: t.valorisation, date: t.date, source: "transaction" as const }));
 
-  if (societe.valorisationInitiale !== null) {
+  const manuelleEligible =
+    societe.valorisationInitiale !== null &&
+    (!dateLimite || !societe.valorisationInitialeDate || societe.valorisationInitialeDate <= dateLimite);
+
+  if (manuelleEligible) {
     candidats.push({
-      valeur: societe.valorisationInitiale,
+      valeur: societe.valorisationInitiale as number,
       date: societe.valorisationInitialeDate,
       source: "manuelle",
     });
@@ -40,19 +49,20 @@ export function valorisationCourante(
 
 /**
  * Pourcentage global du capital de la société cédé, recalculé à la
- * valorisation actuelle : chaque tranche est repondérée par le ratio
- * (valorisation actuelle ÷ valorisation à la date de la tranche). Une
- * tranche ancienne, acquise à une valorisation plus faible, pèse donc
- * davantage aujourd'hui qu'au moment de la transaction.
+ * valorisation actuelle (ou à `dateLimite` si fournie) : chaque tranche est
+ * repondérée par le ratio (valorisation retenue ÷ valorisation à la date de
+ * la tranche). Une tranche ancienne, acquise à une valorisation plus
+ * faible, pèse donc davantage une fois le capital revalorisé.
  */
 export function pourcentageGlobal(
   societe: Societe,
   transactions: Transaction[],
+  dateLimite?: string,
 ): number | null {
-  const valorisationActuelle = valorisationCourante(societe, transactions).valeur;
-  if (!valorisationActuelle) return null;
+  const valorisationRetenue = valorisationCourante(societe, transactions, dateLimite).valeur;
+  if (!valorisationRetenue) return null;
 
   return transactions
-    .filter((t) => t.cibleId === societe.id)
-    .reduce((somme, t) => somme + t.pourcentage * (valorisationActuelle / t.valorisation), 0);
+    .filter((t) => t.cibleId === societe.id && (!dateLimite || t.date <= dateLimite))
+    .reduce((somme, t) => somme + t.pourcentage * (valorisationRetenue / t.valorisation), 0);
 }

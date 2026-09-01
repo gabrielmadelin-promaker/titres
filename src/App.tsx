@@ -4,6 +4,7 @@ import { SocieteForm } from "./components/SocieteForm";
 import { SocietesTable } from "./components/SocietesTable";
 import { TransactionForm } from "./components/TransactionForm";
 import { TransactionsTable } from "./components/TransactionsTable";
+import { VisualisationPanel } from "./components/VisualisationPanel";
 import { usePersistentState } from "./lib/storage";
 import type { Societe, Transaction } from "./types";
 
@@ -15,6 +16,7 @@ const ONGLETS = [
   { id: "societes", label: "Sociétés" },
   { id: "transactions", label: "Transactions" },
   { id: "participations", label: "Participations" },
+  { id: "visualisation", label: "Visualisation" },
 ] as const;
 
 type OngletId = (typeof ONGLETS)[number]["id"];
@@ -121,6 +123,10 @@ function App() {
             </p>
             <ParticipationsTable societes={societes} transactions={transactions} />
           </section>
+        )}
+
+        {onglet === "visualisation" && (
+          <VisualisationPanel societes={societes} transactions={transactions} />
         )}
       </main>
     </div>
