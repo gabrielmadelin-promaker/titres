@@ -1,24 +1,16 @@
-import type { Societe, Transaction } from "../types";
-import { valorisationCourante } from "./valorisation";
+import type { Transaction } from "../types";
 
 export interface Participation {
   acheteurId: string;
   cibleId: string;
   /** Somme des pourcentages acquis lors des transactions de ce couple. */
   pourcentageTotal: number;
-  /** Valorisation actuelle de la société détenue (information de contexte). */
-  valorisationRetenue: number;
-  /** Date de cette valorisation actuelle. */
-  dateValorisationRetenue: string | null;
   nombreTransactions: number;
 }
 
 /**
  * Consolide les transactions par couple (actionnaire, société détenue) : le
- * pourcentage détenu est la simple somme des pourcentages acquis (hypothèse :
- * nombre de titres constant, donc un % acquis reste ce même % quelle que
- * soit l'évolution de la valorisation). La valorisation actuelle de la
- * cible est fournie à titre de contexte, pas comme base de calcul du %.
+ * pourcentage détenu est la simple somme des pourcentages acquis.
  *
  * Si `dateLimite` est fournie, seules les transactions antérieures ou
  * égales à cette date sont prises en compte — pour reconstituer la
@@ -26,27 +18,15 @@ export interface Participation {
  */
 export function calculerParticipations(
   transactions: Transaction[],
-  societes: Societe[],
   dateLimite?: string,
 ): Participation[] {
   const transactionsPertinentes = dateLimite
     ? transactions.filter((t) => t.date <= dateLimite)
     : transactions;
 
-  const valorisationParCible = new Map<string, { valeur: number; date: string | null }>();
-  for (const societe of societes) {
-    const v = valorisationCourante(societe, transactions, dateLimite);
-    if (v.valeur !== null) {
-      valorisationParCible.set(societe.id, { valeur: v.valeur, date: v.date });
-    }
-  }
-
   const parCouple = new Map<string, Participation>();
 
   for (const t of transactionsPertinentes) {
-    const vActuelle = valorisationParCible.get(t.cibleId);
-    if (!vActuelle) continue;
-
     const cle = `${t.acheteurId}::${t.cibleId}`;
     const existante = parCouple.get(cle);
 
@@ -55,8 +35,6 @@ export function calculerParticipations(
         acheteurId: t.acheteurId,
         cibleId: t.cibleId,
         pourcentageTotal: t.pourcentage,
-        valorisationRetenue: vActuelle.valeur,
-        dateValorisationRetenue: vActuelle.date,
         nombreTransactions: 1,
       });
       continue;
@@ -67,4 +45,20 @@ export function calculerParticipations(
   }
 
   return [...parCouple.values()];
+}
+
+/**
+ * Pourcentage global du capital de la société cédé : simple somme des
+ * pourcentages acquis lors de ses transactions.
+ */
+export function pourcentageGlobal(
+  societeId: string,
+  transactions: Transaction[],
+  dateLimite?: string,
+): number | null {
+  const pertinentes = transactions.filter(
+    (t) => t.cibleId === societeId && (!dateLimite || t.date <= dateLimite),
+  );
+  if (pertinentes.length === 0) return null;
+  return pertinentes.reduce((somme, t) => somme + t.pourcentage, 0);
 }

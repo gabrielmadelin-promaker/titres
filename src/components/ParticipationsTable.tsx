@@ -1,5 +1,5 @@
 import type { Societe, Transaction } from "../types";
-import { formatDate, formatMontant, formatPourcentage } from "../lib/format";
+import { formatPourcentage } from "../lib/format";
 import { calculerParticipations } from "../lib/participations";
 
 interface Props {
@@ -8,7 +8,7 @@ interface Props {
 }
 
 export function ParticipationsTable({ societes, transactions }: Props) {
-  const participations = calculerParticipations(transactions, societes);
+  const participations = calculerParticipations(transactions);
 
   if (participations.length === 0) {
     return <p className="empty">Aucune participation pour le moment.</p>;
@@ -27,11 +27,9 @@ export function ParticipationsTable({ societes, transactions }: Props) {
         <tr>
           <th>Actionnaire</th>
           <th>Société détenue</th>
-          <th title="Somme des pourcentages acquis lors des transactions de ce couple (nombre de titres supposé constant).">
+          <th title="Somme des pourcentages acquis lors des transactions de ce couple.">
             % détenu
           </th>
-          <th>Valorisation retenue</th>
-          <th>Au</th>
         </tr>
       </thead>
       <tbody>
@@ -47,8 +45,6 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                 </span>
               )}
             </td>
-            <td className="num">{formatMontant(p.valorisationRetenue)}</td>
-            <td>{p.dateValorisationRetenue ? formatDate(p.dateValorisationRetenue) : "—"}</td>
           </tr>
         ))}
       </tbody>

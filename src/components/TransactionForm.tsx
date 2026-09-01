@@ -15,7 +15,6 @@ export function TransactionForm({ societes, onAdd }: Props) {
   const [cibleId, setCibleId] = useState("");
   const [pourcentage, setPourcentage] = useState("");
   const [date, setDate] = useState(today());
-  const [valorisation, setValorisation] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
 
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom));
@@ -45,22 +44,16 @@ export function TransactionForm({ societes, onAdd }: Props) {
       setErreur("Le pourcentage doit être compris entre 0 et 100.");
       return;
     }
-    const val = Number(valorisation);
-    if (!valorisation || val <= 0) {
-      setErreur("La valorisation doit être un nombre positif.");
-      return;
-    }
     if (!date) {
       setErreur("Renseignez une date.");
       return;
     }
 
-    onAdd({ acheteurId, cibleId, pourcentage: pct, date, valorisation: val });
+    onAdd({ acheteurId, cibleId, pourcentage: pct, date });
 
     setAcheteurId("");
     setCibleId("");
     setPourcentage("");
-    setValorisation("");
     setDate(today());
   }
 
@@ -125,19 +118,6 @@ export function TransactionForm({ societes, onAdd }: Props) {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          required
-        />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="tx-valorisation">Valorisation de la cible (€)</label>
-        <input
-          id="tx-valorisation"
-          type="number"
-          min="0"
-          step="1"
-          value={valorisation}
-          onChange={(e) => setValorisation(e.target.value)}
           required
         />
       </div>

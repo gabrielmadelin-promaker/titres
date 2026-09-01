@@ -1,5 +1,5 @@
 import type { Societe, Transaction } from "../types";
-import { formatDate, formatMontant, formatPourcentage } from "../lib/format";
+import { formatDate, formatPourcentage } from "../lib/format";
 
 interface Props {
   transactions: Transaction[];
@@ -24,7 +24,6 @@ export function TransactionsTable({ transactions, societes, onDelete }: Props) {
           <th>Acheteur</th>
           <th>Cible</th>
           <th>%</th>
-          <th>Valorisation cible</th>
           <th aria-label="Actions" />
         </tr>
       </thead>
@@ -35,7 +34,6 @@ export function TransactionsTable({ transactions, societes, onDelete }: Props) {
             <td>{nomDe(t.acheteurId)}</td>
             <td>{nomDe(t.cibleId)}</td>
             <td className="num">{formatPourcentage(t.pourcentage)}</td>
-            <td className="num">{formatMontant(t.valorisation)}</td>
             <td>
               <button
                 type="button"

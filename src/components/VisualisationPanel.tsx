@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Societe, Transaction } from "../types";
-import { formatDate, formatMontant, formatPourcentage } from "../lib/format";
+import { formatDate, formatPourcentage } from "../lib/format";
 import { BOX_H, BOX_W, ROW_GAP, calculerOrganigramme } from "../lib/organigramme";
-import { valorisationCourante } from "../lib/valorisation";
 
 interface Props {
   societes: Societe[];
@@ -29,11 +28,6 @@ export function VisualisationPanel({ societes, transactions }: Props) {
       </section>
     );
   }
-
-  const valorisationDe = (id: string) => {
-    const societe = societes.find((s) => s.id === id);
-    return societe ? valorisationCourante(societe, transactions, date).valeur : null;
-  };
 
   return (
     <section className="panel">
@@ -115,7 +109,6 @@ export function VisualisationPanel({ societes, transactions }: Props) {
                 style={{ left: n.x, top: n.y, width: BOX_W, height: BOX_H }}
               >
                 <div className="orgchart-node-nom">{n.nom}</div>
-                <div className="orgchart-node-valo">{formatMontant(valorisationDe(n.id))}</div>
               </div>
             ))}
           </div>

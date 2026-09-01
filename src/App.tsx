@@ -46,17 +46,6 @@ function App() {
     setSocietes((prev) => prev.filter((s) => s.id !== id));
   }
 
-  function changerValorisation(id: string, valeur: number) {
-    const aujourdHui = new Date().toISOString().slice(0, 10);
-    setSocietes((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? { ...s, valorisationInitiale: valeur, valorisationInitialeDate: aujourdHui }
-          : s,
-      ),
-    );
-  }
-
   function ajouterTransaction(transaction: Omit<Transaction, "id">) {
     setTransactions((prev) => [...prev, { ...transaction, id: createId() }]);
   }
@@ -70,7 +59,7 @@ function App() {
       <header className="app-header">
         <h1>Calcul des titres</h1>
         <p className="subtitle">
-          Suivez la valorisation de vos sociétés et les transactions d'actions entre elles.
+          Suivez les transactions d'actions entre vos sociétés et la structure actionnariale qui en découle.
         </p>
       </header>
 
@@ -91,12 +80,7 @@ function App() {
         {onglet === "societes" && (
           <section className="panel">
             <h2>Sociétés</h2>
-            <SocietesTable
-              societes={societes}
-              transactions={transactions}
-              onDelete={supprimerSociete}
-              onChangerValorisation={changerValorisation}
-            />
+            <SocietesTable societes={societes} transactions={transactions} onDelete={supprimerSociete} />
             <h3>Ajouter une société</h3>
             <SocieteForm onAdd={ajouterSociete} />
           </section>
@@ -118,9 +102,7 @@ function App() {
         {onglet === "participations" && (
           <section className="panel">
             <h2>Participations</h2>
-            <p className="subtitle-panel">
-              Qui détient combien du capital de qui, à quelle valorisation et depuis quand.
-            </p>
+            <p className="subtitle-panel">Qui détient combien du capital de qui.</p>
             <ParticipationsTable societes={societes} transactions={transactions} />
           </section>
         )}

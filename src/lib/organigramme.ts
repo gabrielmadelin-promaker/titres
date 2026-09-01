@@ -23,7 +23,7 @@ export interface Organigramme {
 }
 
 export const BOX_W = 176;
-export const BOX_H = 60;
+export const BOX_H = 48;
 export const ROW_GAP = 72;
 const COL_GAP = 28;
 const PADDING = 16;
@@ -40,7 +40,7 @@ export function calculerOrganigramme(
   transactions: Transaction[],
   dateLimite?: string,
 ): Organigramme {
-  const participations = calculerParticipations(transactions, societes, dateLimite);
+  const participations = calculerParticipations(transactions, dateLimite);
   const liens: LienOrganigramme[] = participations
     .filter((p) => p.pourcentageTotal > 0.001)
     .map((p) => ({ acheteurId: p.acheteurId, cibleId: p.cibleId, pourcentage: p.pourcentageTotal }));
