@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ParticipationsTable } from "./components/ParticipationsTable";
 import { SocieteForm } from "./components/SocieteForm";
 import { SocietesTable } from "./components/SocietesTable";
 import { TransactionForm } from "./components/TransactionForm";
@@ -9,12 +11,21 @@ function createId(): string {
   return crypto.randomUUID();
 }
 
+const ONGLETS = [
+  { id: "societes", label: "Sociétés" },
+  { id: "transactions", label: "Transactions" },
+  { id: "participations", label: "Participations" },
+] as const;
+
+type OngletId = (typeof ONGLETS)[number]["id"];
+
 function App() {
   const [societes, setSocietes] = usePersistentState<Societe[]>("titres.societes", []);
   const [transactions, setTransactions] = usePersistentState<Transaction[]>(
     "titres.transactions",
     [],
   );
+  const [onglet, setOnglet] = useState<OngletId>("societes");
 
   function ajouterSociete(societe: Omit<Societe, "id">) {
     setSocietes((prev) => [...prev, { ...societe, id: createId() }]);
@@ -61,29 +72,56 @@ function App() {
         </p>
       </header>
 
-      <main className="layout">
-        <section className="panel">
-          <h2>Sociétés</h2>
-          <SocietesTable
-            societes={societes}
-            transactions={transactions}
-            onDelete={supprimerSociete}
-            onChangerValorisation={changerValorisation}
-          />
-          <h3>Ajouter une société</h3>
-          <SocieteForm onAdd={ajouterSociete} />
-        </section>
+      <nav className="tabs">
+        {ONGLETS.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            className={`tab ${onglet === o.id ? "tab-active" : ""}`}
+            onClick={() => setOnglet(o.id)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </nav>
 
-        <section className="panel">
-          <h2>Transactions</h2>
-          <TransactionsTable
-            transactions={transactions}
-            societes={societes}
-            onDelete={supprimerTransaction}
-          />
-          <h3>Ajouter une transaction</h3>
-          <TransactionForm societes={societes} onAdd={ajouterTransaction} />
-        </section>
+      <main className="layout-single">
+        {onglet === "societes" && (
+          <section className="panel">
+            <h2>Sociétés</h2>
+            <SocietesTable
+              societes={societes}
+              transactions={transactions}
+              onDelete={supprimerSociete}
+              onChangerValorisation={changerValorisation}
+            />
+            <h3>Ajouter une société</h3>
+            <SocieteForm onAdd={ajouterSociete} />
+          </section>
+        )}
+
+        {onglet === "transactions" && (
+          <section className="panel">
+            <h2>Transactions</h2>
+            <TransactionsTable
+              transactions={transactions}
+              societes={societes}
+              onDelete={supprimerTransaction}
+            />
+            <h3>Ajouter une transaction</h3>
+            <TransactionForm societes={societes} onAdd={ajouterTransaction} />
+          </section>
+        )}
+
+        {onglet === "participations" && (
+          <section className="panel">
+            <h2>Participations</h2>
+            <p className="subtitle-panel">
+              Qui détient combien du capital de qui, à quelle valorisation et depuis quand.
+            </p>
+            <ParticipationsTable societes={societes} transactions={transactions} />
+          </section>
+        )}
       </main>
     </div>
   );
