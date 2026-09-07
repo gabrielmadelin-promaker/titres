@@ -12,6 +12,11 @@ export function formatPourcentage(value: number): string {
   return `${percentFormatter.format(value)} %`;
 }
 
+/** Comme formatPourcentage, sans le symbole % — pour l'organigramme, où il est redondant. */
+export function formatNombre(value: number): string {
+  return percentFormatter.format(value);
+}
+
 export function formatDate(iso: string): string {
   if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00`);

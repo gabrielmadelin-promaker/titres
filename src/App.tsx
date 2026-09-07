@@ -150,7 +150,7 @@ function App() {
           Chargement des données…
         </p>
       ) : (
-        <main className="layout-single">
+        <main className={onglet === "visualisation" ? "layout-wide" : "layout-single"}>
           {onglet === "societes" && (
             <section className="panel">
               <h2>Sociétés</h2>
