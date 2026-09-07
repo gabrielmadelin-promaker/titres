@@ -15,12 +15,14 @@ builder.Host.UseWindowsService();
 // chaîne de connexion et les origines CORS.
 builder.Configuration.AddJsonFile("appsettings.Production.json", optional: true, reloadOnChange: false);
 
+// L'API n'est joignable que depuis le réseau interne (pare-feu), pas
+// exposée sur internet : pas besoin de restreindre les origines CORS, ça
+// n'a fait qu'ajouter un mode de panne (mismatch d'URL) sans bénéfice réel.
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        var origins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
-        policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
 
