@@ -6,10 +6,11 @@
       "type": "npm",
       "script": "build",
       "problemMatcher": ["$tsc"],
-      "group": { "kind": "build", "isDefault": true }
+      "group": { "kind": "build", "isDefault": true },
+      "detail": "Build de dev/test en local. Le build servi sur IIS est produit par la GitHub Action (voir .github/workflows/deploy-iis.yml), pas par cette tâche."
     },
     {
-      "label": "Déployer sur IIS",
+      "label": "Créer le site IIS (une seule fois)",
       "type": "shell",
       "command": "powershell.exe",
       "args": [
@@ -17,11 +18,11 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/deploy/deploy-iis.ps1"
+        "${workspaceFolder}/deploy/setup-iis-site.ps1"
       ],
       "problemMatcher": [],
       "group": "none",
-      "detail": "Build de production puis publication sur le site IIS local (voir deploy/deploy-iis.ps1 pour les paramètres)."
+      "detail": "Crée le pool d'applications et le site IIS (admin requis). À lancer une seule fois sur le serveur, avant de cloner la branche iis-dist dedans."
     }
   ]
 }

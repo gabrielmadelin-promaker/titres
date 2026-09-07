@@ -1,0 +1,42 @@
+name: Publier le build pour IIS
+
+# Build l'application et pousse le contenu de dist/ sur la branche iis-dist.
+# Le serveur IIS n'a besoin que de git : son dossier de site est un clone de
+# cette branche, mis à jour avec un simple `git pull` (bouton "Synchroniser"
+# dans VS Code) — aucun Node.js/npm requis sur le serveur.
+
+on:
+  push:
+    branches:
+      - claude/calcul-des-titres-app-177vc3
+      - claude/calcul-titres-iis-deploy-4oscij
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Pousser dist/ sur la branche iis-dist
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cd dist
+          git init -q
+          git add -A
+          git commit -q -m "Build ${GITHUB_SHA::7} pour IIS"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:iis-dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

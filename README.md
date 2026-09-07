@@ -27,52 +27,51 @@ npm run lint      # oxlint
 
 ## Déploiement sur IIS (depuis VS Code)
 
-L'application se build en fichiers statiques (`dist/`), servis par IIS sans
-aucun contenu dynamique. Le fichier `public/web.config` (recopié dans
-`dist/` à chaque build) configure le document par défaut et le cache des
-assets ; le pool d'applications IIS doit être en **"No Managed Code"**.
+Le serveur IIS n'a besoin **ni de Node.js ni de npm** : le build est fait par
+une GitHub Action, le serveur ne fait que `git pull`.
 
-### Option 1 — tâche VS Code (recommandé)
+- `.github/workflows/deploy-iis.yml` build l'application à chaque push
+  (`npm ci && npm run build`) et pousse le contenu de `dist/` — y compris
+  `web.config` — sur la branche **`iis-dist`**, qui ne contient que ce build.
+- Sur le serveur, le dossier physique du site IIS **est** un clone git de
+  cette branche. Mettre à jour le site = `git pull` dedans (bouton
+  « Synchroniser les modifications » dans VS Code, ou `git pull` en
+  terminal) — rien d'autre à installer.
 
-1. Ouvrez le dossier du dépôt dans VS Code, sur le serveur IIS (ou via
-   Remote - SSH / Remote Desktop si VS Code tourne ailleurs que le serveur).
-2. `Terminal > Run Task... > Déployer sur IIS`, ou `Ctrl+Shift+B` puis
-   choisissez la tâche.
-3. Une console PowerShell **administrateur** s'ouvre et exécute
-   `deploy/deploy-iis.ps1`, qui :
-   - build l'application (`npm ci` + `npm run build`) ;
-   - crée si besoin le pool d'applications et le site IIS
-     `CalculDesTitres` (port `8090` par défaut) ;
-   - publie le contenu de `dist/` dans `C:\inetpub\wwwroot\CalculDesTitres`.
+### 1. Créer le site IIS (une seule fois)
 
-Adaptez le nom du site, le chemin physique ou le port en modifiant les
-paramètres de la tâche dans `.vscode/tasks.json`, ou en lançant le script à
-la main (voir option 2).
-
-### Option 2 — script PowerShell en ligne de commande
-
-Depuis une console PowerShell **"Exécuter en tant qu'administrateur"** sur
-le serveur IIS :
+Sur le serveur, dans une console PowerShell **« Exécuter en tant
+qu'administrateur »** :
 
 ```powershell
-.\deploy\deploy-iis.ps1 `
-  -SiteName "CalculDesTitres" `
-  -PhysicalPath "C:\inetpub\wwwroot\CalculDesTitres" `
-  -Port 8090
+.\deploy\setup-iis-site.ps1
 ```
 
-Prérequis serveur : rôle IIS avec fonctionnalité "Outils de gestion IIS ->
-Scripts et outils de gestion IIS" (module PowerShell `WebAdministration`),
-et Node.js installé pour le build. Voir l'aide intégrée du script
-(`Get-Help .\deploy\deploy-iis.ps1 -Full`) pour le détail des paramètres.
+Crée le pool d'applications `CalculDesTitres` en **"No Managed Code"** (site
+100&nbsp;% statique) et le site IIS sur le port `8090`, pointant vers
+`C:\inetpub\wwwroot\CalculDesTitres`. Peut aussi se lancer depuis VS Code :
+palette de commandes → *Tasks: Run Task* → **Créer le site IIS**. Paramètres
+personnalisables : `-SiteName`, `-PhysicalPath`, `-Port`.
 
-### Option 3 — build local puis copie manuelle
+Prérequis serveur : rôle IIS avec la fonctionnalité "Outils de gestion IIS ->
+Scripts et outils de gestion IIS" (module PowerShell `WebAdministration`).
 
-Si vous préférez builder ailleurs que sur le serveur :
+### 2. Cloner la branche `iis-dist` dans ce dossier
 
-1. `npm install && npm run build` (localement ou en CI).
-2. Copiez le contenu de `dist/` (y compris `web.config`) vers le dossier
-   physique du site IIS.
-3. Dans IIS Manager : créez le site s'il n'existe pas, avec un pool
-   d'applications en `.NET CLR Version` = "No Managed Code", pointant vers
-   ce dossier.
+Dans VS Code, sur le serveur : *Git: Clone*, URL du dépôt, en choisissant la
+branche `iis-dist`, avec `C:\inetpub\wwwroot\CalculDesTitres` comme
+destination — ou en terminal :
+
+```powershell
+git clone --branch iis-dist --single-branch https://github.com/gabrielmadelin-promaker/titres.git C:\inetpub\wwwroot\CalculDesTitres
+```
+
+Le site est en ligne : http://localhost:8090/.
+
+### 3. Mettre à jour le site
+
+À chaque nouvelle version poussée sur la branche de développement (la
+GitHub Action republie automatiquement `iis-dist`) : ouvrez le dossier du
+site dans VS Code et cliquez sur **Synchroniser les modifications** dans le
+panneau Source Control (ou `git pull` en terminal). Pas de build, pas de
+redémarrage IIS nécessaire.
