@@ -3,6 +3,12 @@ using Microsoft.Data.SqlClient;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Sans ça, sc.exe démarre bien le processus mais celui-ci ne répond jamais
+// au gestionnaire de services Windows (protocole SCM) -> erreur 1053
+// "The service did not respond...". Ne change rien quand l'app tourne
+// autrement (dotnet run, console) : le hook ne s'active qu'en tant que service.
+builder.Host.UseWindowsService();
+
 // Chargé explicitement (indépendamment d'ASPNETCORE_ENVIRONMENT) : le
 // service Windows n'a pas de variable d'environnement à configurer, il
 // suffit que ce fichier existe à côté de l'exécutable pour surcharger la
