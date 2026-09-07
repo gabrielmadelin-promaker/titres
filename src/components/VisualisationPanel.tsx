@@ -221,14 +221,11 @@ export function VisualisationPanel({ societes, transactions }: Props) {
 
   const echelleAffichee = echelleImpression ?? echelle;
 
-  if (!societes.some((s) => s.principale)) {
+  if (societes.length === 0) {
     return (
       <section className="panel">
         <h2>Visualisation</h2>
-        <p className="empty">
-          Marquez au moins une société comme « Principale » (onglet Sociétés) pour qu'elle apparaisse dans
-          l'organigramme.
-        </p>
+        <p className="empty">Ajoutez des sociétés pour visualiser la structure actionnariale.</p>
       </section>
     );
   }
@@ -238,7 +235,7 @@ export function VisualisationPanel({ societes, transactions }: Props) {
       <div className="viz-head">
         <div>
           <h2>Visualisation</h2>
-          <p className="lede">Structure actionnariale entre les sociétés principales, à une date donnée.</p>
+          <p className="lede">Structure actionnariale entre les sociétés, à une date donnée.</p>
         </div>
         <button type="button" className="btn btn-secondary btn-small no-print" onClick={() => window.print()}>
           Exporter en PDF (A4)
@@ -341,9 +338,9 @@ export function VisualisationPanel({ societes, transactions }: Props) {
         </div>
         <figcaption className="viz-base">
           Structure actionnariale au {formatDate(date)}. Chaque flèche va de la société actionnaire vers la
-          société détenue (pourcentage cumulé jusqu'à cette date). Seules les sociétés « Principale » sont
-          affichées comme boîtes ; les autres actionnaires apparaissent en liste à côté de la société qu'ils
-          détiennent. Au-delà de 2 actionnaires principaux entrants, les suivants rejoignent aussi cette liste.
+          société détenue (pourcentage cumulé jusqu'à cette date). Pour une société marquée « Principale », au-delà
+          de 2 actionnaires entrants, les suivants (par % décroissant) rejoignent une liste compacte à côté de la
+          boîte plutôt que d'ajouter une flèche.
         </figcaption>
       </figure>
     </section>

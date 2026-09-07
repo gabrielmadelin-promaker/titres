@@ -24,7 +24,7 @@ export interface EntreeGroupee {
   pourcentage: number;
 }
 
-/** Actionnaires d'une société principale non affichés individuellement (voir calculerOrganigramme). */
+/** Actionnaires excédentaires d'une cible principale (au-delà des 2 flèches individuelles), voir calculerOrganigramme. */
 export interface GroupeActionnaires {
   cibleId: string;
   entrees: EntreeGroupee[];
@@ -42,21 +42,29 @@ export const BOX_W = 148;
 export const BOX_H = 44;
 export const ROW_GAP = 60;
 export const COL_GAP = 20;
-export const LARGEUR_GROUPE = 168;
+export const LARGEUR_GROUPE = 205;
 export const GAP_GROUPE = 12;
 export const LIGNE_GROUPE_H = 13;
 const PADDING = 16;
 const MARGE_RETOUR = 70;
 
 /**
- * Dispose les sociétés "principales" en niveaux (une société non détenue par
- * une autre principale est au niveau 0 ; sinon un niveau sous son
- * actionnaire principal le plus "haut"), à la manière d'un organigramme de
- * groupe. Seules les sociétés principales apparaissent comme boîtes : les
- * autres sont regroupées comme actionnaires minoritaires de la société
- * qu'elles détiennent (liste compacte accolée, pas de boîte ni de ligne
- * dédiée) — de même au-delà de 2 actionnaires PRINCIPAUX entrants pour une
- * même cible, les excédentaires rejoignent aussi cette liste.
+ * Dispose TOUTES les sociétés en niveaux (une société non détenue est au
+ * niveau 0 ; une société détenue est un niveau sous son actionnaire le plus
+ * "haut"), à la manière d'un organigramme de groupe — chaque société a sa
+ * boîte, chaque participation sa flèche.
+ *
+ * Seule simplification : au-delà de 2 flèches entrantes sur une société
+ * marquée "principale", les 2 plus importantes (par %) restent tracées
+ * individuellement et les suivantes rejoignent une liste compacte accolée
+ * à la boîte, pour ne pas noyer l'arbre principal sous les participations
+ * minoritaires. Les sociétés non principales n'ont pas cette limite.
+ *
+ * Dans chaque niveau, les sociétés principales sont placées en premier et
+ * alignées à gauche (pas de centrage) : quand l'essentiel de la structure
+ * est une chaîne linéaire de principales, elles restent alignées à la
+ * verticale d'un niveau à l'autre plutôt que de zigzaguer selon la largeur
+ * des autres sociétés du niveau.
  *
  * Les participations croisées (A détient B qui détient A, directement ou
  * via une chaîne) sont détectées et exclues du calcul de niveau — sans ça,
@@ -74,16 +82,11 @@ export function calculerOrganigramme(
     .filter((p) => p.pourcentageTotal > 0.001)
     .map((p) => ({ acheteurId: p.acheteurId, cibleId: p.cibleId, pourcentage: p.pourcentageTotal }));
 
-  const principales = societes.filter((s) => s.principale);
-  const idsPrincipales = new Set(principales.map((s) => s.id));
+  const idsPrincipales = new Set(societes.filter((s) => s.principale).map((s) => s.id));
 
-  const liensEntrePrincipales = tousLiens.filter(
-    (l) => idsPrincipales.has(l.acheteurId) && idsPrincipales.has(l.cibleId),
-  );
-
-  // --- Détection des participations croisées (DFS) ---
+  // --- Détection des participations croisées (DFS, sur tout le graphe) ---
   const adjacence = new Map<string, string[]>();
-  liensEntrePrincipales.forEach((l) => {
+  tousLiens.forEach((l) => {
     if (!adjacence.has(l.acheteurId)) adjacence.set(l.acheteurId, []);
     adjacence.get(l.acheteurId)!.push(l.cibleId);
   });
@@ -102,18 +105,17 @@ export function calculerOrganigramme(
     }
     etat.set(id, "fini");
   }
-  principales.forEach((s) => {
+  societes.forEach((s) => {
     if (!etat.has(s.id)) visiter(s.id);
   });
 
-  const liensPourNiveau = liensEntrePrincipales.filter((l) => !arcsRetour.has(`${l.acheteurId}::${l.cibleId}`));
+  const liensPourNiveau = tousLiens.filter((l) => !arcsRetour.has(`${l.acheteurId}::${l.cibleId}`));
 
-  // Niveau = plus long chemin depuis une principale non détenue par une
-  // autre principale. Sans boucle (grâce au filtrage ci-dessus), converge
-  // en au plus principales.length passes.
+  // Niveau = plus long chemin depuis une société non détenue. Sans boucle
+  // (grâce au filtrage ci-dessus), converge en au plus societes.length passes.
   const niveaux = new Map<string, number>();
-  principales.forEach((s) => niveaux.set(s.id, 0));
-  for (let i = 0; i < principales.length; i++) {
+  societes.forEach((s) => niveaux.set(s.id, 0));
+  for (let i = 0; i < societes.length; i++) {
     let changed = false;
     for (const lien of liensPourNiveau) {
       const niveauParent = niveaux.get(lien.acheteurId) ?? 0;
@@ -126,22 +128,24 @@ export function calculerOrganigramme(
     if (!changed) break;
   }
 
-  // --- Liens dessinés individuellement vs regroupés (indépendant des positions) ---
+  // --- Liens dessinés individuellement vs regroupés ---
+  // Uniquement pour les cibles PRINCIPALES : au-delà de 2 flèches entrantes
+  // (les 2 plus grosses par %), les suivantes rejoignent une liste groupée.
+  // Les cibles non principales n'ont pas de limite : tout est dessiné.
   interface EntreeCandidate {
     acheteurId: string;
     pourcentage: number;
     nom: string;
-    estPrincipale: boolean;
+    retour: boolean;
   }
   const entreesParCible = new Map<string, EntreeCandidate[]>();
   tousLiens.forEach((l) => {
-    if (!idsPrincipales.has(l.cibleId)) return;
     if (!entreesParCible.has(l.cibleId)) entreesParCible.set(l.cibleId, []);
     entreesParCible.get(l.cibleId)!.push({
       acheteurId: l.acheteurId,
       pourcentage: l.pourcentage,
       nom: societeParId.get(l.acheteurId)?.nom ?? "(supprimée)",
-      estPrincipale: idsPrincipales.has(l.acheteurId),
+      retour: arcsRetour.has(`${l.acheteurId}::${l.cibleId}`),
     });
   });
 
@@ -152,33 +156,40 @@ export function calculerOrganigramme(
 
   entreesParCible.forEach((entrees, cibleId) => {
     const triees = [...entrees].sort((a, b) => b.pourcentage - a.pourcentage);
-    const individuelles = triees.filter((e) => e.estPrincipale).slice(0, 2);
-    const idsIndividuelles = new Set(individuelles.map((e) => e.acheteurId));
+    const estPrincipale = idsPrincipales.has(cibleId);
+    const individuelles = estPrincipale ? triees.slice(0, 2) : triees;
 
     individuelles.forEach((e) => {
-      const retour = arcsRetour.has(`${e.acheteurId}::${cibleId}`);
-      if (retour) margeDroite = Math.max(margeDroite, MARGE_RETOUR);
-      liens.push({ acheteurId: e.acheteurId, cibleId, pourcentage: e.pourcentage, retour });
+      if (e.retour) margeDroite = Math.max(margeDroite, MARGE_RETOUR);
+      liens.push({ acheteurId: e.acheteurId, cibleId, pourcentage: e.pourcentage, retour: e.retour });
     });
 
-    const regroupees = triees.filter((e) => !idsIndividuelles.has(e.acheteurId));
-    if (regroupees.length > 0) {
-      const groupe: GroupeActionnaires = { cibleId, entrees: regroupees.map((e) => ({ nom: e.nom, pourcentage: e.pourcentage })) };
+    if (estPrincipale && triees.length > 2) {
+      const regroupees = triees.slice(2);
+      const groupe: GroupeActionnaires = {
+        cibleId,
+        entrees: regroupees.map((e) => ({ nom: e.nom, pourcentage: e.pourcentage })),
+      };
       groupes.push(groupe);
       groupeParCible.set(cibleId, groupe);
     }
   });
 
-  // --- Répartition horizontale : chaque boîte réserve, si besoin, la place
-  //     de sa liste d'actionnaires groupés à sa droite. ---
+  // --- Répartition horizontale : principales d'abord et alignées à gauche
+  //     (pas centrées), pour que la chaîne principale reste verticale d'un
+  //     niveau à l'autre. Chaque boîte réserve, si besoin, la place de sa
+  //     liste d'actionnaires groupés à sa droite. ---
   const parNiveau = new Map<number, Societe[]>();
-  for (const s of principales) {
+  for (const s of societes) {
     const n = niveaux.get(s.id) ?? 0;
     if (!parNiveau.has(n)) parNiveau.set(n, []);
     parNiveau.get(n)!.push(s);
   }
   for (const liste of parNiveau.values()) {
-    liste.sort((a, b) => a.nom.localeCompare(b.nom));
+    liste.sort((a, b) => {
+      if (a.principale !== b.principale) return a.principale ? -1 : 1;
+      return a.nom.localeCompare(b.nom);
+    });
   }
 
   function largeurBoite(id: string): number {
@@ -186,20 +197,11 @@ export function calculerOrganigramme(
   }
 
   const niveauxTries = [...parNiveau.keys()].sort((a, b) => a - b);
-  let largeurMax = 0;
-  niveauxTries.forEach((n) => {
-    const liste = parNiveau.get(n)!;
-    const largeurLigne =
-      liste.reduce((somme, s) => somme + largeurBoite(s.id), 0) + (liste.length - 1) * COL_GAP;
-    largeurMax = Math.max(largeurMax, largeurLigne);
-  });
-
   const noeuds: NoeudOrganigramme[] = [];
+  let largeurContenu = 0;
   niveauxTries.forEach((n) => {
     const liste = parNiveau.get(n)!;
-    const largeurLigne =
-      liste.reduce((somme, s) => somme + largeurBoite(s.id), 0) + (liste.length - 1) * COL_GAP;
-    let curseurX = PADDING + (largeurMax - largeurLigne) / 2;
+    let curseurX = PADDING;
     liste.forEach((s) => {
       const aGroupe = groupeParCible.has(s.id);
       noeuds.push({
@@ -212,9 +214,10 @@ export function calculerOrganigramme(
       });
       curseurX += largeurBoite(s.id) + COL_GAP;
     });
+    largeurContenu = Math.max(largeurContenu, curseurX - COL_GAP);
   });
 
-  const largeur = largeurMax + PADDING * 2 + margeDroite;
+  const largeur = largeurContenu + PADDING * 2 + margeDroite;
   const hauteur =
     niveauxTries.length > 0
       ? PADDING * 2 + niveauxTries.length * BOX_H + (niveauxTries.length - 1) * ROW_GAP
