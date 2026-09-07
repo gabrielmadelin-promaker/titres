@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build",
+      "type": "npm",
+      "script": "build",
+      "problemMatcher": ["$tsc"],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "Déployer sur IIS",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/deploy/deploy-iis.ps1"
+      ],
+      "problemMatcher": [],
+      "group": "none",
+      "detail": "Build de production puis publication sur le site IIS local (voir deploy/deploy-iis.ps1 pour les paramètres)."
+    }
+  ]
+}
