@@ -52,11 +52,12 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Publier l'API en exécutable autonome (win-x64)
+        # Pas de PublishSingleFile : le binaire unique qui embarque tout le
+        # runtime .NET dépasse la limite GitHub de 100 Mo par fichier. En
+        # plusieurs fichiers (TitresApi.exe + ses .dll), aucun ne l'atteint.
         run: >
           dotnet publish server/TitresApi/TitresApi.csproj
           -c Release -r win-x64 --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
       - name: Pousser publish/ sur la branche api-dist
