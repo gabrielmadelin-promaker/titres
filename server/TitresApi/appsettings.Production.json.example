@@ -1,0 +1,9 @@
+{
+  "_comment": "Copiez ce fichier en 'appsettings.Production.json' (sans '.example') à côté de TitresApi.exe sur le serveur, remplissez les valeurs réelles, puis supprimez ce commentaire. Ce fichier n'est jamais commité (voir .gitignore) : il contient le mot de passe SQL.",
+
+  "AllowedOrigins": ["http://NOM-OU-IP-DU-SERVEUR:8090"],
+
+  "ConnectionStrings": {
+    "CalculDesTitres": "Server=10.128.13.13,1433;Database=CalculDesTitres;User Id=titres_app;Password=CHANGE_ME_STRONG_PASSWORD!;TrustServerCertificate=True;"
+  }
+}

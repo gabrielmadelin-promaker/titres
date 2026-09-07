@@ -1,0 +1,48 @@
+-- Base et objets pour l'application "Calcul des titres".
+-- A exécuter sur le serveur SQL Server (HFRBSEDBS027VM / 10.128.13.13),
+-- avec un compte disposant des droits sysadmin / dbcreator, via SQL Server
+-- Management Studio ou sqlcmd.
+--
+-- Remplacez le mot de passe avant d'exécuter, et reportez la même valeur
+-- dans ConnectionStrings:CalculDesTitres de appsettings.Production.json
+-- côté API (voir server/TitresApi/appsettings.Production.json.example).
+
+CREATE DATABASE CalculDesTitres;
+GO
+
+USE CalculDesTitres;
+GO
+
+CREATE TABLE dbo.Societes (
+    Id  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
+    Nom NVARCHAR(200)    NOT NULL
+);
+GO
+
+-- Pas de clé étrangère sur AcheteurId/CibleId : comme dans l'application
+-- d'origine, une société supprimée peut laisser des transactions "orphelines"
+-- (affichées côté appli comme "(supprimée)") plutôt que de bloquer la
+-- suppression ou de la propager en cascade.
+CREATE TABLE dbo.Transactions (
+    Id          UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Transactions PRIMARY KEY DEFAULT NEWID(),
+    AcheteurId  UNIQUEIDENTIFIER NOT NULL,
+    CibleId     UNIQUEIDENTIFIER NOT NULL,
+    Pourcentage DECIMAL(6,2)     NOT NULL CONSTRAINT CK_Transactions_Pourcentage CHECK (Pourcentage > 0 AND Pourcentage <= 100),
+    [Date]      DATE             NOT NULL
+);
+GO
+
+CREATE INDEX IX_Transactions_AcheteurId ON dbo.Transactions (AcheteurId);
+CREATE INDEX IX_Transactions_CibleId ON dbo.Transactions (CibleId);
+GO
+
+-- Compte applicatif dédié (authentification SQL, pas d'accès Windows/AD).
+CREATE LOGIN titres_app WITH PASSWORD = 'CHANGE_ME_STRONG_PASSWORD!';
+GO
+
+CREATE USER titres_app FOR LOGIN titres_app;
+GO
+
+ALTER ROLE db_datareader ADD MEMBER titres_app;
+ALTER ROLE db_datawriter ADD MEMBER titres_app;
+GO

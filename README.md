@@ -13,8 +13,11 @@ structure actionnariale qui en découle.
 - **Visualisation** : organigramme façon document corporate de la structure
   actionnariale.
 
-L'application est 100% côté client : les données sont conservées dans le
-`localStorage` du navigateur, il n'y a pas de backend.
+Architecture : un frontend statique (React/Vite, ce dépôt à la racine),
+servi par IIS, qui appelle une API .NET (`server/TitresApi`) sur le port
+`8091` ; l'API lit/écrit dans une base SQL Server (schéma dans
+`sql/schema.sql`). Les données ne sont plus dans le `localStorage` du
+navigateur — elles sont partagées entre tous les utilisateurs, en base.
 
 ## Développement
 
@@ -25,53 +28,44 @@ npm run build    # build de production (tsc + vite build) -> dossier dist/
 npm run lint      # oxlint
 ```
 
-## Déploiement sur IIS (depuis VS Code)
+Pour développer avec l'API en local :
 
-Le serveur IIS n'a besoin **ni de Node.js ni de npm** : le build est fait par
-une GitHub Action, le serveur ne fait que `git pull`.
-
-- `.github/workflows/deploy-iis.yml` build l'application à chaque push
-  (`npm ci && npm run build`) et pousse le contenu de `dist/` — y compris
-  `web.config` — sur la branche **`iis-dist`**, qui ne contient que ce build.
-- Sur le serveur, le dossier physique du site IIS **est** un clone git de
-  cette branche. Mettre à jour le site = `git pull` dedans (bouton
-  « Synchroniser les modifications » dans VS Code, ou `git pull` en
-  terminal) — rien d'autre à installer.
-
-### 1. Créer le site IIS (une seule fois)
-
-Sur le serveur, dans une console PowerShell **« Exécuter en tant
-qu'administrateur »** :
-
-```powershell
-.\deploy\setup-iis-site.ps1
+```bash
+cd server/TitresApi
+dotnet run       # écoute sur http://localhost:8091
 ```
 
-Crée le pool d'applications `CalculDesTitres` en **"No Managed Code"** (site
-100&nbsp;% statique) et le site IIS sur le port `8090`, pointant vers
-`C:\inetpub\wwwroot\CalculDesTitres`. Peut aussi se lancer depuis VS Code :
-palette de commandes → *Tasks: Run Task* → **Créer le site IIS**. Paramètres
-personnalisables : `-SiteName`, `-PhysicalPath`, `-Port`.
+Créez `server/TitresApi/appsettings.Development.json` (non commité) avec
+une chaîne de connexion vers une base de dev — voir la structure de
+`appsettings.Production.json.example`.
 
-Prérequis serveur : rôle IIS avec la fonctionnalité "Outils de gestion IIS ->
-Scripts et outils de gestion IIS" (module PowerShell `WebAdministration`).
+## Déploiement
 
-### 2. Cloner la branche `iis-dist` dans ce dossier
+Le serveur n'a besoin d'installer **ni Node.js, ni .NET, ni git** : tout est
+buildé par `.github/workflows/deploy-iis.yml` à chaque push, en deux
+branches ne contenant que du build prêt à l'emploi :
 
-Dans VS Code, sur le serveur : *Git: Clone*, URL du dépôt, en choisissant la
-branche `iis-dist`, avec `C:\inetpub\wwwroot\CalculDesTitres` comme
-destination — ou en terminal :
+- **`iis-dist`** : le frontend statique (`dist/`, `web.config` inclus), servi
+  par IIS sur le port `8090`.
+- **`api-dist`** : l'API .NET publiée en exécutable autonome (runtime .NET
+  inclus dedans), à lancer comme service Windows sur le port `8091`.
 
-```powershell
-git clone --branch iis-dist --single-branch https://github.com/gabrielmadelin-promaker/titres.git C:\inetpub\wwwroot\CalculDesTitres
-```
+Marche à suivre détaillée (création de la base SQL, du site IIS, du service
+Windows pour l'API, ouverture des ports pare-feu) : voir le runbook fourni
+séparément. En résumé, sur le serveur :
 
-Le site est en ligne : http://localhost:8090/.
+1. Exécuter `sql/schema.sql` sur le serveur SQL Server (crée la base, les
+   tables, le compte applicatif `titres_app`).
+2. Télécharger et extraire le zip de la branche `iis-dist` dans le dossier
+   du site IIS (port `8090`).
+3. Télécharger et extraire le zip de la branche `api-dist` quelque part sur
+   le serveur, créer `appsettings.Production.json` à côté de `TitresApi.exe`
+   (voir `server/TitresApi/appsettings.Production.json.example`) avec la
+   chaîne de connexion réelle, puis l'enregistrer comme service Windows
+   (port `8091`).
+4. Ouvrir les ports `8090` et `8091` dans le pare-feu Windows si besoin
+   d'un accès depuis d'autres postes.
 
-### 3. Mettre à jour le site
-
-À chaque nouvelle version poussée sur la branche de développement (la
-GitHub Action republie automatiquement `iis-dist`) : ouvrez le dossier du
-site dans VS Code et cliquez sur **Synchroniser les modifications** dans le
-panneau Source Control (ou `git pull` en terminal). Pas de build, pas de
-redémarrage IIS nécessaire.
+Pour une mise à jour : retélécharger les zips `iis-dist`/`api-dist` et
+écraser les fichiers existants ; redémarrer le service Windows de l'API
+après une mise à jour de `api-dist`.

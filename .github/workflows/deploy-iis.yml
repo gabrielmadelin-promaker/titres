@@ -1,9 +1,10 @@
 name: Publier le build pour IIS
 
-# Build l'application et pousse le contenu de dist/ sur la branche iis-dist.
-# Le serveur IIS n'a besoin que de git : son dossier de site est un clone de
-# cette branche, mis à jour avec un simple `git pull` (bouton "Synchroniser"
-# dans VS Code) — aucun Node.js/npm requis sur le serveur.
+# Build l'application et l'API, publie chacune sur sa propre branche :
+# - iis-dist  : contenu de dist/ (frontend statique), servi par IIS.
+# - api-dist  : publication self-contained de l'API .NET (server/TitresApi).
+# Le serveur n'a besoin que de git pour récupérer ces builds déjà prêts —
+# aucun Node.js/npm/dotnet requis dessus.
 
 on:
   push:
@@ -16,7 +17,7 @@ permissions:
   contents: write
 
 jobs:
-  build-and-publish:
+  publish-web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,5 +39,35 @@ jobs:
           git add -A
           git commit -q -m "Build ${GITHUB_SHA::7} pour IIS"
           git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:iis-dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publier l'API en exécutable autonome (win-x64)
+        run: >
+          dotnet publish server/TitresApi/TitresApi.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish
+
+      - name: Pousser publish/ sur la branche api-dist
+        run: |
+          set -e
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          cd publish
+          git init -q
+          git add -A
+          git commit -q -m "Build ${GITHUB_SHA::7} pour l'API"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:api-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
