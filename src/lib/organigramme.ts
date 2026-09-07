@@ -17,6 +17,8 @@ export interface LienOrganigramme {
   pourcentage: number;
   /** Participation croisée détectée (boucle) : tracée différemment, ne détermine pas le niveau. */
   retour: boolean;
+  /** Actionnaire "satellite" positionné à côté de sa cible (même rangée) : tracé à l'horizontale. */
+  lateral: boolean;
 }
 
 export interface EntreeGroupee {
@@ -40,8 +42,9 @@ export interface Organigramme {
 
 export const BOX_W = 148;
 export const BOX_H = 44;
-export const ROW_GAP = 60;
-export const COL_GAP = 20;
+export const ROW_GAP = 70;
+export const COL_GAP = 24;
+export const SPINE_GAP = 40;
 export const LARGEUR_GROUPE = 205;
 export const GAP_GROUPE = 12;
 export const LIGNE_GROUPE_H = 13;
@@ -54,17 +57,18 @@ const MARGE_RETOUR = 70;
  * "haut"), à la manière d'un organigramme de groupe — chaque société a sa
  * boîte, chaque participation sa flèche.
  *
- * Seule simplification : au-delà de 2 flèches entrantes sur une société
- * marquée "principale", les 2 plus importantes (par %) restent tracées
- * individuellement et les suivantes rejoignent une liste compacte accolée
- * à la boîte, pour ne pas noyer l'arbre principal sous les participations
- * minoritaires. Les sociétés non principales n'ont pas cette limite.
+ * L'arbre principal (les sociétés "principale", en général une par niveau
+ * dans une chaîne de holdings) forme une colonne verticale centrale fixe
+ * ("spine"). Les actionnaires non principaux qui n'ont eux-mêmes aucun
+ * actionnaire (des sociétés d'investissement pures, pas d'autres maillons
+ * de la chaîne) gravitent à côté de la société qu'ils détiennent le plus —
+ * sur la même rangée, à gauche du tronc — plutôt que d'être alignés tout en
+ * haut du graphe comme le voudrait un calcul de niveau strict.
  *
- * Dans chaque niveau, les sociétés principales sont placées en premier et
- * alignées à gauche (pas de centrage) : quand l'essentiel de la structure
- * est une chaîne linéaire de principales, elles restent alignées à la
- * verticale d'un niveau à l'autre plutôt que de zigzaguer selon la largeur
- * des autres sociétés du niveau.
+ * Seule autre simplification : au-delà de 2 flèches entrantes sur une
+ * société marquée "principale", les 2 plus importantes (par %) restent
+ * tracées individuellement et les suivantes rejoignent une liste compacte
+ * accolée à la boîte. Les sociétés non principales n'ont pas cette limite.
  *
  * Les participations croisées (A détient B qui détient A, directement ou
  * via une chaîne) sont détectées et exclues du calcul de niveau — sans ça,
@@ -111,17 +115,18 @@ export function calculerOrganigramme(
 
   const liensPourNiveau = tousLiens.filter((l) => !arcsRetour.has(`${l.acheteurId}::${l.cibleId}`));
 
-  // Niveau = plus long chemin depuis une société non détenue. Sans boucle
-  // (grâce au filtrage ci-dessus), converge en au plus societes.length passes.
-  const niveaux = new Map<string, number>();
-  societes.forEach((s) => niveaux.set(s.id, 0));
+  // Niveau "naturel" = plus long chemin depuis une société non détenue. Sans
+  // boucle (grâce au filtrage ci-dessus), converge en au plus societes.length
+  // passes.
+  const niveauxBase = new Map<string, number>();
+  societes.forEach((s) => niveauxBase.set(s.id, 0));
   for (let i = 0; i < societes.length; i++) {
     let changed = false;
     for (const lien of liensPourNiveau) {
-      const niveauParent = niveaux.get(lien.acheteurId) ?? 0;
-      const niveauEnfant = niveaux.get(lien.cibleId) ?? 0;
+      const niveauParent = niveauxBase.get(lien.acheteurId) ?? 0;
+      const niveauEnfant = niveauxBase.get(lien.cibleId) ?? 0;
       if (niveauParent + 1 > niveauEnfant) {
-        niveaux.set(lien.cibleId, niveauParent + 1);
+        niveauxBase.set(lien.cibleId, niveauParent + 1);
         changed = true;
       }
     }
@@ -161,7 +166,7 @@ export function calculerOrganigramme(
 
     individuelles.forEach((e) => {
       if (e.retour) margeDroite = Math.max(margeDroite, MARGE_RETOUR);
-      liens.push({ acheteurId: e.acheteurId, cibleId, pourcentage: e.pourcentage, retour: e.retour });
+      liens.push({ acheteurId: e.acheteurId, cibleId, pourcentage: e.pourcentage, retour: e.retour, lateral: false });
     });
 
     if (estPrincipale && triees.length > 2) {
@@ -175,49 +180,125 @@ export function calculerOrganigramme(
     }
   });
 
-  // --- Répartition horizontale : principales d'abord et alignées à gauche
-  //     (pas centrées), pour que la chaîne principale reste verticale d'un
-  //     niveau à l'autre. Chaque boîte réserve, si besoin, la place de sa
-  //     liste d'actionnaires groupés à sa droite. ---
-  const parNiveau = new Map<number, Societe[]>();
-  for (const s of societes) {
-    const n = niveaux.get(s.id) ?? 0;
-    if (!parNiveau.has(n)) parNiveau.set(n, []);
-    parNiveau.get(n)!.push(s);
+  // --- Repérage des "satellites" : sociétés non principales sans aucun
+  //     actionnaire (racines) dont la relation la plus significative
+  //     effectivement tracée rejoint une cible à un autre niveau. On les
+  //     rapproche visuellement de cette cible (même rangée, à gauche du
+  //     tronc) plutôt que de les laisser tout en haut du graphe.
+  const entrants = new Map<string, number>();
+  liensPourNiveau.forEach((l) => entrants.set(l.cibleId, (entrants.get(l.cibleId) ?? 0) + 1));
+
+  const satelliteDeCible = new Map<string, string>();
+  societes.forEach((s) => {
+    if (idsPrincipales.has(s.id) || (entrants.get(s.id) ?? 0) > 0) return;
+    const sesLiens = liens.filter((l) => l.acheteurId === s.id && !l.retour);
+    if (sesLiens.length === 0) return;
+    const principal = sesLiens.reduce((a, b) => (b.pourcentage > a.pourcentage ? b : a));
+    satelliteDeCible.set(s.id, principal.cibleId);
+  });
+
+  liens.forEach((l) => {
+    if (satelliteDeCible.get(l.acheteurId) === l.cibleId) l.lateral = true;
+  });
+
+  const niveauxFinal = new Map<string, number>();
+  societes.forEach((s) => {
+    const cible = satelliteDeCible.get(s.id);
+    niveauxFinal.set(s.id, cible ? (niveauxBase.get(cible) ?? 0) : (niveauxBase.get(s.id) ?? 0));
+  });
+
+  // --- Répartition par niveau : les sociétés du tronc (principales et
+  //     autres sociétés "de hiérarchie") sont centrées sur une colonne
+  //     verticale fixe ("spine") ; les satellites de ce niveau sont placés
+  //     à sa gauche, adjacents. ---
+  interface Rangee {
+    tronc: Societe[];
+    satellites: Societe[];
   }
-  for (const liste of parNiveau.values()) {
-    liste.sort((a, b) => {
+  const parNiveau = new Map<number, Rangee>();
+  for (const s of societes) {
+    const n = niveauxFinal.get(s.id) ?? 0;
+    if (!parNiveau.has(n)) parNiveau.set(n, { tronc: [], satellites: [] });
+    const rangee = parNiveau.get(n)!;
+    if (satelliteDeCible.has(s.id)) rangee.satellites.push(s);
+    else rangee.tronc.push(s);
+  }
+  parNiveau.forEach(({ tronc, satellites }) => {
+    tronc.sort((a, b) => {
       if (a.principale !== b.principale) return a.principale ? -1 : 1;
       return a.nom.localeCompare(b.nom);
     });
-  }
+    satellites.sort((a, b) => a.nom.localeCompare(b.nom));
+  });
 
   function largeurBoite(id: string): number {
     return BOX_W + (groupeParCible.has(id) ? GAP_GROUPE + LARGEUR_GROUPE : 0);
   }
 
+  let largeurSatellitesMax = 0;
+  parNiveau.forEach(({ satellites }) => {
+    if (satellites.length === 0) return;
+    const l = satellites.reduce((s, n) => s + largeurBoite(n.id) + COL_GAP, 0);
+    largeurSatellitesMax = Math.max(largeurSatellitesMax, l);
+  });
+  const spineX = PADDING + largeurSatellitesMax + (largeurSatellitesMax > 0 ? SPINE_GAP : 0);
+  const centreSpine = spineX + BOX_W / 2;
+
   const niveauxTries = [...parNiveau.keys()].sort((a, b) => a - b);
   const noeuds: NoeudOrganigramme[] = [];
-  let largeurContenu = 0;
+  let bordDroiteMax = spineX + BOX_W;
+
   niveauxTries.forEach((n) => {
-    const liste = parNiveau.get(n)!;
-    let curseurX = PADDING;
-    liste.forEach((s) => {
+    const { tronc, satellites } = parNiveau.get(n)!;
+    const y = PADDING + n * (BOX_H + ROW_GAP);
+
+    // Satellites : de droite (collé au tronc) à gauche.
+    let curseurSatelliteX = spineX - SPINE_GAP;
+    const positionsSatellites = new Array<number>(satellites.length);
+    for (let i = satellites.length - 1; i >= 0; i--) {
+      curseurSatelliteX -= largeurBoite(satellites[i].id);
+      positionsSatellites[i] = curseurSatelliteX;
+      curseurSatelliteX -= COL_GAP;
+    }
+    satellites.forEach((s, i) => {
+      const aGroupe = groupeParCible.has(s.id);
+      noeuds.push({
+        id: s.id,
+        nom: s.nom,
+        niveau: n,
+        x: positionsSatellites[i],
+        y,
+        largeurGroupe: aGroupe ? LARGEUR_GROUPE : 0,
+      });
+    });
+
+    // Tronc : centré sur la colonne verticale fixe. Le centrage porte
+    // uniquement sur la largeur des boîtes elles-mêmes (BOX_W) — une liste
+    // groupée est un panneau accolé au bord droit d'une boîte, pas une boîte
+    // supplémentaire, et ne doit donc pas décaler la boîte vers la gauche
+    // (sinon elle empiète sur les satellites, positionnés en supposant que
+    // le bord gauche du tronc est bien à spineX).
+    const largeurCentrage = tronc.length * BOX_W + Math.max(0, tronc.length - 1) * COL_GAP;
+    let curseurX = centreSpine - largeurCentrage / 2;
+    tronc.forEach((s) => {
       const aGroupe = groupeParCible.has(s.id);
       noeuds.push({
         id: s.id,
         nom: s.nom,
         niveau: n,
         x: curseurX,
-        y: PADDING + n * (BOX_H + ROW_GAP),
+        y,
         largeurGroupe: aGroupe ? LARGEUR_GROUPE : 0,
       });
-      curseurX += largeurBoite(s.id) + COL_GAP;
+      const largeur = largeurBoite(s.id);
+      bordDroiteMax = Math.max(bordDroiteMax, curseurX + largeur);
+      // On avance du plein encombrement (boîte + éventuelle liste groupée)
+      // pour ne jamais chevaucher la boîte suivante sur la même rangée.
+      curseurX += largeur + COL_GAP;
     });
-    largeurContenu = Math.max(largeurContenu, curseurX - COL_GAP);
   });
 
-  const largeur = largeurContenu + PADDING * 2 + margeDroite;
+  const largeur = bordDroiteMax + PADDING + margeDroite;
   const hauteur =
     niveauxTries.length > 0
       ? PADDING * 2 + niveauxTries.length * BOX_H + (niveauxTries.length - 1) * ROW_GAP
