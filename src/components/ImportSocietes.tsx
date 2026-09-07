@@ -1,10 +1,10 @@
 import { useState } from "react";
 import type { Societe } from "../types";
-import { lireFeuilleXlsx, texteColonne } from "../lib/xlsxImport";
+import { booleenColonne, lireFeuilleXlsx, texteColonne } from "../lib/xlsxImport";
 
 interface Props {
   societes: Societe[];
-  onImport: (noms: string[]) => Promise<{ ajoutees: number; erreurs: string[] }>;
+  onImport: (societes: Omit<Societe, "id">[]) => Promise<{ ajoutees: number; erreurs: string[] }>;
 }
 
 export function ImportSocietes({ societes, onImport }: Props) {
@@ -25,7 +25,7 @@ export function ImportSocietes({ societes, onImport }: Props) {
       const lignes = await lireFeuilleXlsx(fichier);
       const existants = new Set(societes.map((s) => s.nom.trim().toLowerCase()));
       const vus = new Set<string>();
-      const aAjouter: string[] = [];
+      const aAjouter: Omit<Societe, "id">[] = [];
       const ignorees: string[] = [];
 
       lignes.forEach((ligne, i) => {
@@ -37,7 +37,8 @@ export function ImportSocietes({ societes, onImport }: Props) {
           return;
         }
         vus.add(cle);
-        aAjouter.push(nom);
+        const principale = booleenColonne(ligne, "principale");
+        aAjouter.push({ nom, principale });
       });
 
       if (aAjouter.length === 0 && ignorees.length === 0) {
@@ -61,7 +62,10 @@ export function ImportSocietes({ societes, onImport }: Props) {
         {enCours ? "Import en cours…" : "Importer depuis un fichier Excel (.xlsx)"}
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
-      <p className="import-hint">Colonne attendue : « Nom ».</p>
+      <p className="import-hint">
+        Colonnes : « Nom » (requise), « Principale » (facultative — Oui/1/x pour une société affichée dans
+        l'arbre central de l'organigramme).
+      </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (
         <ul className="import-errors">

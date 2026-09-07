@@ -222,6 +222,25 @@ h3 {
   outline-offset: 1px;
 }
 
+.form-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.form-field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.form-field-checkbox input {
+  width: auto;
+  padding: 0;
+}
+
 .form-error {
   grid-column: 1 / -1;
   color: var(--danger);
@@ -367,6 +386,11 @@ h3 {
   fill: none;
 }
 
+.orgchart-edge-line-retour {
+  stroke-dasharray: 3 3;
+  opacity: 0.85;
+}
+
 .orgchart-edge-label-bg {
   fill: var(--panel-bg);
 }
@@ -399,6 +423,38 @@ h3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+}
+
+.orgchart-groupe {
+  position: absolute;
+  border-left: 2px solid var(--org-ink);
+  padding-left: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.orgchart-groupe-ligne {
+  display: flex;
+  gap: 5px;
+  font-size: 9.5px;
+  line-height: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.orgchart-groupe-pct {
+  font-weight: 700;
+  color: var(--org-ink);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.orgchart-groupe-nom {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .viz-base {

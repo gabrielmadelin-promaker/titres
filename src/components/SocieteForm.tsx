@@ -7,15 +7,17 @@ interface Props {
 
 export function SocieteForm({ onAdd }: Props) {
   const [nom, setNom] = useState("");
+  const [principale, setPrincipale] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const nomPropre = nom.trim();
     if (!nomPropre) return;
 
-    onAdd({ nom: nomPropre });
+    onAdd({ nom: nomPropre, principale });
 
     setNom("");
+    setPrincipale(false);
   }
 
   return (
@@ -30,6 +32,17 @@ export function SocieteForm({ onAdd }: Props) {
           placeholder="Ex : Acme SAS"
           required
         />
+      </div>
+      <div className="form-field form-field-checkbox">
+        <label htmlFor="societe-principale">
+          <input
+            id="societe-principale"
+            type="checkbox"
+            checked={principale}
+            onChange={(e) => setPrincipale(e.target.checked)}
+          />
+          Société principale (boîte dans l'organigramme central)
+        </label>
       </div>
       <button type="submit" className="btn btn-primary">
         Ajouter la société

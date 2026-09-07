@@ -50,6 +50,18 @@ function App() {
     }
   }
 
+  async function basculerPrincipale(id: string, principale: boolean) {
+    // Optimiste : la table doit réagir immédiatement au clic sur la case.
+    setSocietes((prev) => prev.map((s) => (s.id === id ? { ...s, principale } : s)));
+    try {
+      await api.modifierSocietePrincipale(id, principale);
+      setErreur(null);
+    } catch (e) {
+      setSocietes((prev) => prev.map((s) => (s.id === id ? { ...s, principale: !principale } : s)));
+      setErreur(`Impossible de modifier la société : ${messageErreur(e)}`);
+    }
+  }
+
   async function supprimerSociete(id: string) {
     const utilisee = transactions.some((t) => t.acheteurId === id || t.cibleId === id);
     if (
@@ -89,14 +101,14 @@ function App() {
     }
   }
 
-  async function importerSocietes(noms: string[]) {
+  async function importerSocietes(candidats: Omit<Societe, "id">[]) {
     const creees: Societe[] = [];
     const erreursImport: string[] = [];
-    for (const nom of noms) {
+    for (const candidat of candidats) {
       try {
-        creees.push(await api.creerSociete({ nom }));
+        creees.push(await api.creerSociete(candidat));
       } catch (e) {
-        erreursImport.push(`« ${nom} » : ${messageErreur(e)}`);
+        erreursImport.push(`« ${candidat.nom} » : ${messageErreur(e)}`);
       }
     }
     if (creees.length > 0) setSocietes((prev) => [...prev, ...creees]);
@@ -154,7 +166,12 @@ function App() {
           {onglet === "societes" && (
             <section className="panel">
               <h2>Sociétés</h2>
-              <SocietesTable societes={societes} transactions={transactions} onDelete={supprimerSociete} />
+              <SocietesTable
+                societes={societes}
+                transactions={transactions}
+                onDelete={supprimerSociete}
+                onTogglePrincipale={basculerPrincipale}
+              />
               <h3>Ajouter une société</h3>
               <SocieteForm onAdd={ajouterSociete} />
               <ImportSocietes societes={societes} onImport={importerSocietes} />

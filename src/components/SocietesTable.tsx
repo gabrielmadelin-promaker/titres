@@ -6,9 +6,10 @@ interface Props {
   societes: Societe[];
   transactions: Transaction[];
   onDelete: (id: string) => void;
+  onTogglePrincipale: (id: string, principale: boolean) => void;
 }
 
-export function SocietesTable({ societes, transactions, onDelete }: Props) {
+export function SocietesTable({ societes, transactions, onDelete, onTogglePrincipale }: Props) {
   if (societes.length === 0) {
     return <p className="empty">Aucune société pour le moment.</p>;
   }
@@ -20,6 +21,11 @@ export function SocietesTable({ societes, transactions, onDelete }: Props) {
       <thead>
         <tr>
           <th>Société</th>
+          <th
+            title="Boîte affichée dans l'arbre central de l'organigramme. Les sociétés non principales apparaissent groupées en actionnaires minoritaires."
+          >
+            Principale
+          </th>
           <th title="Somme des pourcentages acquis lors de l'ensemble des transactions ciblant cette société.">
             % cédé
           </th>
@@ -33,6 +39,14 @@ export function SocietesTable({ societes, transactions, onDelete }: Props) {
           return (
             <tr key={societe.id}>
               <td>{societe.nom}</td>
+              <td className="num">
+                <input
+                  type="checkbox"
+                  checked={societe.principale}
+                  onChange={(e) => onTogglePrincipale(societe.id, e.target.checked)}
+                  aria-label={`${societe.nom} est une société principale`}
+                />
+              </td>
               <td className={`num ${pctGlobal !== null && pctGlobal > 100 ? "warning" : ""}`}>
                 {pctGlobal === null ? "—" : formatPourcentage(pctGlobal)}
               </td>

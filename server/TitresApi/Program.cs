@@ -53,7 +53,7 @@ app.MapGet("/api/health", async () =>
 app.MapGet("/api/societes", async () =>
 {
     await using var conn = new SqlConnection(ConnectionString());
-    var societes = await conn.QueryAsync<Societe>("SELECT Id, Nom FROM dbo.Societes ORDER BY Nom");
+    var societes = await conn.QueryAsync<Societe>("SELECT Id, Nom, Principale FROM dbo.Societes ORDER BY Nom");
     return Results.Ok(societes);
 });
 
@@ -63,10 +63,18 @@ app.MapPost("/api/societes", async (SocieteInput input) =>
     if (string.IsNullOrEmpty(nom))
         return Results.BadRequest("Le nom est requis.");
 
-    var societe = new Societe(Guid.NewGuid(), nom);
+    var societe = new Societe(Guid.NewGuid(), nom, input.Principale);
     await using var conn = new SqlConnection(ConnectionString());
-    await conn.ExecuteAsync("INSERT INTO dbo.Societes (Id, Nom) VALUES (@Id, @Nom)", societe);
+    await conn.ExecuteAsync("INSERT INTO dbo.Societes (Id, Nom, Principale) VALUES (@Id, @Nom, @Principale)", societe);
     return Results.Created($"/api/societes/{societe.Id}", societe);
+});
+
+app.MapPut("/api/societes/{id:guid}", async (Guid id, SocieteUpdate input) =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var lignes = await conn.ExecuteAsync(
+        "UPDATE dbo.Societes SET Principale = @Principale WHERE Id = @id", new { id, input.Principale });
+    return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
 
 app.MapDelete("/api/societes/{id:guid}", async (Guid id) =>
@@ -112,9 +120,11 @@ app.MapDelete("/api/transactions/{id:guid}", async (Guid id) =>
 
 app.Run();
 
-record Societe(Guid Id, string Nom);
+record Societe(Guid Id, string Nom, bool Principale);
 
-record SocieteInput(string? Nom);
+record SocieteInput(string? Nom, bool Principale = false);
+
+record SocieteUpdate(bool Principale);
 
 record Transaction(Guid Id, Guid AcheteurId, Guid CibleId, decimal Pourcentage, string Date);
 

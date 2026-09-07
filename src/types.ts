@@ -1,6 +1,8 @@
 export interface Societe {
   id: string;
   nom: string;
+  /** Apparaît comme boîte dans l'arbre central de l'organigramme ; sinon groupée en actionnaire minoritaire. */
+  principale: boolean;
 }
 
 export interface Transaction {

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Societe, Transaction } from "../types";
 import { formatDate, formatNombre } from "../lib/format";
-import { BOX_H, BOX_W, COL_GAP, ROW_GAP, calculerOrganigramme } from "../lib/organigramme";
+import {
+  BOX_H,
+  BOX_W,
+  COL_GAP,
+  GAP_GROUPE,
+  LIGNE_GROUPE_H,
+  ROW_GAP,
+  calculerOrganigramme,
+} from "../lib/organigramme";
 
 interface Props {
   societes: Societe[];
@@ -15,6 +23,7 @@ interface AreteAffichee {
   labelY: number;
   labelWidth: number;
   label: string;
+  retour: boolean;
 }
 
 function today(): string {
@@ -24,22 +33,25 @@ function today(): string {
 /**
  * Répartit les points d'arrivée (et de départ) d'un même nœud le long de la
  * largeur de sa boîte, dans l'ordre horizontal des boîtes en face — sinon
- * les lignes se croisent et les étiquettes se chevauchent dès qu'un nœud a
- * plusieurs actionnaires ou plusieurs participations.
+ * les lignes se croisent et les étiquettes se chevauchent.
  */
 function calculerAretes(organigramme: ReturnType<typeof calculerOrganigramme>): AreteAffichee[] {
   const noeudDe = new Map(organigramme.noeuds.map((n) => [n.id, n]));
+  const liensDirects = organigramme.liens.filter((l) => !l.retour);
 
-  function rangsTries(cle: (l: (typeof organigramme.liens)[number]) => string, ordonneParX: (l: (typeof organigramme.liens)[number]) => number) {
+  function rangsTries(
+    cle: (l: (typeof liensDirects)[number]) => string,
+    ordonneParX: (l: (typeof liensDirects)[number]) => number,
+  ) {
     const groupes = new Map<string, number[]>();
-    organigramme.liens.forEach((l, i) => {
+    liensDirects.forEach((l, i) => {
       const k = cle(l);
       if (!groupes.has(k)) groupes.set(k, []);
       groupes.get(k)!.push(i);
     });
     const rang = new Map<number, { rang: number; total: number }>();
     groupes.forEach((indices) => {
-      const tries = [...indices].sort((i1, i2) => ordonneParX(organigramme.liens[i1]) - ordonneParX(organigramme.liens[i2]));
+      const tries = [...indices].sort((i1, i2) => ordonneParX(liensDirects[i1]) - ordonneParX(liensDirects[i2]));
       tries.forEach((i, r) => rang.set(i, { rang: r, total: tries.length }));
     });
     return rang;
@@ -55,8 +67,9 @@ function calculerAretes(organigramme: ReturnType<typeof calculerOrganigramme>): 
   );
 
   let compteurLongueDistance = 0;
+  let compteurRetour = 0;
 
-  return organigramme.liens
+  const aretesDirectes = liensDirects
     .map((lien, index) => {
       const parent = noeudDe.get(lien.acheteurId);
       const enfant = noeudDe.get(lien.cibleId);
@@ -70,10 +83,9 @@ function calculerAretes(organigramme: ReturnType<typeof calculerOrganigramme>): 
       const x1 = parent.x + (BOX_W * (rangD + 1)) / (totalD + 1);
       const y1 = parent.y + BOX_H;
 
-      // Quand plusieurs flèches arrivent sur la même boîte, leur dernier
-      // segment horizontal est en plus réparti verticalement dans le
-      // couloir vide au-dessus de la cible, pour ne jamais se superposer
-      // même si deux points d'arrivée tombent proches en X.
+      // Quand 2 flèches arrivent sur la même boîte, leur dernier segment
+      // horizontal est en plus réparti verticalement dans le couloir vide
+      // au-dessus de la cible, pour ne jamais superposer les étiquettes.
       const bandeH = ROW_GAP - 18;
       const offsetArrivee = totalA > 1 ? -bandeH / 2 + ((rangA + 0.5) * bandeH) / totalA : 0;
 
@@ -82,8 +94,6 @@ function calculerAretes(organigramme: ReturnType<typeof calculerOrganigramme>): 
       let labelY: number;
 
       if (enfant.niveau - parent.niveau <= 1) {
-        // Tracé en coude simple : le segment horizontal (et donc le label)
-        // reste dans la bande vide juste au-dessus de la société détenue.
         const gutterY = y2 - ROW_GAP / 2 + offsetArrivee;
         d = `M ${x1} ${y1} L ${x1} ${gutterY} L ${x2} ${gutterY} L ${x2} ${y2}`;
         labelMx = (x1 + x2) / 2;
@@ -106,9 +116,56 @@ function calculerAretes(organigramme: ReturnType<typeof calculerOrganigramme>): 
 
       const label = formatNombre(lien.pourcentage);
       const labelWidth = label.length * 6.6 + 10;
-      return { cle: `${lien.acheteurId}::${lien.cibleId}`, d, labelMx, labelY, labelWidth, label };
+      return { cle: `${lien.acheteurId}::${lien.cibleId}`, d, labelMx, labelY, labelWidth, label, retour: false };
     })
     .filter((a): a is AreteAffichee => a !== null);
+
+  const aretesRetour = organigramme.liens
+    .filter((l) => l.retour)
+    .map((lien) => {
+      const parent = noeudDe.get(lien.acheteurId);
+      const enfant = noeudDe.get(lien.cibleId);
+      if (!parent || !enfant) return null;
+
+      // Participation croisée : entre/sort toujours par le haut ou le bas
+      // des boîtes, jamais par le côté (qui devrait alors traverser les
+      // boîtes voisines de la même rangée) ; rejoint l'autre bout par la
+      // marge de droite du canevas plutôt que de supposer que la cible est
+      // sous le parent — faux ici par définition. Quand la cible est plus
+      // haute que le parent (cas le plus courant, boucle "vers le haut"),
+      // on sort par le haut du parent et on entre par le bas de la cible.
+      const decalage = (compteurRetour % 2) * 10;
+      compteurRetour += 1;
+      const versLeHaut = enfant.niveau < parent.niveau;
+      const x1 = parent.x + BOX_W / 2;
+      const y1 = versLeHaut ? parent.y : parent.y + BOX_H;
+      const x2 = enfant.x + BOX_W / 2;
+      const y2 = versLeHaut ? enfant.y + BOX_H : enfant.y;
+      const laneX = organigramme.largeur - 20 - decalage;
+      // Décalé à un quart (au lieu de la moitié) du couloir : les liens
+      // normaux placent leur étiquette au milieu, ce décalage évite de
+      // passer dessus.
+      const corridorSource = versLeHaut ? parent.y - ROW_GAP * 0.25 : parent.y + BOX_H + ROW_GAP * 0.25;
+      const corridorCible = versLeHaut ? enfant.y + BOX_H + ROW_GAP * 0.25 : enfant.y - ROW_GAP * 0.25;
+      const d =
+        `M ${x1} ${y1} L ${x1} ${corridorSource} L ${laneX} ${corridorSource} ` +
+        `L ${laneX} ${corridorCible} L ${x2} ${corridorCible} L ${x2} ${y2}`;
+
+      const label = formatNombre(lien.pourcentage);
+      const labelWidth = label.length * 6.6 + 10;
+      return {
+        cle: `${lien.acheteurId}::${lien.cibleId}::retour`,
+        d,
+        labelMx: laneX,
+        labelY: (corridorSource + corridorCible) / 2,
+        labelWidth,
+        label,
+        retour: true,
+      };
+    })
+    .filter((a): a is AreteAffichee => a !== null);
+
+  return [...aretesDirectes, ...aretesRetour];
 }
 
 export function VisualisationPanel({ societes, transactions }: Props) {
@@ -123,6 +180,7 @@ export function VisualisationPanel({ societes, transactions }: Props) {
   );
 
   const aretes = useMemo(() => calculerAretes(organigramme), [organigramme]);
+  const groupeParCible = useMemo(() => new Map(organigramme.groupes.map((g) => [g.cibleId, g])), [organigramme]);
 
   // Met le graphe à l'échelle de la fenêtre : plus besoin de défiler
   // horizontalement pour une structure large, le texte reste lisible tant
@@ -163,11 +221,14 @@ export function VisualisationPanel({ societes, transactions }: Props) {
 
   const echelleAffichee = echelleImpression ?? echelle;
 
-  if (societes.length === 0) {
+  if (!societes.some((s) => s.principale)) {
     return (
       <section className="panel">
         <h2>Visualisation</h2>
-        <p className="empty">Ajoutez des sociétés pour visualiser la structure actionnariale.</p>
+        <p className="empty">
+          Marquez au moins une société comme « Principale » (onglet Sociétés) pour qu'elle apparaisse dans
+          l'organigramme.
+        </p>
       </section>
     );
   }
@@ -177,7 +238,7 @@ export function VisualisationPanel({ societes, transactions }: Props) {
       <div className="viz-head">
         <div>
           <h2>Visualisation</h2>
-          <p className="lede">Structure actionnariale entre les sociétés, à une date donnée.</p>
+          <p className="lede">Structure actionnariale entre les sociétés principales, à une date donnée.</p>
         </div>
         <button type="button" className="btn btn-secondary btn-small no-print" onClick={() => window.print()}>
           Exporter en PDF (A4)
@@ -228,7 +289,12 @@ export function VisualisationPanel({ societes, transactions }: Props) {
                 </defs>
                 {aretes.map((arete) => (
                   <g key={arete.cle}>
-                    <path d={arete.d} className="orgchart-edge-line" fill="none" markerEnd="url(#orgchart-arrow)" />
+                    <path
+                      d={arete.d}
+                      className={`orgchart-edge-line ${arete.retour ? "orgchart-edge-line-retour" : ""}`}
+                      fill="none"
+                      markerEnd="url(#orgchart-arrow)"
+                    />
                     <rect
                       x={arete.labelMx - arete.labelWidth / 2}
                       y={arete.labelY - 9}
@@ -243,21 +309,41 @@ export function VisualisationPanel({ societes, transactions }: Props) {
                   </g>
                 ))}
               </svg>
-              {organigramme.noeuds.map((n) => (
-                <div
-                  key={n.id}
-                  className="orgchart-node"
-                  style={{ left: n.x, top: n.y, width: BOX_W, height: BOX_H }}
-                >
-                  <div className="orgchart-node-nom">{n.nom}</div>
-                </div>
-              ))}
+              {organigramme.noeuds.map((n) => {
+                const groupe = groupeParCible.get(n.id);
+                return (
+                  <div key={n.id}>
+                    <div className="orgchart-node" style={{ left: n.x, top: n.y, width: BOX_W, height: BOX_H }}>
+                      <div className="orgchart-node-nom">{n.nom}</div>
+                    </div>
+                    {groupe && (
+                      <div
+                        className="orgchart-groupe"
+                        style={{
+                          left: n.x + BOX_W + GAP_GROUPE,
+                          top: n.y + BOX_H / 2 - (groupe.entrees.length * LIGNE_GROUPE_H) / 2,
+                          width: n.largeurGroupe,
+                        }}
+                      >
+                        {groupe.entrees.map((e, i) => (
+                          <div key={i} className="orgchart-groupe-ligne">
+                            <span className="orgchart-groupe-pct">{formatNombre(e.pourcentage)}</span>
+                            <span className="orgchart-groupe-nom">{e.nom}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
         <figcaption className="viz-base">
           Structure actionnariale au {formatDate(date)}. Chaque flèche va de la société actionnaire vers la
-          société détenue ; le pourcentage est la somme des tranches acquises jusqu'à cette date.
+          société détenue (pourcentage cumulé jusqu'à cette date). Seules les sociétés « Principale » sont
+          affichées comme boîtes ; les autres actionnaires apparaissent en liste à côté de la société qu'ils
+          détiennent. Au-delà de 2 actionnaires principaux entrants, les suivants rejoignent aussi cette liste.
         </figcaption>
       </figure>
     </section>

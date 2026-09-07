@@ -14,8 +14,12 @@ USE CalculDesTitres;
 GO
 
 CREATE TABLE dbo.Societes (
-    Id  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
-    Nom NVARCHAR(200)    NOT NULL
+    Id         UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
+    Nom        NVARCHAR(200)    NOT NULL,
+    -- Sociétés affichées comme boîtes dans l'arbre central de l'organigramme ;
+    -- les autres n'apparaissent que groupées dans la liste des actionnaires
+    -- minoritaires de la société qu'elles détiennent (voir organigramme.ts).
+    Principale BIT              NOT NULL DEFAULT 0
 );
 GO
 
