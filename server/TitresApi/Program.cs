@@ -3,6 +3,12 @@ using Microsoft.Data.SqlClient;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Chargé explicitement (indépendamment d'ASPNETCORE_ENVIRONMENT) : le
+// service Windows n'a pas de variable d'environnement à configurer, il
+// suffit que ce fichier existe à côté de l'exécutable pour surcharger la
+// chaîne de connexion et les origines CORS.
+builder.Configuration.AddJsonFile("appsettings.Production.json", optional: true, reloadOnChange: false);
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
