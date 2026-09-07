@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { ImportSocietes } from "./components/ImportSocietes";
+import { ImportTransactions } from "./components/ImportTransactions";
 import { ParticipationsTable } from "./components/ParticipationsTable";
 import { SocieteForm } from "./components/SocieteForm";
 import { SocietesTable } from "./components/SocietesTable";
@@ -87,6 +89,34 @@ function App() {
     }
   }
 
+  async function importerSocietes(noms: string[]) {
+    const creees: Societe[] = [];
+    const erreursImport: string[] = [];
+    for (const nom of noms) {
+      try {
+        creees.push(await api.creerSociete({ nom }));
+      } catch (e) {
+        erreursImport.push(`« ${nom} » : ${messageErreur(e)}`);
+      }
+    }
+    if (creees.length > 0) setSocietes((prev) => [...prev, ...creees]);
+    return { ajoutees: creees.length, erreurs: erreursImport };
+  }
+
+  async function importerTransactions(candidates: Omit<Transaction, "id">[]) {
+    const creees: Transaction[] = [];
+    const erreursImport: string[] = [];
+    for (const candidate of candidates) {
+      try {
+        creees.push(await api.creerTransaction(candidate));
+      } catch (e) {
+        erreursImport.push(messageErreur(e));
+      }
+    }
+    if (creees.length > 0) setTransactions((prev) => [...prev, ...creees]);
+    return { ajoutees: creees.length, erreurs: erreursImport };
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -127,6 +157,7 @@ function App() {
               <SocietesTable societes={societes} transactions={transactions} onDelete={supprimerSociete} />
               <h3>Ajouter une société</h3>
               <SocieteForm onAdd={ajouterSociete} />
+              <ImportSocietes societes={societes} onImport={importerSocietes} />
             </section>
           )}
 
@@ -140,6 +171,7 @@ function App() {
               />
               <h3>Ajouter une transaction</h3>
               <TransactionForm societes={societes} onAdd={ajouterTransaction} />
+              <ImportTransactions societes={societes} onImport={importerTransactions} />
             </section>
           )}
 
