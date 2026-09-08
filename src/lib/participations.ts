@@ -87,7 +87,15 @@ export function calculerParticipationsDetaillees(
   direct.forEach((parCible, x) => total.set(x, new Map(parCible)));
 
   const acteurs = [...direct.keys()];
-  const PASSES = Math.min(40, acteurs.length + 5);
+  // Un réseau de participations croisées réaliste (plusieurs boucles qui se
+  // recouvrent) converge géométriquement mais lentement — le taux de
+  // décroissance dépend du rayon spectral du graphe, pas seulement de son
+  // nombre de sociétés. Un plafond trop bas tronque silencieusement le
+  // résultat avant convergence (constaté sur un vrai jeu de données à 25
+  // sociétés : ~150 passes nécessaires). On boucle donc jusqu'à
+  // stabilisation, avec un plafond large en garde-fou plutôt qu'un calcul
+  // de nombre de passes basé sur une hypothèse de décroissance rapide.
+  const PASSES = Math.min(500, acteurs.length * 15 + 100);
 
   for (let passe = 0; passe < PASSES; passe++) {
     const suivant = new Map<string, Map<string, number>>();
@@ -96,8 +104,14 @@ export function calculerParticipationsDetaillees(
       const parCibleX = new Map(direct.get(x));
       direct.get(x)!.forEach((dpct, z) => {
         if (Math.abs(dpct) < SEUIL_PARTICIPATION) return;
+        // On accumule aussi les éventuelles boucles auto-référentielles
+        // (y === x) : bien qu'exclues du tableau final (voir plus bas),
+        // elles doivent rester dans `total` pendant le calcul, car
+        // d'autres sociétés s'appuient dessus pour propager leur propre
+        // participation indirecte — les en exclure ici sous-évalue tout
+        // chemin qui repasse par une boucle avant de continuer ailleurs.
         total.get(z)?.forEach((tpct, y) => {
-          if (y === x || Math.abs(tpct) < SEUIL_PARTICIPATION) return;
+          if (Math.abs(tpct) < SEUIL_PARTICIPATION) return;
           const contribution = (dpct * tpct) / 100;
           if (Math.abs(contribution) < SEUIL_PARTICIPATION) return;
           parCibleX.set(y, (parCibleX.get(y) ?? 0) + contribution);
@@ -125,7 +139,10 @@ export function calculerParticipationsDetaillees(
   const resultat: ParticipationDetaillee[] = [];
   total.forEach((parCible, acheteurId) => {
     parCible.forEach((pourcentageTotal, cibleId) => {
-      if (Math.abs(pourcentageTotal) < SEUIL_PARTICIPATION) return;
+      // Une boucle auto-référentielle (une société qui finit par détenir une
+      // part d'elle-même) n'a pas sa place dans ce tableau, qui compare
+      // toujours deux sociétés distinctes.
+      if (cibleId === acheteurId || Math.abs(pourcentageTotal) < SEUIL_PARTICIPATION) return;
       resultat.push({
         acheteurId,
         cibleId,
