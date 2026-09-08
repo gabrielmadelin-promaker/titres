@@ -166,29 +166,31 @@ function App() {
           {onglet === "societes" && (
             <section className="panel">
               <h2>Sociétés</h2>
+              <h3>Ajouter une société</h3>
+              <SocieteForm onAdd={ajouterSociete} />
+              <ImportSocietes societes={societes} onImport={importerSocietes} />
+              <h3>Liste des sociétés</h3>
               <SocietesTable
                 societes={societes}
                 transactions={transactions}
                 onDelete={supprimerSociete}
                 onTogglePrincipale={basculerPrincipale}
               />
-              <h3>Ajouter une société</h3>
-              <SocieteForm onAdd={ajouterSociete} />
-              <ImportSocietes societes={societes} onImport={importerSocietes} />
             </section>
           )}
 
           {onglet === "transactions" && (
             <section className="panel">
               <h2>Transactions</h2>
+              <h3>Ajouter une transaction</h3>
+              <TransactionForm societes={societes} onAdd={ajouterTransaction} />
+              <ImportTransactions societes={societes} onImport={importerTransactions} />
+              <h3>Liste des transactions</h3>
               <TransactionsTable
                 transactions={transactions}
                 societes={societes}
                 onDelete={supprimerTransaction}
               />
-              <h3>Ajouter une transaction</h3>
-              <TransactionForm societes={societes} onAdd={ajouterTransaction} />
-              <ImportTransactions societes={societes} onImport={importerTransactions} />
             </section>
           )}
 

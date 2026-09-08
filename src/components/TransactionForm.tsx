@@ -40,8 +40,8 @@ export function TransactionForm({ societes, onAdd }: Props) {
       return;
     }
     const pct = Number(pourcentage);
-    if (!pourcentage || pct <= 0 || pct > 100) {
-      setErreur("Le pourcentage doit être compris entre 0 et 100.");
+    if (!pourcentage || pct === 0 || pct < -100 || pct > 100) {
+      setErreur("Le pourcentage doit être compris entre -100 et 100, sans être nul (positif pour un achat, négatif pour une vente).");
       return;
     }
     if (!date) {
@@ -98,13 +98,14 @@ export function TransactionForm({ societes, onAdd }: Props) {
       </div>
 
       <div className="form-field">
-        <label htmlFor="tx-pourcentage">Pourcentage acheté (%)</label>
+        <label htmlFor="tx-pourcentage">Pourcentage (%)</label>
         <input
           id="tx-pourcentage"
           type="number"
-          min="0"
+          min="-100"
           max="100"
           step="0.01"
+          placeholder="Ex : 10 (achat) ou -10 (vente)"
           value={pourcentage}
           onChange={(e) => setPourcentage(e.target.value)}
           required

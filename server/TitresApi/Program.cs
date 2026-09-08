@@ -97,8 +97,8 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
 {
     if (input.AcheteurId == input.CibleId)
         return Results.BadRequest("La société acheteuse doit être différente de la société cible.");
-    if (input.Pourcentage <= 0 || input.Pourcentage > 100)
-        return Results.BadRequest("Le pourcentage doit être compris entre 0 et 100.");
+    if (input.Pourcentage == 0 || input.Pourcentage < -100 || input.Pourcentage > 100)
+        return Results.BadRequest("Le pourcentage doit être compris entre -100 et 100, sans être nul (négatif pour une vente).");
     if (string.IsNullOrWhiteSpace(input.Date))
         return Results.BadRequest("La date est requise.");
 

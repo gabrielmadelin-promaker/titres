@@ -56,8 +56,16 @@ export function ImportTransactions({ societes, onImport }: Props) {
 
         const pourcentageBrut = valeurColonne(ligne, "pourcentage", "%", "pct");
         const pourcentage = Number(pourcentageBrut);
-        if (!pourcentageBrut || Number.isNaN(pourcentage) || pourcentage <= 0 || pourcentage > 100) {
-          lignesErreurs.push(`Ligne ${numeroLigne} : pourcentage invalide (« ${String(pourcentageBrut)} », attendu entre 0 et 100).`);
+        if (
+          !pourcentageBrut ||
+          Number.isNaN(pourcentage) ||
+          pourcentage === 0 ||
+          pourcentage < -100 ||
+          pourcentage > 100
+        ) {
+          lignesErreurs.push(
+            `Ligne ${numeroLigne} : pourcentage invalide (« ${String(pourcentageBrut)} », attendu entre -100 et 100, non nul).`,
+          );
           return;
         }
 
@@ -92,7 +100,9 @@ export function ImportTransactions({ societes, onImport }: Props) {
         {enCours ? "Import en cours…" : "Importer depuis un fichier Excel (.xlsx)"}
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
-      <p className="import-hint">Colonnes attendues : « Acheteur », « Cible », « Pourcentage » (0-100), « Date ».</p>
+      <p className="import-hint">
+        Colonnes attendues : « Acheteur », « Cible », « Pourcentage » (-100 à 100, négatif pour une vente), « Date ».
+      </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (
         <ul className="import-errors">

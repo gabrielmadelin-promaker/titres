@@ -31,7 +31,8 @@ CREATE TABLE dbo.Transactions (
     Id          UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Transactions PRIMARY KEY DEFAULT NEWID(),
     AcheteurId  UNIQUEIDENTIFIER NOT NULL,
     CibleId     UNIQUEIDENTIFIER NOT NULL,
-    Pourcentage DECIMAL(6,2)     NOT NULL CONSTRAINT CK_Transactions_Pourcentage CHECK (Pourcentage > 0 AND Pourcentage <= 100),
+    -- Positif = achat, négatif = vente (cession d'une partie de la participation détenue).
+    Pourcentage DECIMAL(6,2)     NOT NULL CONSTRAINT CK_Transactions_Pourcentage CHECK (Pourcentage <> 0 AND Pourcentage BETWEEN -100 AND 100),
     [Date]      DATE             NOT NULL
 );
 GO

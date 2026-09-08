@@ -166,6 +166,41 @@ h3 {
   letter-spacing: 0.4px;
 }
 
+.th-tri {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.th-tri:hover {
+  color: var(--accent);
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.table-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-filters .form-field {
+  min-width: 180px;
+}
+
+.participation-detail {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
 .table tbody tr:hover {
   background: var(--row-hover);
 }
