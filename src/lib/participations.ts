@@ -58,6 +58,16 @@ export interface ParticipationDetaillee {
 
 const SEUIL_PARTICIPATION = 0.001;
 
+function construireDirect(transactions: Transaction[], dateLimite?: string): Map<string, Map<string, number>> {
+  const directs = calculerParticipations(transactions, dateLimite);
+  const direct = new Map<string, Map<string, number>>();
+  directs.forEach((p) => {
+    if (!direct.has(p.acheteurId)) direct.set(p.acheteurId, new Map());
+    direct.get(p.acheteurId)!.set(p.cibleId, p.pourcentageTotal);
+  });
+  return direct;
+}
+
 /**
  * Comme calculerParticipations, mais ajoute la part détenue *indirectement*
  * via les sociétés intermédiaires : si A détient 50% de B et B détient 40%
@@ -79,13 +89,7 @@ export function calculerParticipationsDetaillees(
   transactions: Transaction[],
   dateLimite?: string,
 ): ParticipationDetaillee[] {
-  const directs = calculerParticipations(transactions, dateLimite);
-
-  const direct = new Map<string, Map<string, number>>();
-  directs.forEach((p) => {
-    if (!direct.has(p.acheteurId)) direct.set(p.acheteurId, new Map());
-    direct.get(p.acheteurId)!.set(p.cibleId, p.pourcentageTotal);
-  });
+  const direct = construireDirect(transactions, dateLimite);
 
   // Garde-fou : borne le nombre de chemins explorés au total, pour éviter
   // une explosion combinatoire sur un graphe très dense (beaucoup de
@@ -125,6 +129,68 @@ export function calculerParticipationsDetaillees(
   }
 
   return resultat;
+}
+
+export interface CheminParticipation {
+  /** Sociétés traversées, de l'actionnaire de départ à la cible (bornes incluses), dans l'ordre. */
+  societeIds: string[];
+  /** Pourcentage de chaque maillon (societeIds[i] → societeIds[i+1]) — un de moins que societeIds. */
+  pourcentages: number[];
+  /** Produit de tous les maillons : ce que ce chemin, à lui seul, apporte au total détenu. */
+  contribution: number;
+}
+
+/**
+ * Détaille, pour un couple (actionnaire, société détenue) précis, la liste
+ * des chemins de détention (directs et indirects) qui composent son
+ * "% détenu (total)" — la cascade à l'origine de ce chiffre. La somme des
+ * `contribution` de tous les chemins retournés reconstitue exactement
+ * `pourcentageTotal` tel que calculé par calculerParticipationsDetaillees.
+ *
+ * Triés par contribution décroissante : les chaînes de détention les plus
+ * significatives d'abord.
+ */
+export function calculerCheminsParticipation(
+  transactions: Transaction[],
+  acheteurId: string,
+  cibleId: string,
+  dateLimite?: string,
+): CheminParticipation[] {
+  const direct = construireDirect(transactions, dateLimite);
+
+  const chemins: CheminParticipation[] = [];
+  const chemin: string[] = [acheteurId];
+  const pourcentages: number[] = [];
+  const visitees = new Set<string>([acheteurId]);
+  let budget = 500_000;
+
+  function explorer(courant: string, pctAccumule: number): void {
+    if (budget <= 0) return;
+    for (const [suivant, pct] of direct.get(courant) ?? []) {
+      if (budget-- <= 0) return;
+      if (visitees.has(suivant)) continue; // chemin simple : jamais deux fois la même société
+      const nouveauPct = (pctAccumule * pct) / 100;
+      if (Math.abs(nouveauPct) < SEUIL_PARTICIPATION) continue;
+
+      chemin.push(suivant);
+      pourcentages.push(pct);
+      if (suivant === cibleId) {
+        // Chemin complet jusqu'à la cible : on l'enregistre, sans continuer
+        // au-delà (la suite représenterait la détention d'une AUTRE société,
+        // pas de celle-ci).
+        chemins.push({ societeIds: [...chemin], pourcentages: [...pourcentages], contribution: nouveauPct });
+      } else {
+        visitees.add(suivant);
+        explorer(suivant, nouveauPct);
+        visitees.delete(suivant);
+      }
+      chemin.pop();
+      pourcentages.pop();
+    }
+  }
+  explorer(acheteurId, 100);
+
+  return chemins.sort((a, b) => b.contribution - a.contribution);
 }
 
 /**

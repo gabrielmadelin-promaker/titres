@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { Societe, Transaction } from "../types";
 import { formatPourcentage } from "../lib/format";
-import { calculerParticipationsDetaillees, type ParticipationDetaillee } from "../lib/participations";
+import { calculerCheminsParticipation, calculerParticipationsDetaillees, type ParticipationDetaillee } from "../lib/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
 
@@ -13,11 +13,64 @@ interface Props {
 type Colonne = "acheteur" | "cible" | "total" | "direct";
 
 const SEUIL_ECART = 0.01;
+const MAX_CHEMINS_AFFICHES = 15;
+
+interface DetailCheminsProps {
+  transactions: Transaction[];
+  acheteurId: string;
+  cibleId: string;
+  nomDe: (id: string) => string;
+}
+
+/** Cascade des chemins de détention (direct + indirects) qui composent un "% détenu" total. */
+function DetailChemins({ transactions, acheteurId, cibleId, nomDe }: DetailCheminsProps) {
+  const chemins = useMemo(
+    () => calculerCheminsParticipation(transactions, acheteurId, cibleId),
+    [transactions, acheteurId, cibleId],
+  );
+  const affiches = chemins.slice(0, MAX_CHEMINS_AFFICHES);
+  const reste = chemins.slice(MAX_CHEMINS_AFFICHES);
+  const resteTotal = reste.reduce((s, c) => s + c.contribution, 0);
+
+  return (
+    <div className="chemins-detail">
+      <p className="chemins-titre">
+        Cascade des {chemins.length} chemin{chemins.length > 1 ? "s" : ""} de détention {nomDe(acheteurId)} →{" "}
+        {nomDe(cibleId)} :
+      </p>
+      <ul className="chemins-liste">
+        {affiches.map((chemin, i) => (
+          <li key={i} className="chemins-ligne">
+            <span className="chemins-chaine">
+              {chemin.societeIds.map((id, j) => (
+                <span key={id}>
+                  {j > 0 && <span className="chemins-fleche"> → </span>}
+                  {nomDe(id)}
+                  {j < chemin.pourcentages.length && (
+                    <span className="chemins-pct"> ({formatPourcentage(chemin.pourcentages[j])})</span>
+                  )}
+                </span>
+              ))}
+            </span>
+            <span className="chemins-contribution">= {formatPourcentage(chemin.contribution)}</span>
+          </li>
+        ))}
+      </ul>
+      {reste.length > 0 && (
+        <p className="chemins-reste">
+          + {reste.length} autre{reste.length > 1 ? "s" : ""} chemin{reste.length > 1 ? "s" : ""} plus mineur
+          {reste.length > 1 ? "s" : ""}, {formatPourcentage(resteTotal)} au total.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function ParticipationsTable({ societes, transactions }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "acheteur", sens: "asc" });
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");
   const [filtreDetenueId, setFiltreDetenueId] = useState("");
+  const [ligneOuverte, setLigneOuverte] = useState<string | null>(null);
 
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
@@ -130,28 +183,57 @@ export function ParticipationsTable({ societes, transactions }: Props) {
               >
                 % détenu{flecheTri(tri, "total")}
               </th>
+              <th aria-label="Détail" />
             </tr>
           </thead>
           <tbody>
             {triees.map((p) => {
+              const cle = `${p.acheteurId}::${p.cibleId}`;
               const ecart = Math.abs(p.pourcentageTotal - p.pourcentageDirect);
               const aDirect = Math.abs(p.pourcentageDirect) > SEUIL_ECART;
+              const aIndirect = ecart > SEUIL_ECART;
+              const ouverte = ligneOuverte === cle;
               return (
-                <tr key={`${p.acheteurId}::${p.cibleId}`}>
-                  <td>{nomDe(p.acheteurId)}</td>
-                  <td>{nomDe(p.cibleId)}</td>
-                  <td className="num">
-                    {formatPourcentage(p.pourcentageTotal)}
-                    {ecart > SEUIL_ECART && aDirect && (
-                      <span className="participation-detail">dont {formatPourcentage(p.pourcentageDirect)} en direct</span>
-                    )}
-                    {ecart > SEUIL_ECART && !aDirect && (
-                      <span className="badge" title="Aucune transaction directe entre ces deux sociétés : participation entièrement indirecte.">
-                        indirect
-                      </span>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={cle}>
+                  <tr>
+                    <td>{nomDe(p.acheteurId)}</td>
+                    <td>{nomDe(p.cibleId)}</td>
+                    <td className="num">
+                      {formatPourcentage(p.pourcentageTotal)}
+                      {aIndirect && aDirect && (
+                        <span className="participation-detail">dont {formatPourcentage(p.pourcentageDirect)} en direct</span>
+                      )}
+                      {aIndirect && !aDirect && (
+                        <span className="badge" title="Aucune transaction directe entre ces deux sociétés : participation entièrement indirecte.">
+                          indirect
+                        </span>
+                      )}
+                    </td>
+                    <td className="actions">
+                      {aIndirect && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-small"
+                          onClick={() => setLigneOuverte(ouverte ? null : cle)}
+                        >
+                          {ouverte ? "Masquer" : "Voir la cascade"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {ouverte && (
+                    <tr>
+                      <td colSpan={4}>
+                        <DetailChemins
+                          transactions={transactions}
+                          acheteurId={p.acheteurId}
+                          cibleId={p.cibleId}
+                          nomDe={nomDe}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
