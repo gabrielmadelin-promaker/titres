@@ -64,12 +64,16 @@ const SEUIL_PARTICIPATION = 0.001;
  * de C, A détient indirectement 50% × 40% = 20% de C (en plus d'une
  * éventuelle part directe A→C).
  *
- * Calculé par relaxation à point fixe : total(X,Y) = direct(X,Y) +
- * Σ_Z direct(X,Z) · total(Z,Y) / 100. Chaque passe ajoute les chemins un
- * cran plus longs ; les pourcentages étant ≤ 100, les contributions
- * décroissent géométriquement et la valeur converge en quelques passes même
- * en présence de participations croisées (cycles) — on relâche jusqu'à
- * stabilisation, avec un nombre de passes plafonné par sécurité.
+ * La part indirecte est la somme, sur tous les *chemins simples* (chaque
+ * société traversée au plus une fois) de A vers la cible, du produit des
+ * pourcentages le long du chemin. C'est essentiel en présence de
+ * participations croisées (cycles) : une définition qui autoriserait à
+ * repasser plusieurs fois par la même boucle réinjecterait indéfiniment la
+ * même participation sous-jacente à chaque tour, et ferait dépasser 100 %
+ * même à des sociétés qui, en réalité, n'ont jamais pu être détenues à plus
+ * de 100 % de leur capital. En n'autorisant qu'un seul passage par société
+ * et par chemin, chaque tranche de capital n'est comptée qu'une fois par
+ * chaîne de détention distincte.
  */
 export function calculerParticipationsDetaillees(
   transactions: Transaction[],
@@ -83,74 +87,43 @@ export function calculerParticipationsDetaillees(
     direct.get(p.acheteurId)!.set(p.cibleId, p.pourcentageTotal);
   });
 
-  let total = new Map<string, Map<string, number>>();
-  direct.forEach((parCible, x) => total.set(x, new Map(parCible)));
-
-  const acteurs = [...direct.keys()];
-  // Un réseau de participations croisées réaliste (plusieurs boucles qui se
-  // recouvrent) converge géométriquement mais lentement — le taux de
-  // décroissance dépend du rayon spectral du graphe, pas seulement de son
-  // nombre de sociétés. Un plafond trop bas tronque silencieusement le
-  // résultat avant convergence (constaté sur un vrai jeu de données à 25
-  // sociétés : ~150 passes nécessaires). On boucle donc jusqu'à
-  // stabilisation, avec un plafond large en garde-fou plutôt qu'un calcul
-  // de nombre de passes basé sur une hypothèse de décroissance rapide.
-  const PASSES = Math.min(500, acteurs.length * 15 + 100);
-
-  for (let passe = 0; passe < PASSES; passe++) {
-    const suivant = new Map<string, Map<string, number>>();
-
-    for (const x of acteurs) {
-      const parCibleX = new Map(direct.get(x));
-      direct.get(x)!.forEach((dpct, z) => {
-        if (Math.abs(dpct) < SEUIL_PARTICIPATION) return;
-        // On accumule aussi les éventuelles boucles auto-référentielles
-        // (y === x) : bien qu'exclues du tableau final (voir plus bas),
-        // elles doivent rester dans `total` pendant le calcul, car
-        // d'autres sociétés s'appuient dessus pour propager leur propre
-        // participation indirecte — les en exclure ici sous-évalue tout
-        // chemin qui repasse par une boucle avant de continuer ailleurs.
-        total.get(z)?.forEach((tpct, y) => {
-          if (Math.abs(tpct) < SEUIL_PARTICIPATION) return;
-          const contribution = (dpct * tpct) / 100;
-          if (Math.abs(contribution) < SEUIL_PARTICIPATION) return;
-          parCibleX.set(y, (parCibleX.get(y) ?? 0) + contribution);
-        });
-      });
-      suivant.set(x, parCibleX);
-    }
-
-    let changement = false;
-    for (const x of acteurs) {
-      const avant = total.get(x)!;
-      for (const [y, v] of suivant.get(x)!) {
-        if (Math.abs(v - (avant.get(y) ?? 0)) > SEUIL_PARTICIPATION) {
-          changement = true;
-          break;
-        }
-      }
-      if (changement) break;
-    }
-
-    total = suivant;
-    if (!changement) break;
-  }
+  // Garde-fou : borne le nombre de chemins explorés au total, pour éviter
+  // une explosion combinatoire sur un graphe très dense (beaucoup de
+  // sociétés avec beaucoup de participations croisées entre elles). Les
+  // chemins déjà comptés avant d'atteindre ce plafond restent valables.
+  let budget = 2_000_000;
 
   const resultat: ParticipationDetaillee[] = [];
-  total.forEach((parCible, acheteurId) => {
-    parCible.forEach((pourcentageTotal, cibleId) => {
-      // Une boucle auto-référentielle (une société qui finit par détenir une
-      // part d'elle-même) n'a pas sa place dans ce tableau, qui compare
-      // toujours deux sociétés distinctes.
-      if (cibleId === acheteurId || Math.abs(pourcentageTotal) < SEUIL_PARTICIPATION) return;
+
+  for (const depart of direct.keys()) {
+    const totalParCible = new Map<string, number>();
+    const visitees = new Set<string>([depart]);
+
+    function explorer(courant: string, pctAccumule: number): void {
+      if (budget <= 0) return;
+      for (const [suivant, pct] of direct.get(courant) ?? []) {
+        if (budget-- <= 0) return;
+        if (visitees.has(suivant)) continue; // chemin simple : jamais deux fois la même société
+        const nouveauPct = (pctAccumule * pct) / 100;
+        if (Math.abs(nouveauPct) < SEUIL_PARTICIPATION) continue;
+        totalParCible.set(suivant, (totalParCible.get(suivant) ?? 0) + nouveauPct);
+        visitees.add(suivant);
+        explorer(suivant, nouveauPct);
+        visitees.delete(suivant);
+      }
+    }
+    explorer(depart, 100);
+
+    totalParCible.forEach((pourcentageTotal, cibleId) => {
       resultat.push({
-        acheteurId,
+        acheteurId: depart,
         cibleId,
-        pourcentageDirect: direct.get(acheteurId)?.get(cibleId) ?? 0,
+        pourcentageDirect: direct.get(depart)?.get(cibleId) ?? 0,
         pourcentageTotal,
       });
     });
-  });
+  }
+
   return resultat;
 }
 
