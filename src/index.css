@@ -348,6 +348,12 @@ h3 {
   flex-wrap: wrap;
 }
 
+.viz-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .viz-filters .form-field {
   min-width: 200px;
 }
