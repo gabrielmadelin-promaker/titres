@@ -110,24 +110,33 @@ app.MapGet("/api/transactions", async () =>
     return Results.Ok(transactions);
 });
 
-app.MapPost("/api/transactions", async (TransactionInput input) =>
+(string? Erreur, string Qualification) ValiderTransaction(TransactionInput input)
 {
     if (input.AcheteurId == input.CibleId)
-        return Results.BadRequest("La société acheteuse doit être différente de la société cible.");
+        return ("La société acheteuse doit être différente de la société cible.", "");
     if (input.Capital == 0 || input.Capital < -100 || input.Capital > 100)
-        return Results.BadRequest("Le capital (%) doit être compris entre -100 et 100, sans être nul (négatif pour une vente).");
+        return ("Le capital (%) doit être compris entre -100 et 100, sans être nul (négatif pour une vente).", "");
     if (input.DroitVoteTheorique is < -100 or > 100)
-        return Results.BadRequest("Le droit de vote théorique (%) doit être compris entre -100 et 100.");
+        return ("Le droit de vote théorique (%) doit être compris entre -100 et 100.", "");
     if (input.DroitVoteExercable is < -100 or > 100)
-        return Results.BadRequest("Le droit de vote exerçable (%) doit être compris entre -100 et 100.");
+        return ("Le droit de vote exerçable (%) doit être compris entre -100 et 100.", "");
     if (input.PrixAction is < 0)
-        return Results.BadRequest("Le prix de l'action ne peut pas être négatif.");
+        return ("Le prix de l'action ne peut pas être négatif.", "");
     if (string.IsNullOrWhiteSpace(input.Date))
-        return Results.BadRequest("La date est requise.");
+        return ("La date est requise.", "");
 
     var qualification = string.IsNullOrWhiteSpace(input.Qualification) ? "Simple" : input.Qualification;
     if (!qualificationsValides.Contains(qualification))
-        return Results.BadRequest("La qualification doit être Simple, Fusion ou TUPE.");
+        return ("La qualification doit être Simple, Fusion ou TUPE.", "");
+
+    return (null, qualification);
+}
+
+app.MapPost("/api/transactions", async (TransactionInput input) =>
+{
+    var (erreur, qualification) = ValiderTransaction(input);
+    if (erreur is not null)
+        return Results.BadRequest(erreur);
 
     var transaction = new Transaction(
         Guid.NewGuid(), input.AcheteurId, input.CibleId, input.Date, input.NombreActions, input.Capital,
@@ -140,6 +149,26 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
         "@DroitVoteExercable, @VendeurId, @PrixAction, @Qualification)",
         transaction);
     return Results.Created($"/api/transactions/{transaction.Id}", transaction);
+});
+
+app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input) =>
+{
+    var (erreur, qualification) = ValiderTransaction(input);
+    if (erreur is not null)
+        return Results.BadRequest(erreur);
+
+    await using var conn = new SqlConnection(ConnectionString());
+    var lignes = await conn.ExecuteAsync(
+        "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, CibleId = @CibleId, [Date] = @Date, " +
+        "NombreActions = @NombreActions, Capital = @Capital, DroitVoteTheorique = @DroitVoteTheorique, " +
+        "DroitVoteExercable = @DroitVoteExercable, VendeurId = @VendeurId, PrixAction = @PrixAction, " +
+        "Qualification = @Qualification WHERE Id = @id",
+        new
+        {
+            id, input.AcheteurId, input.CibleId, input.Date, input.NombreActions, input.Capital,
+            input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, input.PrixAction, Qualification = qualification,
+        });
+    return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
 
 app.MapDelete("/api/transactions/{id:guid}", async (Guid id) =>

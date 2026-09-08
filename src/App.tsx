@@ -92,6 +92,19 @@ function App() {
     }
   }
 
+  async function modifierTransaction(id: string, champs: Omit<Transaction, "id">) {
+    const avant = transactions;
+    // Optimiste : la table doit réagir immédiatement à l'enregistrement.
+    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...champs } : t)));
+    try {
+      await api.modifierTransaction(id, champs);
+      setErreur(null);
+    } catch (e) {
+      setTransactions(avant);
+      setErreur(`Impossible de modifier la transaction : ${messageErreur(e)}`);
+    }
+  }
+
   async function supprimerTransaction(id: string) {
     try {
       await api.supprimerTransaction(id);
@@ -191,6 +204,7 @@ function App() {
                 transactions={transactions}
                 societes={societes}
                 onDelete={supprimerTransaction}
+                onUpdate={modifierTransaction}
               />
             </section>
           )}

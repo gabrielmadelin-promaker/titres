@@ -33,7 +33,6 @@ interface SocieteEditRowProps {
 
 function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   const [nom, setNom] = useState(societe.nom);
-  const [principale, setPrincipale] = useState(societe.principale);
   const [valeurNominale, setValeurNominale] = useState(societe.valeurNominale?.toString() ?? "");
   const [pays, setPays] = useState(societe.pays ?? "");
   const [siegeSocial, setSiegeSocial] = useState(societe.siegeSocial ?? "");
@@ -46,7 +45,9 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
     if (!nomPropre) return;
     onSave({
       nom: nomPropre,
-      principale,
+      // Non modifiable depuis l'interface : conservé tel quel, seule une
+      // intervention directe en base peut changer ce champ.
+      principale: societe.principale,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,
@@ -93,12 +94,6 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
       <div className="form-field">
         <label>LEI</label>
         <input type="text" value={lei} onChange={(e) => setLei(e.target.value)} />
-      </div>
-      <div className="form-field form-field-checkbox">
-        <label>
-          <input type="checkbox" checked={principale} onChange={(e) => setPrincipale(e.target.checked)} />
-          Société principale
-        </label>
       </div>
       <div className="edit-row-actions">
         <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
@@ -163,7 +158,6 @@ export function SocietesTable({ societes, transactions, onDelete, onUpdate }: Pr
       "Sociétés",
       triees.map((l) => ({
         Société: l.societe.nom,
-        Principale: l.societe.principale ? "Oui" : "Non",
         "Valeur nominale": l.societe.valeurNominale ?? "",
         Pays: l.societe.pays ?? "",
         "Siège social": l.societe.siegeSocial ?? "",

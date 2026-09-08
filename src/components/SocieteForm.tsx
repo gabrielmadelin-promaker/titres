@@ -12,7 +12,6 @@ function champVide(): string {
 
 export function SocieteForm({ onAdd }: Props) {
   const [nom, setNom] = useState("");
-  const [principale, setPrincipale] = useState(false);
   const [valeurNominale, setValeurNominale] = useState(champVide());
   const [pays, setPays] = useState(champVide());
   const [siegeSocial, setSiegeSocial] = useState(champVide());
@@ -26,7 +25,9 @@ export function SocieteForm({ onAdd }: Props) {
 
     onAdd({
       nom: nomPropre,
-      principale,
+      // Non modifiable depuis l'interface : toujours faux à la création,
+      // seule une intervention directe en base peut changer ce champ.
+      principale: false,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,
@@ -35,7 +36,6 @@ export function SocieteForm({ onAdd }: Props) {
     });
 
     setNom("");
-    setPrincipale(false);
     setValeurNominale(champVide());
     setPays(champVide());
     setSiegeSocial(champVide());
@@ -102,17 +102,6 @@ export function SocieteForm({ onAdd }: Props) {
         <input id="societe-lei" type="text" value={lei} onChange={(e) => setLei(e.target.value)} />
       </div>
 
-      <div className="form-field form-field-checkbox">
-        <label htmlFor="societe-principale">
-          <input
-            id="societe-principale"
-            type="checkbox"
-            checked={principale}
-            onChange={(e) => setPrincipale(e.target.checked)}
-          />
-          Société principale (boîte dans l'organigramme central)
-        </label>
-      </div>
       <button type="submit" className="btn btn-primary">
         Ajouter la société
       </button>

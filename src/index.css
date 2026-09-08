@@ -60,7 +60,7 @@ h3 {
 }
 
 .app {
-  max-width: 1200px;
+  max-width: 1700px;
   margin: 0 auto;
   padding: 32px 20px 64px;
 }
@@ -161,9 +161,27 @@ h3 {
 
 .table-group-header th {
   text-align: center;
-  background: var(--accent-bg);
   color: var(--accent);
   border-bottom: 1px solid var(--border);
+}
+
+/* Distingue visuellement les groupes de 4 colonnes (Total/Direct/Indirect/
+   Cascade) d'une métrique à l'autre, dans le tableau des participations. */
+.groupe-metrique-0 {
+  background: var(--accent-bg);
+}
+
+.groupe-metrique-1 {
+  background: var(--panel-bg);
+}
+
+.groupe-metrique-debut {
+  border-left: 2px solid var(--accent);
+}
+
+.valeur-secondaire {
+  font-size: 12px;
+  color: var(--text);
 }
 
 .edit-row-form {
@@ -190,7 +208,7 @@ h3 {
 .table th,
 .table td {
   text-align: left;
-  padding: 8px 10px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -626,7 +644,7 @@ h3 {
 }
 
 .layout-wide {
-  max-width: 1100px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 

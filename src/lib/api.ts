@@ -41,6 +41,10 @@ export function creerTransaction(transaction: Omit<Transaction, "id">): Promise<
   return request("/transactions", { method: "POST", body: JSON.stringify(transaction) });
 }
 
+export function modifierTransaction(id: string, champs: Omit<Transaction, "id">): Promise<void> {
+  return request(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(champs) });
+}
+
 export function supprimerTransaction(id: string): Promise<void> {
   return request(`/transactions/${id}`, { method: "DELETE" });
 }

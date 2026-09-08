@@ -42,7 +42,7 @@ const GROUPES: GroupeMetrique[] = [
 type Colonne = "acheteur" | "cible" | `total_${Metrique}`;
 
 const SEUIL_ECART = 0.01;
-const MAX_CHEMINS_AFFICHES = 15;
+const MAX_CHEMINS_AFFICHES = 8;
 
 interface DetailCheminsProps {
   transactions: Transaction[];
@@ -117,15 +117,25 @@ export function ParticipationsTable({ societes, transactions }: Props) {
   // La liste des couples (actionnaire, cible) à afficher est l'union de ce
   // que chaque métrique a pu produire — une métrique facultative (nombre
   // d'actions, droits de vote) peut être renseignée sur des transactions où
-  // une autre ne l'est pas.
+  // une autre ne l'est pas. L'ordre de cette union dépend de l'ordre interne
+  // (non significatif) de chaque calcul ; on le fige tout de suite par nom
+  // pour que le tableau ait un ordre stable même avant tout tri utilisateur
+  // — sinon des lignes de même actionnaire pouvaient sembler "remonter" de
+  // façon apparemment aléatoire d'un rendu à l'autre.
   const lignesBase = useMemo(() => {
     const cles = new Set<string>();
     parMetrique.forEach((map) => map.forEach((_, cle) => cles.add(cle)));
-    return [...cles].map((cle) => {
+    const lignes = [...cles].map((cle) => {
       const [acheteurId, cibleId] = cle.split("::");
       return { cle, acheteurId, cibleId };
     });
-  }, [parMetrique]);
+    const nomOuId = (id: string) => nomParId.get(id) ?? "(supprimée)";
+    lignes.sort((a, b) => {
+      const parActionnaire = comparerValeurs(nomOuId(a.acheteurId), nomOuId(b.acheteurId));
+      return parActionnaire !== 0 ? parActionnaire : comparerValeurs(nomOuId(a.cibleId), nomOuId(b.cibleId));
+    });
+    return lignes;
+  }, [parMetrique, nomParId]);
 
   const filtrees = useMemo(
     () =>
@@ -236,25 +246,25 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                 >
                   Société détenue{flecheTri(tri, "cible")}
                 </th>
-                {GROUPES.map((g) => (
-                  <th key={g.metrique} colSpan={4}>
+                {GROUPES.map((g, i) => (
+                  <th key={g.metrique} colSpan={4} className={`groupe-metrique groupe-metrique-${i % 2}`}>
                     {g.libelle}
                   </th>
                 ))}
               </tr>
               <tr>
-                {GROUPES.map((g) => (
+                {GROUPES.map((g, i) => (
                   <Fragment key={g.metrique}>
                     <th
-                      className="th-tri num"
+                      className={`th-tri num groupe-metrique groupe-metrique-${i % 2} groupe-metrique-debut`}
                       onClick={() => setTri(basculerTri(tri, `total_${g.metrique}` as Colonne))}
                       title="Total détenu, directement et indirectement via les sociétés intermédiaires."
                     >
                       Total{flecheTri(tri, `total_${g.metrique}` as Colonne)}
                     </th>
-                    <th className="num">Direct</th>
-                    <th className="num">Indirect</th>
-                    <th aria-label="Détail" />
+                    <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Direct</th>
+                    <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Indirect</th>
+                    <th aria-label="Détail" className={`groupe-metrique groupe-metrique-${i % 2}`} />
                   </Fragment>
                 ))}
               </tr>
@@ -265,19 +275,26 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                   <tr>
                     <td>{nomDe(p.acheteurId)}</td>
                     <td>{nomDe(p.cibleId)}</td>
-                    {GROUPES.map((g) => {
+                    {GROUPES.map((g, i) => {
                       const d = parMetrique.get(g.metrique)?.get(p.cle);
                       const total = d?.valeurTotale ?? null;
                       const direct = d?.valeurDirecte ?? null;
                       const indirect = g.chainable && total !== null && direct !== null ? total - direct : null;
                       const aIndirect = indirect !== null && Math.abs(indirect) > SEUIL_ECART;
                       const estOuverte = ouvert?.cle === p.cle && ouvert.metrique === g.metrique;
+                      const classeGroupe = `groupe-metrique groupe-metrique-${i % 2}`;
                       return (
                         <Fragment key={g.metrique}>
-                          <td className="num">{total === null ? "—" : g.formatValeur(total)}</td>
-                          <td className="num">{direct === null ? "—" : g.formatValeur(direct)}</td>
-                          <td className="num">{indirect === null ? "—" : g.formatValeur(indirect)}</td>
-                          <td className="actions">
+                          <td className={`num ${classeGroupe} groupe-metrique-debut`}>
+                            {total === null ? "—" : g.formatValeur(total)}
+                          </td>
+                          <td className={`num valeur-secondaire ${classeGroupe}`}>
+                            {direct === null ? "—" : g.formatValeur(direct)}
+                          </td>
+                          <td className={`num valeur-secondaire ${classeGroupe}`}>
+                            {indirect === null ? "—" : g.formatValeur(indirect)}
+                          </td>
+                          <td className={`actions ${classeGroupe}`}>
                             {aIndirect && (
                               <button
                                 type="button"
