@@ -3,7 +3,16 @@ export interface Societe {
   nom: string;
   /** Apparaît comme boîte dans l'arbre central de l'organigramme ; sinon groupée en actionnaire minoritaire. */
   principale: boolean;
+  /** Valeur nominale de l'action, dans la devise de la société. */
+  valeurNominale: number | null;
+  pays: string | null;
+  siegeSocial: string | null;
+  siren: string | null;
+  lei: string | null;
 }
+
+export const QUALIFICATIONS = ["Simple", "Fusion", "TUPE"] as const;
+export type Qualification = (typeof QUALIFICATIONS)[number];
 
 export interface Transaction {
   id: string;
@@ -11,8 +20,19 @@ export interface Transaction {
   acheteurId: string;
   /** Société dont les actions sont achetées. */
   cibleId: string;
-  /** Pourcentage du capital de la société cible acquis lors de cette transaction. */
-  pourcentage: number;
   /** Date de la transaction (format ISO yyyy-mm-dd). */
   date: string;
+  /** Nombre d'actions échangées (positif = achat, négatif = vente). */
+  nombreActions: number | null;
+  /** Part du capital de la société cible échangée (positif = achat, négatif = vente). */
+  capital: number;
+  /** Droit de vote théorique (peut différer du capital : actions à droit de vote double, sans droit de vote...). */
+  droitVoteTheorique: number | null;
+  /** Droit de vote effectivement exerçable (peut différer du théorique : droits suspendus, autocontrôle...). */
+  droitVoteExercable: number | null;
+  /** Société ayant cédé les actions, si connue. */
+  vendeurId: string | null;
+  /** Prix unitaire de l'action lors de la transaction, en euros. */
+  prixAction: number | null;
+  qualification: Qualification;
 }

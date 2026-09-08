@@ -151,6 +151,42 @@ h3 {
   font-size: 14px;
 }
 
+.table-scroll {
+  overflow-x: auto;
+}
+
+.table-scroll .table {
+  min-width: 1100px;
+}
+
+.table-group-header th {
+  text-align: center;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+
+.edit-row-form {
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--accent-bg);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 4px 0;
+}
+
+.edit-row-form .form-field label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.edit-row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .table th,
 .table td {
   text-align: left;
@@ -202,6 +238,14 @@ h3 {
 }
 
 .chemins-detail {
+  /* La cellule qui la contient couvre toutes les colonnes d'un tableau très
+     large (jusqu'à 18 colonnes) : sans cette largeur propre, le texte ne se
+     met à la ligne qu'à la largeur totale du tableau (bien au-delà de ce qui
+     est visible sans défiler), et reste ancrée au bord gauche visible plutôt
+     que de suivre le défilement horizontal du tableau. */
+  position: sticky;
+  left: 8px;
+  width: min(760px, calc(100vw - 96px));
   background: var(--accent-bg);
   border-radius: 8px;
   padding: 10px 14px;
@@ -226,11 +270,11 @@ h3 {
 
 .chemins-ligne {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 12px;
   font-size: 12.5px;
-  padding: 3px 0;
+  line-height: 1.5;
+  padding: 4px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -239,25 +283,36 @@ h3 {
 }
 
 .chemins-chaine {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--text);
+}
+
+.chemins-segment {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .chemins-fleche {
   color: var(--accent);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .chemins-pct {
   color: var(--text);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .chemins-contribution {
-  flex: none;
+  flex: 0 0 auto;
+  padding-top: 1px;
   font-weight: 700;
   color: var(--org-ink);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .chemins-reste {

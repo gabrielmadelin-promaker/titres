@@ -50,14 +50,15 @@ function App() {
     }
   }
 
-  async function basculerPrincipale(id: string, principale: boolean) {
-    // Optimiste : la table doit réagir immédiatement au clic sur la case.
-    setSocietes((prev) => prev.map((s) => (s.id === id ? { ...s, principale } : s)));
+  async function modifierSociete(id: string, champs: Omit<Societe, "id">) {
+    const avant = societes;
+    // Optimiste : la table doit réagir immédiatement à l'enregistrement.
+    setSocietes((prev) => prev.map((s) => (s.id === id ? { ...s, ...champs } : s)));
     try {
-      await api.modifierSocietePrincipale(id, principale);
+      await api.modifierSociete(id, champs);
       setErreur(null);
     } catch (e) {
-      setSocietes((prev) => prev.map((s) => (s.id === id ? { ...s, principale: !principale } : s)));
+      setSocietes(avant);
       setErreur(`Impossible de modifier la société : ${messageErreur(e)}`);
     }
   }
@@ -162,7 +163,7 @@ function App() {
           Chargement des données…
         </p>
       ) : (
-        <main className={onglet === "visualisation" ? "layout-wide" : "layout-single"}>
+        <main className="layout-wide">
           {onglet === "societes" && (
             <section className="panel">
               <h2>Sociétés</h2>
@@ -174,7 +175,7 @@ function App() {
                 societes={societes}
                 transactions={transactions}
                 onDelete={supprimerSociete}
-                onTogglePrincipale={basculerPrincipale}
+                onUpdate={modifierSociete}
               />
             </section>
           )}

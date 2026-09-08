@@ -36,6 +36,8 @@ string ConnectionString() =>
         : throw new InvalidOperationException(
             "ConnectionStrings:CalculDesTitres manquante — créez appsettings.Production.json à côté de l'exécutable.");
 
+var qualificationsValides = new[] { "Simple", "Fusion", "TUPE" };
+
 app.MapGet("/api/health", async () =>
 {
     try
@@ -50,10 +52,12 @@ app.MapGet("/api/health", async () =>
     }
 });
 
+const string ColonnesSociete = "Id, Nom, Principale, ValeurNominale, Pays, SiegeSocial, Siren, Lei";
+
 app.MapGet("/api/societes", async () =>
 {
     await using var conn = new SqlConnection(ConnectionString());
-    var societes = await conn.QueryAsync<Societe>("SELECT Id, Nom, Principale FROM dbo.Societes ORDER BY Nom");
+    var societes = await conn.QueryAsync<Societe>($"SELECT {ColonnesSociete} FROM dbo.Societes ORDER BY Nom");
     return Results.Ok(societes);
 });
 
@@ -63,17 +67,27 @@ app.MapPost("/api/societes", async (SocieteInput input) =>
     if (string.IsNullOrEmpty(nom))
         return Results.BadRequest("Le nom est requis.");
 
-    var societe = new Societe(Guid.NewGuid(), nom, input.Principale);
+    var societe = new Societe(
+        Guid.NewGuid(), nom, input.Principale, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei);
     await using var conn = new SqlConnection(ConnectionString());
-    await conn.ExecuteAsync("INSERT INTO dbo.Societes (Id, Nom, Principale) VALUES (@Id, @Nom, @Principale)", societe);
+    await conn.ExecuteAsync(
+        "INSERT INTO dbo.Societes (Id, Nom, Principale, ValeurNominale, Pays, SiegeSocial, Siren, Lei) " +
+        "VALUES (@Id, @Nom, @Principale, @ValeurNominale, @Pays, @SiegeSocial, @Siren, @Lei)",
+        societe);
     return Results.Created($"/api/societes/{societe.Id}", societe);
 });
 
 app.MapPut("/api/societes/{id:guid}", async (Guid id, SocieteUpdate input) =>
 {
+    var nom = input.Nom?.Trim();
+    if (string.IsNullOrEmpty(nom))
+        return Results.BadRequest("Le nom est requis.");
+
     await using var conn = new SqlConnection(ConnectionString());
     var lignes = await conn.ExecuteAsync(
-        "UPDATE dbo.Societes SET Principale = @Principale WHERE Id = @id", new { id, input.Principale });
+        "UPDATE dbo.Societes SET Nom = @Nom, Principale = @Principale, ValeurNominale = @ValeurNominale, " +
+        "Pays = @Pays, SiegeSocial = @SiegeSocial, Siren = @Siren, Lei = @Lei WHERE Id = @id",
+        new { id, Nom = nom, input.Principale, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei });
     return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
 
@@ -84,12 +98,15 @@ app.MapDelete("/api/societes/{id:guid}", async (Guid id) =>
     return Results.NoContent();
 });
 
+const string ColonnesTransaction =
+    "Id, AcheteurId, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, Capital, " +
+    "DroitVoteTheorique, DroitVoteExercable, VendeurId, PrixAction, Qualification";
+
 app.MapGet("/api/transactions", async () =>
 {
     await using var conn = new SqlConnection(ConnectionString());
     var transactions = await conn.QueryAsync<Transaction>(
-        "SELECT Id, AcheteurId, CibleId, Pourcentage, CONVERT(varchar(10), [Date], 23) AS Date " +
-        "FROM dbo.Transactions ORDER BY [Date] DESC");
+        $"SELECT {ColonnesTransaction} FROM dbo.Transactions ORDER BY [Date] DESC");
     return Results.Ok(transactions);
 });
 
@@ -97,16 +114,30 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
 {
     if (input.AcheteurId == input.CibleId)
         return Results.BadRequest("La société acheteuse doit être différente de la société cible.");
-    if (input.Pourcentage == 0 || input.Pourcentage < -100 || input.Pourcentage > 100)
-        return Results.BadRequest("Le pourcentage doit être compris entre -100 et 100, sans être nul (négatif pour une vente).");
+    if (input.Capital == 0 || input.Capital < -100 || input.Capital > 100)
+        return Results.BadRequest("Le capital (%) doit être compris entre -100 et 100, sans être nul (négatif pour une vente).");
+    if (input.DroitVoteTheorique is < -100 or > 100)
+        return Results.BadRequest("Le droit de vote théorique (%) doit être compris entre -100 et 100.");
+    if (input.DroitVoteExercable is < -100 or > 100)
+        return Results.BadRequest("Le droit de vote exerçable (%) doit être compris entre -100 et 100.");
+    if (input.PrixAction is < 0)
+        return Results.BadRequest("Le prix de l'action ne peut pas être négatif.");
     if (string.IsNullOrWhiteSpace(input.Date))
         return Results.BadRequest("La date est requise.");
 
-    var transaction = new Transaction(Guid.NewGuid(), input.AcheteurId, input.CibleId, input.Pourcentage, input.Date);
+    var qualification = string.IsNullOrWhiteSpace(input.Qualification) ? "Simple" : input.Qualification;
+    if (!qualificationsValides.Contains(qualification))
+        return Results.BadRequest("La qualification doit être Simple, Fusion ou TUPE.");
+
+    var transaction = new Transaction(
+        Guid.NewGuid(), input.AcheteurId, input.CibleId, input.Date, input.NombreActions, input.Capital,
+        input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, input.PrixAction, qualification);
     await using var conn = new SqlConnection(ConnectionString());
     await conn.ExecuteAsync(
-        "INSERT INTO dbo.Transactions (Id, AcheteurId, CibleId, Pourcentage, [Date]) " +
-        "VALUES (@Id, @AcheteurId, @CibleId, @Pourcentage, @Date)",
+        "INSERT INTO dbo.Transactions (Id, AcheteurId, CibleId, [Date], NombreActions, Capital, DroitVoteTheorique, " +
+        "DroitVoteExercable, VendeurId, PrixAction, Qualification) " +
+        "VALUES (@Id, @AcheteurId, @CibleId, @Date, @NombreActions, @Capital, @DroitVoteTheorique, " +
+        "@DroitVoteExercable, @VendeurId, @PrixAction, @Qualification)",
         transaction);
     return Results.Created($"/api/transactions/{transaction.Id}", transaction);
 });
@@ -120,12 +151,48 @@ app.MapDelete("/api/transactions/{id:guid}", async (Guid id) =>
 
 app.Run();
 
-record Societe(Guid Id, string Nom, bool Principale);
+record Societe(
+    Guid Id, string Nom, bool Principale, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
-record SocieteInput(string? Nom, bool Principale = false);
+record SocieteInput(
+    string? Nom,
+    bool Principale = false,
+    decimal? ValeurNominale = null,
+    string? Pays = null,
+    string? SiegeSocial = null,
+    string? Siren = null,
+    string? Lei = null);
 
-record SocieteUpdate(bool Principale);
+record SocieteUpdate(
+    string? Nom,
+    bool Principale,
+    decimal? ValeurNominale,
+    string? Pays,
+    string? SiegeSocial,
+    string? Siren,
+    string? Lei);
 
-record Transaction(Guid Id, Guid AcheteurId, Guid CibleId, decimal Pourcentage, string Date);
+record Transaction(
+    Guid Id,
+    Guid AcheteurId,
+    Guid CibleId,
+    string Date,
+    decimal? NombreActions,
+    decimal Capital,
+    decimal? DroitVoteTheorique,
+    decimal? DroitVoteExercable,
+    Guid? VendeurId,
+    decimal? PrixAction,
+    string Qualification);
 
-record TransactionInput(Guid AcheteurId, Guid CibleId, decimal Pourcentage, string Date);
+record TransactionInput(
+    Guid AcheteurId,
+    Guid CibleId,
+    string Date,
+    decimal? NombreActions,
+    decimal Capital,
+    decimal? DroitVoteTheorique,
+    decimal? DroitVoteExercable,
+    Guid? VendeurId,
+    decimal? PrixAction,
+    string? Qualification);

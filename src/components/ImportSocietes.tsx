@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Societe } from "../types";
-import { booleenColonne, lireFeuilleXlsx, texteColonne } from "../lib/xlsxImport";
+import { booleenColonne, lireFeuilleXlsx, nombreColonne, texteColonne } from "../lib/xlsxImport";
 
 interface Props {
   societes: Societe[];
@@ -38,7 +38,15 @@ export function ImportSocietes({ societes, onImport }: Props) {
         }
         vus.add(cle);
         const principale = booleenColonne(ligne, "principale");
-        aAjouter.push({ nom, principale });
+        aAjouter.push({
+          nom,
+          principale,
+          valeurNominale: nombreColonne(ligne, "valeur nominale", "valeur nominale de l'action"),
+          pays: texteColonne(ligne, "pays") || null,
+          siegeSocial: texteColonne(ligne, "siège social", "siege social") || null,
+          siren: texteColonne(ligne, "siren") || null,
+          lei: texteColonne(ligne, "lei") || null,
+        });
       });
 
       if (aAjouter.length === 0 && ignorees.length === 0) {
@@ -63,8 +71,8 @@ export function ImportSocietes({ societes, onImport }: Props) {
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
       <p className="import-hint">
-        Colonnes : « Nom » (requise), « Principale » (facultative — Oui/1/x pour une société affichée dans
-        l'arbre central de l'organigramme).
+        Colonnes : « Nom » (requise), « Principale » (Oui/1/x), « Valeur nominale », « Pays », « Siège social »,
+        « SIREN », « LEI » (toutes facultatives).
       </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (

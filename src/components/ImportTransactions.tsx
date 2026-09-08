@@ -1,12 +1,16 @@
 import { useState } from "react";
-import type { Societe, Transaction } from "../types";
-import { dateExcelVersIso, lireFeuilleXlsx, texteColonne, valeurColonne } from "../lib/xlsxImport";
+import { QUALIFICATIONS, type Qualification, type Societe, type Transaction } from "../types";
+import { dateExcelVersIso, lireFeuilleXlsx, nombreColonne, texteColonne, valeurColonne } from "../lib/xlsxImport";
 
 interface Props {
   societes: Societe[];
   onImport: (
     transactions: Omit<Transaction, "id">[],
   ) => Promise<{ ajoutees: number; erreurs: string[] }>;
+}
+
+function estQualificationValide(valeur: string): valeur is Qualification {
+  return (QUALIFICATIONS as readonly string[]).includes(valeur);
 }
 
 export function ImportTransactions({ societes, onImport }: Props) {
@@ -54,17 +58,11 @@ export function ImportTransactions({ societes, onImport }: Props) {
           return;
         }
 
-        const pourcentageBrut = valeurColonne(ligne, "pourcentage", "%", "pct");
-        const pourcentage = Number(pourcentageBrut);
-        if (
-          !pourcentageBrut ||
-          Number.isNaN(pourcentage) ||
-          pourcentage === 0 ||
-          pourcentage < -100 ||
-          pourcentage > 100
-        ) {
+        const capitalBrut = valeurColonne(ligne, "capital", "pourcentage", "%", "pct");
+        const capital = Number(capitalBrut);
+        if (!capitalBrut || Number.isNaN(capital) || capital === 0 || capital < -100 || capital > 100) {
           lignesErreurs.push(
-            `Ligne ${numeroLigne} : pourcentage invalide (« ${String(pourcentageBrut)} », attendu entre -100 et 100, non nul).`,
+            `Ligne ${numeroLigne} : capital (%) invalide (« ${String(capitalBrut)} », attendu entre -100 et 100, non nul).`,
           );
           return;
         }
@@ -76,7 +74,27 @@ export function ImportTransactions({ societes, onImport }: Props) {
           return;
         }
 
-        valides.push({ acheteurId: acheteur.id, cibleId: cible.id, pourcentage, date });
+        const nomVendeur = texteColonne(ligne, "vendeur", "société vendeuse", "societe vendeuse");
+        const vendeur = nomVendeur ? trouverSociete(nomVendeur) : undefined;
+        if (nomVendeur && !vendeur) {
+          lignesErreurs.push(`Ligne ${numeroLigne} : société vendeuse « ${nomVendeur} » introuvable, ignorée.`);
+        }
+
+        const qualificationBrute = texteColonne(ligne, "qualification") || "Simple";
+        const qualification = estQualificationValide(qualificationBrute) ? qualificationBrute : "Simple";
+
+        valides.push({
+          acheteurId: acheteur.id,
+          cibleId: cible.id,
+          date,
+          nombreActions: nombreColonne(ligne, "nombre d'actions", "nombre actions"),
+          capital,
+          droitVoteTheorique: nombreColonne(ligne, "droit de vote théorique", "droit de vote theorique", "dv théorique", "dv theorique"),
+          droitVoteExercable: nombreColonne(ligne, "droit de vote exerçable", "droit de vote exercable", "dv exerçable", "dv exercable"),
+          vendeurId: vendeur?.id ?? null,
+          prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
+          qualification,
+        });
       });
 
       if (valides.length === 0 && lignesErreurs.length === 0) {
@@ -101,7 +119,9 @@ export function ImportTransactions({ societes, onImport }: Props) {
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
       <p className="import-hint">
-        Colonnes attendues : « Acheteur », « Cible », « Pourcentage » (-100 à 100, négatif pour une vente), « Date ».
+        Colonnes : « Acheteur », « Cible », « Capital » (-100 à 100, négatif pour une vente), « Date » (requises) ;
+        « Nombre d'actions », « Droit de vote théorique », « Droit de vote exerçable », « Vendeur », « Prix de
+        l'action », « Qualification » (Simple/Fusion/TUPE — facultatives).
       </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (

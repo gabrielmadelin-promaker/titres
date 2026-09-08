@@ -28,6 +28,14 @@ export function texteColonne(ligne: RowObject, ...nomsPossibles: string[]): stri
   return valeur === undefined || valeur === null ? "" : String(valeur).trim();
 }
 
+/** Nombre optionnel : null si la colonne est absente/vide ou non numérique. */
+export function nombreColonne(ligne: RowObject, ...nomsPossibles: string[]): number | null {
+  const valeur = valeurColonne(ligne, ...nomsPossibles);
+  if (valeur === undefined || valeur === null || valeur === "") return null;
+  const n = Number(valeur);
+  return Number.isNaN(n) ? null : n;
+}
+
 const VALEURS_VRAIES = new Set(["oui", "yes", "true", "vrai", "1", "x"]);
 
 /** Interprète une colonne booléenne texte/numérique/case Excel ("Oui", "1", "x", TRUE...). */

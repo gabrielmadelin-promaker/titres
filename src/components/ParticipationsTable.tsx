@@ -1,7 +1,12 @@
 import { Fragment, useMemo, useState } from "react";
 import type { Societe, Transaction } from "../types";
-import { formatPourcentage } from "../lib/format";
-import { calculerCheminsParticipation, calculerParticipationsDetaillees, type ParticipationDetaillee } from "../lib/participations";
+import { formatDecimal, formatPourcentage } from "../lib/format";
+import {
+  calculerCheminsParticipation,
+  calculerParticipationsDetaillees,
+  type Metrique,
+  type ParticipationDetaillee,
+} from "../lib/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
 
@@ -10,7 +15,31 @@ interface Props {
   transactions: Transaction[];
 }
 
-type Colonne = "acheteur" | "cible" | "total" | "direct";
+interface GroupeMetrique {
+  metrique: Metrique;
+  libelle: string;
+  chainable: boolean;
+  formatValeur: (v: number) => string;
+}
+
+const GROUPES: GroupeMetrique[] = [
+  { metrique: "nombreActions", libelle: "Nombre d'actions", chainable: false, formatValeur: formatDecimal },
+  { metrique: "capital", libelle: "Capital (%)", chainable: true, formatValeur: formatPourcentage },
+  {
+    metrique: "droitVoteTheorique",
+    libelle: "Droit de vote théorique (%)",
+    chainable: true,
+    formatValeur: formatPourcentage,
+  },
+  {
+    metrique: "droitVoteExercable",
+    libelle: "Droit de vote exerçable (%)",
+    chainable: true,
+    formatValeur: formatPourcentage,
+  },
+];
+
+type Colonne = "acheteur" | "cible" | `total_${Metrique}`;
 
 const SEUIL_ECART = 0.01;
 const MAX_CHEMINS_AFFICHES = 15;
@@ -19,14 +48,16 @@ interface DetailCheminsProps {
   transactions: Transaction[];
   acheteurId: string;
   cibleId: string;
+  metrique: Metrique;
+  formatValeur: (v: number) => string;
   nomDe: (id: string) => string;
 }
 
-/** Cascade des chemins de détention (direct + indirects) qui composent un "% détenu" total. */
-function DetailChemins({ transactions, acheteurId, cibleId, nomDe }: DetailCheminsProps) {
+/** Cascade des chemins de détention (direct + indirects) qui composent la valeur totale d'une métrique. */
+function DetailChemins({ transactions, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
   const chemins = useMemo(
-    () => calculerCheminsParticipation(transactions, acheteurId, cibleId),
-    [transactions, acheteurId, cibleId],
+    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique),
+    [transactions, acheteurId, cibleId, metrique],
   );
   const affiches = chemins.slice(0, MAX_CHEMINS_AFFICHES);
   const reste = chemins.slice(MAX_CHEMINS_AFFICHES);
@@ -43,23 +74,21 @@ function DetailChemins({ transactions, acheteurId, cibleId, nomDe }: DetailChemi
           <li key={i} className="chemins-ligne">
             <span className="chemins-chaine">
               {chemin.societeIds.map((id, j) => (
-                <span key={id}>
+                <span key={id} className="chemins-segment">
                   {j > 0 && <span className="chemins-fleche"> → </span>}
                   {nomDe(id)}
-                  {j < chemin.pourcentages.length && (
-                    <span className="chemins-pct"> ({formatPourcentage(chemin.pourcentages[j])})</span>
-                  )}
+                  {j < chemin.valeurs.length && <span className="chemins-pct"> ({formatValeur(chemin.valeurs[j])})</span>}
                 </span>
               ))}
             </span>
-            <span className="chemins-contribution">= {formatPourcentage(chemin.contribution)}</span>
+            <span className="chemins-contribution">= {formatValeur(chemin.contribution)}</span>
           </li>
         ))}
       </ul>
       {reste.length > 0 && (
         <p className="chemins-reste">
           + {reste.length} autre{reste.length > 1 ? "s" : ""} chemin{reste.length > 1 ? "s" : ""} plus mineur
-          {reste.length > 1 ? "s" : ""}, {formatPourcentage(resteTotal)} au total.
+          {reste.length > 1 ? "s" : ""}, {formatValeur(resteTotal)} au total.
         </p>
       )}
     </div>
@@ -70,55 +99,75 @@ export function ParticipationsTable({ societes, transactions }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "acheteur", sens: "asc" });
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");
   const [filtreDetenueId, setFiltreDetenueId] = useState("");
-  const [ligneOuverte, setLigneOuverte] = useState<string | null>(null);
+  const [ouvert, setOuvert] = useState<{ cle: string; metrique: Metrique } | null>(null);
 
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
-  const participations = useMemo(() => calculerParticipationsDetaillees(transactions), [transactions]);
+  const parMetrique = useMemo(() => {
+    const map = new Map<Metrique, Map<string, ParticipationDetaillee>>();
+    for (const g of GROUPES) {
+      const detail = calculerParticipationsDetaillees(transactions, g.metrique);
+      map.set(g.metrique, new Map(detail.map((d) => [`${d.acheteurId}::${d.cibleId}`, d])));
+    }
+    return map;
+  }, [transactions]);
+
+  // La liste des couples (actionnaire, cible) à afficher est l'union de ce
+  // que chaque métrique a pu produire — une métrique facultative (nombre
+  // d'actions, droits de vote) peut être renseignée sur des transactions où
+  // une autre ne l'est pas.
+  const lignesBase = useMemo(() => {
+    const cles = new Set<string>();
+    parMetrique.forEach((map) => map.forEach((_, cle) => cles.add(cle)));
+    return [...cles].map((cle) => {
+      const [acheteurId, cibleId] = cle.split("::");
+      return { cle, acheteurId, cibleId };
+    });
+  }, [parMetrique]);
 
   const filtrees = useMemo(
     () =>
-      participations.filter(
+      lignesBase.filter(
         (p) =>
           (!filtreActionnaireId || p.acheteurId === filtreActionnaireId) &&
           (!filtreDetenueId || p.cibleId === filtreDetenueId),
       ),
-    [participations, filtreActionnaireId, filtreDetenueId],
+    [lignesBase, filtreActionnaireId, filtreDetenueId],
   );
 
   const triees = useMemo(() => {
     const facteur = tri.sens === "asc" ? 1 : -1;
-    const cle = (p: ParticipationDetaillee): string | number => {
-      switch (tri.colonne) {
-        case "acheteur":
-          return nomParId.get(p.acheteurId) ?? "(supprimée)";
-        case "cible":
-          return nomParId.get(p.cibleId) ?? "(supprimée)";
-        case "total":
-          return p.pourcentageTotal;
-        case "direct":
-          return p.pourcentageDirect;
-      }
+    const cle = (p: (typeof lignesBase)[number]): string | number => {
+      if (tri.colonne === "acheteur") return nomParId.get(p.acheteurId) ?? "(supprimée)";
+      if (tri.colonne === "cible") return nomParId.get(p.cibleId) ?? "(supprimée)";
+      const metrique = tri.colonne.slice("total_".length) as Metrique;
+      return parMetrique.get(metrique)?.get(p.cle)?.valeurTotale ?? -Infinity;
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
-  }, [filtrees, tri, nomParId]);
+  }, [filtrees, tri, nomParId, parMetrique]);
 
   function exporter() {
     return exporterXlsx(
       "participations.xlsx",
       "Participations",
-      triees.map((p) => ({
-        Actionnaire: nomDe(p.acheteurId),
-        "Société détenue": nomDe(p.cibleId),
-        "% détenu (total)": p.pourcentageTotal,
-        "dont % en direct": p.pourcentageDirect,
-      })),
+      triees.map((p) => {
+        const ligne: Record<string, string | number> = {
+          Actionnaire: nomDe(p.acheteurId),
+          "Société détenue": nomDe(p.cibleId),
+        };
+        for (const g of GROUPES) {
+          const d = parMetrique.get(g.metrique)?.get(p.cle);
+          ligne[`${g.libelle} — total`] = d?.valeurTotale ?? "";
+          ligne[`${g.libelle} — direct`] = d?.valeurDirecte ?? "";
+        }
+        return ligne;
+      }),
     );
   }
 
-  if (participations.length === 0) {
+  if (lignesBase.length === 0) {
     return <p className="empty">Aucune participation pour le moment.</p>;
   }
 
@@ -167,77 +216,101 @@ export function ParticipationsTable({ societes, transactions }: Props) {
       {triees.length === 0 ? (
         <p className="empty">Aucune participation ne correspond à ce filtre.</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "acheteur"))}>
-                Actionnaire{flecheTri(tri, "acheteur")}
-              </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "cible"))}>
-                Société détenue{flecheTri(tri, "cible")}
-              </th>
-              <th
-                className="th-tri num"
-                onClick={() => setTri(basculerTri(tri, "total"))}
-                title="Part totale détenue, directement et indirectement via les sociétés intermédiaires."
-              >
-                % détenu{flecheTri(tri, "total")}
-              </th>
-              <th aria-label="Détail" />
-            </tr>
-          </thead>
-          <tbody>
-            {triees.map((p) => {
-              const cle = `${p.acheteurId}::${p.cibleId}`;
-              const ecart = Math.abs(p.pourcentageTotal - p.pourcentageDirect);
-              const aDirect = Math.abs(p.pourcentageDirect) > SEUIL_ECART;
-              const aIndirect = ecart > SEUIL_ECART;
-              const ouverte = ligneOuverte === cle;
-              return (
-                <Fragment key={cle}>
+        <div className="table-scroll">
+          <table className="table table-participations">
+            <thead>
+              <tr className="table-group-header">
+                <th
+                  rowSpan={2}
+                  className="th-tri"
+                  onClick={() => setTri(basculerTri(tri, "acheteur"))}
+                  style={{ background: "var(--panel-bg)" }}
+                >
+                  Actionnaire{flecheTri(tri, "acheteur")}
+                </th>
+                <th
+                  rowSpan={2}
+                  className="th-tri"
+                  onClick={() => setTri(basculerTri(tri, "cible"))}
+                  style={{ background: "var(--panel-bg)" }}
+                >
+                  Société détenue{flecheTri(tri, "cible")}
+                </th>
+                {GROUPES.map((g) => (
+                  <th key={g.metrique} colSpan={4}>
+                    {g.libelle}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {GROUPES.map((g) => (
+                  <Fragment key={g.metrique}>
+                    <th
+                      className="th-tri num"
+                      onClick={() => setTri(basculerTri(tri, `total_${g.metrique}` as Colonne))}
+                      title="Total détenu, directement et indirectement via les sociétés intermédiaires."
+                    >
+                      Total{flecheTri(tri, `total_${g.metrique}` as Colonne)}
+                    </th>
+                    <th className="num">Direct</th>
+                    <th className="num">Indirect</th>
+                    <th aria-label="Détail" />
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {triees.map((p) => (
+                <Fragment key={p.cle}>
                   <tr>
                     <td>{nomDe(p.acheteurId)}</td>
                     <td>{nomDe(p.cibleId)}</td>
-                    <td className="num">
-                      {formatPourcentage(p.pourcentageTotal)}
-                      {aIndirect && aDirect && (
-                        <span className="participation-detail">dont {formatPourcentage(p.pourcentageDirect)} en direct</span>
-                      )}
-                      {aIndirect && !aDirect && (
-                        <span className="badge" title="Aucune transaction directe entre ces deux sociétés : participation entièrement indirecte.">
-                          indirect
-                        </span>
-                      )}
-                    </td>
-                    <td className="actions">
-                      {aIndirect && (
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-small"
-                          onClick={() => setLigneOuverte(ouverte ? null : cle)}
-                        >
-                          {ouverte ? "Masquer" : "Voir la cascade"}
-                        </button>
-                      )}
-                    </td>
+                    {GROUPES.map((g) => {
+                      const d = parMetrique.get(g.metrique)?.get(p.cle);
+                      const total = d?.valeurTotale ?? null;
+                      const direct = d?.valeurDirecte ?? null;
+                      const indirect = g.chainable && total !== null && direct !== null ? total - direct : null;
+                      const aIndirect = indirect !== null && Math.abs(indirect) > SEUIL_ECART;
+                      const estOuverte = ouvert?.cle === p.cle && ouvert.metrique === g.metrique;
+                      return (
+                        <Fragment key={g.metrique}>
+                          <td className="num">{total === null ? "—" : g.formatValeur(total)}</td>
+                          <td className="num">{direct === null ? "—" : g.formatValeur(direct)}</td>
+                          <td className="num">{indirect === null ? "—" : g.formatValeur(indirect)}</td>
+                          <td className="actions">
+                            {aIndirect && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-small"
+                                onClick={() => setOuvert(estOuverte ? null : { cle: p.cle, metrique: g.metrique })}
+                              >
+                                {estOuverte ? "Masquer" : "Cascade"}
+                              </button>
+                            )}
+                          </td>
+                        </Fragment>
+                      );
+                    })}
                   </tr>
-                  {ouverte && (
+                  {ouvert?.cle === p.cle && (
                     <tr>
-                      <td colSpan={4}>
+                      <td colSpan={2 + GROUPES.length * 4}>
                         <DetailChemins
                           transactions={transactions}
                           acheteurId={p.acheteurId}
                           cibleId={p.cibleId}
+                          metrique={ouvert.metrique}
+                          formatValeur={GROUPES.find((g) => g.metrique === ouvert.metrique)!.formatValeur}
                           nomDe={nomDe}
                         />
                       </td>
                     </tr>
                   )}
                 </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

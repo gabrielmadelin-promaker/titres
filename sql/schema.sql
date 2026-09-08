@@ -14,26 +14,38 @@ USE CalculDesTitres;
 GO
 
 CREATE TABLE dbo.Societes (
-    Id         UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
-    Nom        NVARCHAR(200)    NOT NULL,
+    Id            UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
+    Nom           NVARCHAR(200)    NOT NULL,
     -- Sociétés affichées comme boîtes dans l'arbre central de l'organigramme ;
     -- les autres n'apparaissent que groupées dans la liste des actionnaires
     -- minoritaires de la société qu'elles détiennent (voir organigramme.ts).
-    Principale BIT              NOT NULL DEFAULT 0
+    Principale    BIT              NOT NULL DEFAULT 0,
+    ValeurNominale DECIMAL(18,4)   NULL,
+    Pays          NVARCHAR(100)    NULL,
+    SiegeSocial   NVARCHAR(300)    NULL,
+    Siren         NVARCHAR(20)     NULL,
+    Lei           NVARCHAR(20)     NULL
 );
 GO
 
--- Pas de clé étrangère sur AcheteurId/CibleId : comme dans l'application
--- d'origine, une société supprimée peut laisser des transactions "orphelines"
--- (affichées côté appli comme "(supprimée)") plutôt que de bloquer la
--- suppression ou de la propager en cascade.
+-- Pas de clé étrangère sur AcheteurId/CibleId/VendeurId : comme dans
+-- l'application d'origine, une société supprimée peut laisser des
+-- transactions "orphelines" (affichées côté appli comme "(supprimée)")
+-- plutôt que de bloquer la suppression ou de la propager en cascade.
 CREATE TABLE dbo.Transactions (
-    Id          UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Transactions PRIMARY KEY DEFAULT NEWID(),
-    AcheteurId  UNIQUEIDENTIFIER NOT NULL,
-    CibleId     UNIQUEIDENTIFIER NOT NULL,
+    Id                UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Transactions PRIMARY KEY DEFAULT NEWID(),
+    AcheteurId        UNIQUEIDENTIFIER NOT NULL,
+    CibleId           UNIQUEIDENTIFIER NOT NULL,
+    [Date]            DATE             NOT NULL,
+    NombreActions     DECIMAL(18,4)    NULL,
     -- Positif = achat, négatif = vente (cession d'une partie de la participation détenue).
-    Pourcentage DECIMAL(6,2)     NOT NULL CONSTRAINT CK_Transactions_Pourcentage CHECK (Pourcentage <> 0 AND Pourcentage BETWEEN -100 AND 100),
-    [Date]      DATE             NOT NULL
+    Capital           DECIMAL(6,2)     NOT NULL CONSTRAINT CK_Transactions_Capital CHECK (Capital <> 0 AND Capital BETWEEN -100 AND 100),
+    DroitVoteTheorique DECIMAL(6,2)    NULL CONSTRAINT CK_Transactions_DVTheorique CHECK (DroitVoteTheorique BETWEEN -100 AND 100),
+    DroitVoteExercable DECIMAL(6,2)    NULL CONSTRAINT CK_Transactions_DVExercable CHECK (DroitVoteExercable BETWEEN -100 AND 100),
+    VendeurId         UNIQUEIDENTIFIER NULL,
+    PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
+    Qualification     NVARCHAR(20)     NOT NULL CONSTRAINT DF_Transactions_Qualification DEFAULT 'Simple'
+                        CONSTRAINT CK_Transactions_Qualification CHECK (Qualification IN ('Simple', 'Fusion', 'TUPE'))
 );
 GO
 

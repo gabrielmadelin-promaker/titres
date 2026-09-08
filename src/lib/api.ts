@@ -29,8 +29,8 @@ export function supprimerSociete(id: string): Promise<void> {
   return request(`/societes/${id}`, { method: "DELETE" });
 }
 
-export function modifierSocietePrincipale(id: string, principale: boolean): Promise<void> {
-  return request(`/societes/${id}`, { method: "PUT", body: JSON.stringify({ principale }) });
+export function modifierSociete(id: string, champs: Omit<Societe, "id">): Promise<void> {
+  return request(`/societes/${id}`, { method: "PUT", body: JSON.stringify(champs) });
 }
 
 export function fetchTransactions(): Promise<Transaction[]> {
