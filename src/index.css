@@ -159,10 +159,57 @@ h3 {
   min-width: 1500px;
 }
 
-/* .table-participations : sa largeur minimale dépend du nombre de groupes de
-   métriques et colonnes affichés, qui varient selon les cases à cocher
-   "Métriques affichées" — calculée et posée en style inline par le composant
-   plutôt que fixée ici. */
+/* .table-participations : largeurs de colonnes fixes posées via <colgroup>
+   par le composant (elles varient avec les cases à cocher "Métriques
+   affichées"). table-layout: fixed les fait respecter à la lettre, et
+   width: auto (plutôt que les 100% de .table) évite d'étirer le tableau
+   pour remplir la largeur disponible — il reste tassé à gauche. */
+.table-scroll .table.table-participations {
+  table-layout: fixed;
+  width: auto;
+  min-width: 0;
+}
+
+.table-participations th,
+.table-participations td {
+  padding: 8px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Les colonnes Actionnaire / Société détenue ont une largeur fixe : un nom
+   trop long est tronqué avec "…" (ellipsis, qui a besoin de nowrap pour
+   s'appliquer) plutôt que de passer sur 2 lignes, ce qui grandirait la ligne
+   et désaligne le fond alterné des cellules vides à droite (métrique "Nombre
+   d'actions", jamais de bouton Cascade). */
+.table-participations td:nth-child(1),
+.table-participations td:nth-child(2) {
+  white-space: nowrap;
+}
+
+/* .table td.actions passe en display: flex pour aligner 2 boutons
+   (Modifier/Supprimer) dans Sociétés et Transactions — mais ça sort la
+   cellule du modèle table-cell, et une cellule vide (aucun bouton "Cascade"
+   pour une ligne sans détention indirecte, ou pour la métrique "Nombre
+   d'actions" qui n'a jamais de cascade) ne s'étire alors plus à la hauteur
+   de la ligne : elle flotte, plus petite, au milieu de la cellule. Ici il
+   n'y a jamais qu'un seul bouton, pas besoin de flex : une cellule normale
+   alignée à droite suffit et reste correctement étirée sur toute la ligne. */
+.table.table-participations td.actions {
+  display: table-cell;
+  text-align: right;
+}
+
+/* Les libellés de métrique ("Droit de vote théorique (%)") sont trop longs
+   pour les colonnes volontairement étroites et fixes de ce tableau : plutôt
+   que de forcer la colonne à s'élargir pour les faire tenir sur une ligne
+   (comme le ferait .table th en nowrap), on les autorise à passer sur deux
+   lignes ici uniquement — la ligne Total/Direct/Indirect en dessous, elle,
+   reste sur une seule ligne (mots courts, tient dans la largeur fixée). */
+.table-participations .table-group-header th {
+  white-space: normal;
+  line-height: 1.2;
+}
 
 .table-group-header th {
   text-align: center;
@@ -255,7 +302,7 @@ h3 {
 }
 
 .table-filters .form-field {
-  min-width: 180px;
+  width: 144px;
 }
 
 .table-colonnes {
@@ -570,7 +617,7 @@ h3 {
 }
 
 .viz-filters .form-field {
-  min-width: 200px;
+  width: 160px;
 }
 
 .orgchart-figure {

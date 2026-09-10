@@ -44,6 +44,17 @@ type Colonne = "acheteur" | "cible" | `total_${Metrique}`;
 const SEUIL_ECART = 0.01;
 const MAX_CHEMINS_AFFICHES = 8;
 
+// Largeurs de colonnes fixes (tableau en table-layout: fixed) : les 2
+// colonnes de noms d'un côté, et — toutes les métriques affichées partageant
+// la même largeur — une colonne Total, deux colonnes Direct/Indirect
+// (visibles seulement si le détail est activé) et une colonne d'action par
+// métrique de l'autre. Le tableau n'est donc jamais plus large que la somme
+// de ces colonnes, tassé à gauche plutôt qu'étiré pour remplir l'écran.
+const LARGEUR_COL_NOM = 200;
+const LARGEUR_COL_TOTAL = 110;
+const LARGEUR_COL_DETAIL = 100;
+const LARGEUR_COL_ACTION = 110;
+
 interface DetailCheminsProps {
   transactions: Transaction[];
   acheteurId: string;
@@ -103,7 +114,7 @@ export function ParticipationsTable({ societes, transactions }: Props) {
   const [metriquesVisibles, setMetriquesVisibles] = useState<Set<Metrique>>(
     () => new Set(GROUPES.map((g) => g.metrique)),
   );
-  const [afficherDetail, setAfficherDetail] = useState(true);
+  const [afficherDetail, setAfficherDetail] = useState(false);
 
   function basculerMetrique(metrique: Metrique) {
     setMetriquesVisibles((prev) => {
@@ -121,14 +132,13 @@ export function ParticipationsTable({ societes, transactions }: Props) {
 
   const groupesAffiches = GROUPES.filter((g) => metriquesVisibles.has(g.metrique));
   const colonnesParGroupe = afficherDetail ? 4 : 2;
-  // Largeur minimale du tableau : dépend du nombre de groupes de métriques
-  // et de colonnes réellement affichés (les cases "Métriques affichées"
-  // peuvent en masquer une bonne partie), avec un plancher raisonnable pour
-  // qu'un tableau à une seule métrique ne s'étire pas inutilement.
-  const largeurMinimale = Math.max(
-    900,
-    2 * 190 + groupesAffiches.length * (afficherDetail ? 400 : 220),
-  );
+  // table-layout: fixed n'empêche vraiment le contenu (en particulier les
+  // libellés non coupables) d'élargir les colonnes que si le tableau a une
+  // largeur en pixels explicite plutôt que "auto" — on la calcule donc ici
+  // pour qu'elle corresponde exactement à la somme des largeurs du colgroup.
+  const largeurGroupe =
+    LARGEUR_COL_TOTAL + (afficherDetail ? 2 * LARGEUR_COL_DETAIL : 0) + LARGEUR_COL_ACTION;
+  const largeurTable = 2 * LARGEUR_COL_NOM + groupesAffiches.length * largeurGroupe;
 
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
@@ -283,7 +293,23 @@ export function ParticipationsTable({ societes, transactions }: Props) {
         <p className="empty">Aucune participation ne correspond à ce filtre.</p>
       ) : (
         <div className="table-scroll">
-          <table className="table table-participations" style={{ minWidth: `${largeurMinimale}px` }}>
+          <table className="table table-participations" style={{ width: largeurTable }}>
+            <colgroup>
+              <col style={{ width: LARGEUR_COL_NOM }} />
+              <col style={{ width: LARGEUR_COL_NOM }} />
+              {groupesAffiches.map((g) => (
+                <Fragment key={g.metrique}>
+                  <col style={{ width: LARGEUR_COL_TOTAL }} />
+                  {afficherDetail && (
+                    <>
+                      <col style={{ width: LARGEUR_COL_DETAIL }} />
+                      <col style={{ width: LARGEUR_COL_DETAIL }} />
+                    </>
+                  )}
+                  <col style={{ width: LARGEUR_COL_ACTION }} />
+                </Fragment>
+              ))}
+            </colgroup>
             <thead>
               <tr className="table-group-header">
                 <th
