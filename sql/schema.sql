@@ -51,7 +51,10 @@ CREATE TABLE dbo.Transactions (
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
     Qualification     NVARCHAR(20)     NOT NULL CONSTRAINT DF_Transactions_Qualification DEFAULT 'Simple'
                         CONSTRAINT CK_Transactions_Qualification CHECK (Qualification IN ('Simple', 'Fusion', 'TUPE')),
-    CONSTRAINT CK_Transactions_Acheteur CHECK ((AcheteurId IS NULL) <> (AcheteurNomExterne IS NULL)),
+    CONSTRAINT CK_Transactions_Acheteur CHECK (
+        (AcheteurId IS NULL AND AcheteurNomExterne IS NOT NULL)
+        OR (AcheteurId IS NOT NULL AND AcheteurNomExterne IS NULL)
+    ),
     CONSTRAINT CK_Transactions_Vendeur CHECK (NOT (VendeurId IS NOT NULL AND VendeurNomExterne IS NOT NULL))
 );
 GO

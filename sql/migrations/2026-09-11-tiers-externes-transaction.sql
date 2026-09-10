@@ -19,9 +19,14 @@ GO
 ALTER TABLE dbo.Transactions ADD VendeurNomExterne NVARCHAR(300) NULL;
 GO
 
--- Acheteur : toujours l'un des deux, jamais les deux.
+-- Acheteur : toujours l'un des deux, jamais les deux. (T-SQL n'autorise pas
+-- de comparer deux prédicats IS NULL avec <> : il faut les combiner en
+-- AND/OR.)
 ALTER TABLE dbo.Transactions ADD CONSTRAINT CK_Transactions_Acheteur
-    CHECK ((AcheteurId IS NULL) <> (AcheteurNomExterne IS NULL));
+    CHECK (
+        (AcheteurId IS NULL AND AcheteurNomExterne IS NOT NULL)
+        OR (AcheteurId IS NOT NULL AND AcheteurNomExterne IS NULL)
+    );
 GO
 
 -- Vendeur : facultatif (les deux NULL = inconnu), mais pas les deux à la fois.
