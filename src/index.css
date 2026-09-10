@@ -488,6 +488,33 @@ h3 {
   align-items: center;
 }
 
+/* En-tête d'un champ société (acheteur/vendeur) portant le bascule "Hors
+   groupe" à côté du label, pour permettre soit une liste (société suivie),
+   soit une saisie libre (société tierce, hors groupe Bolloré). */
+.form-field-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.form-field-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.form-field-toggle input {
+  width: auto;
+  padding: 0;
+}
+
 .form-field-checkbox label {
   display: flex;
   align-items: center;

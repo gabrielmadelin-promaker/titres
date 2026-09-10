@@ -16,9 +16,11 @@ export type Qualification = (typeof QUALIFICATIONS)[number];
 
 export interface Transaction {
   id: string;
-  /** Société qui achète des actions. */
-  acheteurId: string;
-  /** Société dont les actions sont achetées. */
+  /** Société qui achète des actions, si elle fait partie du groupe (sinon null, voir acheteurNomExterne). */
+  acheteurId: string | null;
+  /** Nom libre de l'acheteur quand il est hors groupe (acheteurId alors null) ; l'un des deux est toujours renseigné. */
+  acheteurNomExterne: string | null;
+  /** Société dont les actions sont achetées — toujours une société suivie du groupe. */
   cibleId: string;
   /** Date de la transaction (format ISO yyyy-mm-dd). */
   date: string;
@@ -30,8 +32,10 @@ export interface Transaction {
   droitVoteTheorique: number | null;
   /** Droit de vote effectivement exerçable (peut différer du théorique : droits suspendus, autocontrôle...). */
   droitVoteExercable: number | null;
-  /** Société ayant cédé les actions, si connue. */
+  /** Société ayant cédé les actions, si connue et membre du groupe (sinon null, voir vendeurNomExterne). */
   vendeurId: string | null;
+  /** Nom libre du vendeur quand il est connu mais hors groupe (vendeurId alors null). */
+  vendeurNomExterne: string | null;
   /** Prix unitaire de l'action lors de la transaction, en euros. */
   prixAction: number | null;
   qualification: Qualification;

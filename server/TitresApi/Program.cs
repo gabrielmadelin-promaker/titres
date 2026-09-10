@@ -99,8 +99,8 @@ app.MapDelete("/api/societes/{id:guid}", async (Guid id) =>
 });
 
 const string ColonnesTransaction =
-    "Id, AcheteurId, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, Capital, " +
-    "DroitVoteTheorique, DroitVoteExercable, VendeurId, PrixAction, Qualification";
+    "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, Capital, " +
+    "DroitVoteTheorique, DroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Qualification";
 
 app.MapGet("/api/transactions", async () =>
 {
@@ -110,63 +110,75 @@ app.MapGet("/api/transactions", async () =>
     return Results.Ok(transactions);
 });
 
-(string? Erreur, string Qualification) ValiderTransaction(TransactionInput input)
+(string? Erreur, string Qualification, string? AcheteurNomExterne, string? VendeurNomExterne) ValiderTransaction(TransactionInput input)
 {
-    if (input.AcheteurId == input.CibleId)
-        return ("La société acheteuse doit être différente de la société cible.", "");
+    var acheteurNomExterne = string.IsNullOrWhiteSpace(input.AcheteurNomExterne) ? null : input.AcheteurNomExterne.Trim();
+    var vendeurNomExterne = string.IsNullOrWhiteSpace(input.VendeurNomExterne) ? null : input.VendeurNomExterne.Trim();
+
+    // Acheteur : soit une société suivie (AcheteurId), soit un nom libre
+    // (AcheteurNomExterne) pour un tiers hors groupe — jamais les deux, ni aucun des deux.
+    if ((input.AcheteurId is null) == (acheteurNomExterne is null))
+        return ("Renseignez la société acheteuse (dans la liste, ou son nom si elle est hors groupe).", "", null, null);
+    // Vendeur : facultatif, mais pas les deux à la fois si renseigné.
+    if (input.VendeurId is not null && vendeurNomExterne is not null)
+        return ("La société vendeuse ne peut pas être à la fois suivie et hors groupe.", "", null, null);
+    if (input.AcheteurId is not null && input.AcheteurId == input.CibleId)
+        return ("La société acheteuse doit être différente de la société cible.", "", null, null);
     if (input.Capital == 0 || input.Capital < -100 || input.Capital > 100)
-        return ("Le capital (%) doit être compris entre -100 et 100, sans être nul (négatif pour une vente).", "");
+        return ("Le capital (%) doit être compris entre -100 et 100, sans être nul (négatif pour une vente).", "", null, null);
     if (input.DroitVoteTheorique is < -100 or > 100)
-        return ("Le droit de vote théorique (%) doit être compris entre -100 et 100.", "");
+        return ("Le droit de vote théorique (%) doit être compris entre -100 et 100.", "", null, null);
     if (input.DroitVoteExercable is < -100 or > 100)
-        return ("Le droit de vote exerçable (%) doit être compris entre -100 et 100.", "");
+        return ("Le droit de vote exerçable (%) doit être compris entre -100 et 100.", "", null, null);
     if (input.PrixAction is < 0)
-        return ("Le prix de l'action ne peut pas être négatif.", "");
+        return ("Le prix de l'action ne peut pas être négatif.", "", null, null);
     if (string.IsNullOrWhiteSpace(input.Date))
-        return ("La date est requise.", "");
+        return ("La date est requise.", "", null, null);
 
     var qualification = string.IsNullOrWhiteSpace(input.Qualification) ? "Simple" : input.Qualification;
     if (!qualificationsValides.Contains(qualification))
-        return ("La qualification doit être Simple, Fusion ou TUPE.", "");
+        return ("La qualification doit être Simple, Fusion ou TUPE.", "", null, null);
 
-    return (null, qualification);
+    return (null, qualification, acheteurNomExterne, vendeurNomExterne);
 }
 
 app.MapPost("/api/transactions", async (TransactionInput input) =>
 {
-    var (erreur, qualification) = ValiderTransaction(input);
+    var (erreur, qualification, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
     if (erreur is not null)
         return Results.BadRequest(erreur);
 
     var transaction = new Transaction(
-        Guid.NewGuid(), input.AcheteurId, input.CibleId, input.Date, input.NombreActions, input.Capital,
-        input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, input.PrixAction, qualification);
+        Guid.NewGuid(), input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
+        input.Capital, input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, vendeurNomExterne,
+        input.PrixAction, qualification);
     await using var conn = new SqlConnection(ConnectionString());
     await conn.ExecuteAsync(
-        "INSERT INTO dbo.Transactions (Id, AcheteurId, CibleId, [Date], NombreActions, Capital, DroitVoteTheorique, " +
-        "DroitVoteExercable, VendeurId, PrixAction, Qualification) " +
-        "VALUES (@Id, @AcheteurId, @CibleId, @Date, @NombreActions, @Capital, @DroitVoteTheorique, " +
-        "@DroitVoteExercable, @VendeurId, @PrixAction, @Qualification)",
+        "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, Capital, " +
+        "DroitVoteTheorique, DroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Qualification) " +
+        "VALUES (@Id, @AcheteurId, @AcheteurNomExterne, @CibleId, @Date, @NombreActions, @Capital, @DroitVoteTheorique, " +
+        "@DroitVoteExercable, @VendeurId, @VendeurNomExterne, @PrixAction, @Qualification)",
         transaction);
     return Results.Created($"/api/transactions/{transaction.Id}", transaction);
 });
 
 app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input) =>
 {
-    var (erreur, qualification) = ValiderTransaction(input);
+    var (erreur, qualification, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
     if (erreur is not null)
         return Results.BadRequest(erreur);
 
     await using var conn = new SqlConnection(ConnectionString());
     var lignes = await conn.ExecuteAsync(
-        "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, CibleId = @CibleId, [Date] = @Date, " +
-        "NombreActions = @NombreActions, Capital = @Capital, DroitVoteTheorique = @DroitVoteTheorique, " +
-        "DroitVoteExercable = @DroitVoteExercable, VendeurId = @VendeurId, PrixAction = @PrixAction, " +
-        "Qualification = @Qualification WHERE Id = @id",
+        "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, AcheteurNomExterne = @AcheteurNomExterne, " +
+        "CibleId = @CibleId, [Date] = @Date, NombreActions = @NombreActions, Capital = @Capital, " +
+        "DroitVoteTheorique = @DroitVoteTheorique, DroitVoteExercable = @DroitVoteExercable, VendeurId = @VendeurId, " +
+        "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Qualification = @Qualification WHERE Id = @id",
         new
         {
-            id, input.AcheteurId, input.CibleId, input.Date, input.NombreActions, input.Capital,
-            input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, input.PrixAction, Qualification = qualification,
+            id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions, input.Capital,
+            input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, vendeurNomExterne, input.PrixAction,
+            Qualification = qualification,
         });
     return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
@@ -203,7 +215,8 @@ record SocieteUpdate(
 
 record Transaction(
     Guid Id,
-    Guid AcheteurId,
+    Guid? AcheteurId,
+    string? AcheteurNomExterne,
     Guid CibleId,
     string Date,
     decimal? NombreActions,
@@ -211,11 +224,13 @@ record Transaction(
     decimal? DroitVoteTheorique,
     decimal? DroitVoteExercable,
     Guid? VendeurId,
+    string? VendeurNomExterne,
     decimal? PrixAction,
     string Qualification);
 
 record TransactionInput(
-    Guid AcheteurId,
+    Guid? AcheteurId,
+    string? AcheteurNomExterne,
     Guid CibleId,
     string Date,
     decimal? NombreActions,
@@ -223,5 +238,6 @@ record TransactionInput(
     decimal? DroitVoteTheorique,
     decimal? DroitVoteExercable,
     Guid? VendeurId,
+    string? VendeurNomExterne,
     decimal? PrixAction,
     string? Qualification);

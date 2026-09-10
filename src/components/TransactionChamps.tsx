@@ -20,22 +20,43 @@ export function TransactionChampsFields({ champs, onChange, societes, idPrefix }
   return (
     <>
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-acheteur`}>Société acheteuse</label>
-        <select
-          id={`${idPrefix}-acheteur`}
-          value={champs.acheteurId}
-          onChange={(e) => set("acheteurId", e.target.value)}
-          required
-        >
-          <option value="" disabled>
-            Choisir...
-          </option>
-          {societesTriees.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nom}
+        <div className="form-field-entete">
+          <label htmlFor={`${idPrefix}-acheteur`}>Société acheteuse</label>
+          <label className="form-field-toggle">
+            <input
+              type="checkbox"
+              checked={champs.acheteurExterne}
+              onChange={(e) => set("acheteurExterne", e.target.checked)}
+            />
+            Hors groupe
+          </label>
+        </div>
+        {champs.acheteurExterne ? (
+          <input
+            id={`${idPrefix}-acheteur`}
+            type="text"
+            placeholder="Nom de la société (hors groupe)"
+            value={champs.acheteurNomExterne}
+            onChange={(e) => set("acheteurNomExterne", e.target.value)}
+            required
+          />
+        ) : (
+          <select
+            id={`${idPrefix}-acheteur`}
+            value={champs.acheteurId}
+            onChange={(e) => set("acheteurId", e.target.value)}
+            required
+          >
+            <option value="" disabled>
+              Choisir...
             </option>
-          ))}
-        </select>
+            {societesTriees.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nom}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="form-field">
@@ -53,15 +74,35 @@ export function TransactionChampsFields({ champs, onChange, societes, idPrefix }
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-vendeur`}>Société vendeuse</label>
-        <select id={`${idPrefix}-vendeur`} value={champs.vendeurId} onChange={(e) => set("vendeurId", e.target.value)}>
-          <option value="">Non renseignée</option>
-          {societesTriees.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nom}
-            </option>
-          ))}
-        </select>
+        <div className="form-field-entete">
+          <label htmlFor={`${idPrefix}-vendeur`}>Société vendeuse</label>
+          <label className="form-field-toggle">
+            <input
+              type="checkbox"
+              checked={champs.vendeurExterne}
+              onChange={(e) => set("vendeurExterne", e.target.checked)}
+            />
+            Hors groupe
+          </label>
+        </div>
+        {champs.vendeurExterne ? (
+          <input
+            id={`${idPrefix}-vendeur`}
+            type="text"
+            placeholder="Nom de la société (hors groupe)"
+            value={champs.vendeurNomExterne}
+            onChange={(e) => set("vendeurNomExterne", e.target.value)}
+          />
+        ) : (
+          <select id={`${idPrefix}-vendeur`} value={champs.vendeurId} onChange={(e) => set("vendeurId", e.target.value)}>
+            <option value="">Non renseignée</option>
+            {societesTriees.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nom}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="form-field">

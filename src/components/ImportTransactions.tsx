@@ -43,17 +43,20 @@ export function ImportTransactions({ societes, onImport }: Props) {
         const nomCible = texteColonne(ligne, "cible", "société cible", "societe cible");
         if (!nomAcheteur && !nomCible) return;
 
-        const acheteur = trouverSociete(nomAcheteur);
-        const cible = trouverSociete(nomCible);
-        if (!acheteur) {
-          lignesErreurs.push(`Ligne ${numeroLigne} : société acheteuse « ${nomAcheteur} » introuvable — importez d'abord les sociétés.`);
+        if (!nomAcheteur) {
+          lignesErreurs.push(`Ligne ${numeroLigne} : société acheteuse manquante.`);
           return;
         }
+        const cible = trouverSociete(nomCible);
         if (!cible) {
           lignesErreurs.push(`Ligne ${numeroLigne} : société cible « ${nomCible} » introuvable — importez d'abord les sociétés.`);
           return;
         }
-        if (acheteur.id === cible.id) {
+        // Une société acheteuse non trouvée dans la liste suivie est traitée
+        // comme hors groupe (nom libre) plutôt que comme une erreur : le
+        // groupe Bolloré achète et vend aussi à des tiers externes.
+        const acheteur = trouverSociete(nomAcheteur);
+        if (acheteur && acheteur.id === cible.id) {
           lignesErreurs.push(`Ligne ${numeroLigne} : acheteur et cible identiques (« ${nomAcheteur} »).`);
           return;
         }
@@ -74,17 +77,17 @@ export function ImportTransactions({ societes, onImport }: Props) {
           return;
         }
 
+        // Même logique que pour l'acheteur : société vendeuse non trouvée
+        // dans la liste suivie = hors groupe (nom libre), pas une erreur.
         const nomVendeur = texteColonne(ligne, "vendeur", "société vendeuse", "societe vendeuse");
         const vendeur = nomVendeur ? trouverSociete(nomVendeur) : undefined;
-        if (nomVendeur && !vendeur) {
-          lignesErreurs.push(`Ligne ${numeroLigne} : société vendeuse « ${nomVendeur} » introuvable, ignorée.`);
-        }
 
         const qualificationBrute = texteColonne(ligne, "qualification") || "Simple";
         const qualification = estQualificationValide(qualificationBrute) ? qualificationBrute : "Simple";
 
         valides.push({
-          acheteurId: acheteur.id,
+          acheteurId: acheteur?.id ?? null,
+          acheteurNomExterne: acheteur ? null : nomAcheteur,
           cibleId: cible.id,
           date,
           nombreActions: nombreColonne(ligne, "nombre d'actions", "nombre actions"),
@@ -92,6 +95,7 @@ export function ImportTransactions({ societes, onImport }: Props) {
           droitVoteTheorique: nombreColonne(ligne, "droit de vote théorique", "droit de vote theorique", "dv théorique", "dv theorique"),
           droitVoteExercable: nombreColonne(ligne, "droit de vote exerçable", "droit de vote exercable", "dv exerçable", "dv exercable"),
           vendeurId: vendeur?.id ?? null,
+          vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
           qualification,
         });
@@ -121,7 +125,8 @@ export function ImportTransactions({ societes, onImport }: Props) {
       <p className="import-hint">
         Colonnes : « Acheteur », « Cible », « Capital » (-100 à 100, négatif pour une vente), « Date » (requises) ;
         « Nombre d'actions », « Droit de vote théorique », « Droit de vote exerçable », « Vendeur », « Prix de
-        l'action », « Qualification » (Simple/Fusion/TUPE — facultatives).
+        l'action », « Qualification » (Simple/Fusion/TUPE — facultatives). « Cible » doit être une société déjà
+        importée ; « Acheteur »/« Vendeur » non reconnus sont importés tels quels comme sociétés hors groupe.
       </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (

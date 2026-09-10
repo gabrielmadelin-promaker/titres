@@ -40,7 +40,13 @@ export function calculerParticipations(
   dateLimite?: string,
 ): Participation[] {
   const extraire = METRIQUES[metrique].extraire;
-  const transactionsPertinentes = dateLimite ? transactions.filter((t) => t.date <= dateLimite) : transactions;
+  // Un acheteur hors groupe (acheteurId null, nom libre) n'est pas une
+  // société suivie : impossible de le faire figurer comme actionnaire dans
+  // ce calcul (ni, a fortiori, de chaîner au-delà). Ces transactions restent
+  // visibles dans le tableau des transactions, simplement pas ici.
+  const transactionsPertinentes = transactions
+    .filter((t): t is Transaction & { acheteurId: string } => t.acheteurId !== null)
+    .filter((t) => !dateLimite || t.date <= dateLimite);
 
   const parCouple = new Map<string, Participation>();
 

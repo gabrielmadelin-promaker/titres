@@ -81,6 +81,27 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
   const nomDe = (id: string | null) => (id ? (nomParId.get(id) ?? "(supprimée)") : "—");
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
+  function celluleAcheteur(t: Transaction) {
+    if (t.acheteurId) return nomDe(t.acheteurId);
+    return (
+      <>
+        {t.acheteurNomExterne || "(sans nom)"} <span className="badge">hors groupe</span>
+      </>
+    );
+  }
+
+  function celluleVendeur(t: Transaction) {
+    if (t.vendeurId) return nomDe(t.vendeurId);
+    if (t.vendeurNomExterne) {
+      return (
+        <>
+          {t.vendeurNomExterne} <span className="badge">hors groupe</span>
+        </>
+      );
+    }
+    return "—";
+  }
+
   const filtrees = useMemo(
     () =>
       transactions.filter(
@@ -98,11 +119,11 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
         case "date":
           return t.date;
         case "acheteur":
-          return nomParId.get(t.acheteurId) ?? "(supprimée)";
+          return t.acheteurId ? (nomParId.get(t.acheteurId) ?? "(supprimée)") : (t.acheteurNomExterne ?? "");
         case "cible":
           return nomParId.get(t.cibleId) ?? "(supprimée)";
         case "vendeur":
-          return t.vendeurId ? (nomParId.get(t.vendeurId) ?? "(supprimée)") : "";
+          return t.vendeurId ? (nomParId.get(t.vendeurId) ?? "(supprimée)") : (t.vendeurNomExterne ?? "");
         case "nombreActions":
           return t.nombreActions ?? -Infinity;
         case "capital":
@@ -126,9 +147,13 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
       "Transactions",
       triees.map((t) => ({
         Date: t.date,
-        Acheteur: nomDe(t.acheteurId),
+        Acheteur: t.acheteurId ? nomDe(t.acheteurId) : `${t.acheteurNomExterne ?? ""} (hors groupe)`,
         Cible: nomDe(t.cibleId),
-        Vendeur: nomDe(t.vendeurId),
+        Vendeur: t.vendeurId
+          ? nomDe(t.vendeurId)
+          : t.vendeurNomExterne
+            ? `${t.vendeurNomExterne} (hors groupe)`
+            : "",
         "Nombre d'actions": t.nombreActions ?? "",
         "Capital (%)": t.capital,
         "Droit de vote théorique (%)": t.droitVoteTheorique ?? "",
@@ -222,9 +247,9 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                 <Fragment key={t.id}>
                   <tr>
                     <td>{formatDate(t.date)}</td>
-                    <td>{nomDe(t.acheteurId)}</td>
+                    <td>{celluleAcheteur(t)}</td>
                     <td>{nomDe(t.cibleId)}</td>
-                    <td>{nomDe(t.vendeurId)}</td>
+                    <td>{celluleVendeur(t)}</td>
                     <td className="num">{formatOuTiret(t.nombreActions, formatDecimal)}</td>
                     <td className="num">{formatPourcentage(t.capital)}</td>
                     <td className="num">{formatOuTiret(t.droitVoteTheorique, formatPourcentage)}</td>
