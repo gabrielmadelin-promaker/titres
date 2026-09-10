@@ -100,6 +100,35 @@ export function ParticipationsTable({ societes, transactions }: Props) {
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");
   const [filtreDetenueId, setFiltreDetenueId] = useState("");
   const [ouvert, setOuvert] = useState<{ cle: string; metrique: Metrique } | null>(null);
+  const [metriquesVisibles, setMetriquesVisibles] = useState<Set<Metrique>>(
+    () => new Set(GROUPES.map((g) => g.metrique)),
+  );
+  const [afficherDetail, setAfficherDetail] = useState(true);
+
+  function basculerMetrique(metrique: Metrique) {
+    setMetriquesVisibles((prev) => {
+      const suivant = new Set(prev);
+      if (suivant.has(metrique)) {
+        // Toujours garder au moins une métrique affichée.
+        if (suivant.size === 1) return prev;
+        suivant.delete(metrique);
+      } else {
+        suivant.add(metrique);
+      }
+      return suivant;
+    });
+  }
+
+  const groupesAffiches = GROUPES.filter((g) => metriquesVisibles.has(g.metrique));
+  const colonnesParGroupe = afficherDetail ? 4 : 2;
+  // Largeur minimale du tableau : dépend du nombre de groupes de métriques
+  // et de colonnes réellement affichés (les cases "Métriques affichées"
+  // peuvent en masquer une bonne partie), avec un plancher raisonnable pour
+  // qu'un tableau à une seule métrique ne s'étire pas inutilement.
+  const largeurMinimale = Math.max(
+    900,
+    2 * 190 + groupesAffiches.length * (afficherDetail ? 400 : 220),
+  );
 
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
@@ -223,11 +252,38 @@ export function ParticipationsTable({ societes, transactions }: Props) {
         </div>
       </div>
 
+      <div className="table-colonnes">
+        <span className="table-colonnes-titre">Métriques affichées</span>
+        {GROUPES.map((g) => (
+          <div className="form-field-checkbox" key={g.metrique}>
+            <label>
+              <input
+                type="checkbox"
+                checked={metriquesVisibles.has(g.metrique)}
+                onChange={() => basculerMetrique(g.metrique)}
+              />
+              {g.libelle}
+            </label>
+          </div>
+        ))}
+        <span className="table-colonnes-separateur" />
+        <div className="form-field-checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={afficherDetail}
+              onChange={(e) => setAfficherDetail(e.target.checked)}
+            />
+            Détail direct / indirect
+          </label>
+        </div>
+      </div>
+
       {triees.length === 0 ? (
         <p className="empty">Aucune participation ne correspond à ce filtre.</p>
       ) : (
         <div className="table-scroll">
-          <table className="table table-participations">
+          <table className="table table-participations" style={{ minWidth: `${largeurMinimale}px` }}>
             <thead>
               <tr className="table-group-header">
                 <th
@@ -246,14 +302,14 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                 >
                   Société détenue{flecheTri(tri, "cible")}
                 </th>
-                {GROUPES.map((g, i) => (
-                  <th key={g.metrique} colSpan={4} className={`groupe-metrique groupe-metrique-${i % 2}`}>
+                {groupesAffiches.map((g, i) => (
+                  <th key={g.metrique} colSpan={colonnesParGroupe} className={`groupe-metrique groupe-metrique-${i % 2}`}>
                     {g.libelle}
                   </th>
                 ))}
               </tr>
               <tr>
-                {GROUPES.map((g, i) => (
+                {groupesAffiches.map((g, i) => (
                   <Fragment key={g.metrique}>
                     <th
                       className={`th-tri num groupe-metrique groupe-metrique-${i % 2} groupe-metrique-debut`}
@@ -262,8 +318,12 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                     >
                       Total{flecheTri(tri, `total_${g.metrique}` as Colonne)}
                     </th>
-                    <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Direct</th>
-                    <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Indirect</th>
+                    {afficherDetail && (
+                      <>
+                        <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Direct</th>
+                        <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Indirect</th>
+                      </>
+                    )}
                     <th aria-label="Détail" className={`groupe-metrique groupe-metrique-${i % 2}`} />
                   </Fragment>
                 ))}
@@ -275,7 +335,7 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                   <tr>
                     <td>{nomDe(p.acheteurId)}</td>
                     <td>{nomDe(p.cibleId)}</td>
-                    {GROUPES.map((g, i) => {
+                    {groupesAffiches.map((g, i) => {
                       const d = parMetrique.get(g.metrique)?.get(p.cle);
                       const total = d?.valeurTotale ?? null;
                       const direct = d?.valeurDirecte ?? null;
@@ -288,12 +348,16 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                           <td className={`num ${classeGroupe} groupe-metrique-debut`}>
                             {total === null ? "—" : g.formatValeur(total)}
                           </td>
-                          <td className={`num valeur-secondaire ${classeGroupe}`}>
-                            {direct === null ? "—" : g.formatValeur(direct)}
-                          </td>
-                          <td className={`num valeur-secondaire ${classeGroupe}`}>
-                            {indirect === null ? "—" : g.formatValeur(indirect)}
-                          </td>
+                          {afficherDetail && (
+                            <>
+                              <td className={`num valeur-secondaire ${classeGroupe}`}>
+                                {direct === null ? "—" : g.formatValeur(direct)}
+                              </td>
+                              <td className={`num valeur-secondaire ${classeGroupe}`}>
+                                {indirect === null ? "—" : g.formatValeur(indirect)}
+                              </td>
+                            </>
+                          )}
                           <td className={`actions ${classeGroupe}`}>
                             {aIndirect && (
                               <button
@@ -309,9 +373,9 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                       );
                     })}
                   </tr>
-                  {ouvert?.cle === p.cle && (
+                  {ouvert?.cle === p.cle && metriquesVisibles.has(ouvert.metrique) && (
                     <tr>
-                      <td colSpan={2 + GROUPES.length * 4}>
+                      <td colSpan={2 + groupesAffiches.length * colonnesParGroupe}>
                         <DetailChemins
                           transactions={transactions}
                           acheteurId={p.acheteurId}

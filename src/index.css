@@ -159,12 +159,10 @@ h3 {
   min-width: 1500px;
 }
 
-.table-scroll .table-participations {
-  /* 2 colonnes de noms + 4 groupes de 4 colonnes (Total/Direct/Indirect/
-     Cascade) : bien plus large qu'un tableau ordinaire, sous peine de
-     retasser chaque en-tête et de le faire retourner à la ligne. */
-  min-width: 2100px;
-}
+/* .table-participations : sa largeur minimale dépend du nombre de groupes de
+   métriques et colonnes affichés, qui varient selon les cases à cocher
+   "Métriques affichées" — calculée et posée en style inline par le composant
+   plutôt que fixée ici. */
 
 .table-group-header th {
   text-align: center;
@@ -258,6 +256,36 @@ h3 {
 
 .table-filters .form-field {
   min-width: 180px;
+}
+
+.table-colonnes {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.table-colonnes-titre {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text);
+}
+
+.table-colonnes-separateur {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+
+.table-colonnes .form-field-checkbox label {
+  font-size: 13px;
 }
 
 .participation-detail {
