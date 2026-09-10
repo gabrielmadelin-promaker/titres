@@ -177,6 +177,24 @@ h3 {
   text-overflow: ellipsis;
 }
 
+/* Exception à la règle ci-dessus : la cellule qui déplie la cascade des
+   chemins de détention (.chemins-detail) a besoin d'overflow visible pour
+   que son positionnement sticky reste ancré à .table-scroll (son ancêtre
+   défilant) — un overflow: hidden sur la cellule elle-même la transforme en
+   nouveau conteneur de défilement, ce qui casse cet ancrage et fait
+   chevaucher le texte de la chaîne et la contribution finale.
+   white-space: normal contre la règle td:nth-child(1) ci-dessous : cette
+   cellule de détail est justement le seul <td> de sa ligne (donc aussi son
+   nth-child(1)), et le nowrap qu'elle hérite sinon empêche la chaîne de
+   chemins de repasser à la ligne — elle déborde alors sur la contribution
+   affichée à sa droite. Spécificité relevée (3 classes) pour l'emporter sur
+   cette règle quel que soit l'ordre dans la feuille de style. */
+.table.table-participations td.chemins-cellule {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 /* Les colonnes Actionnaire / Société détenue ont une largeur fixe : un nom
    trop long est tronqué avec "…" (ellipsis, qui a besoin de nowrap pour
    s'appliquer) plutôt que de passer sur 2 lignes, ce qui grandirait la ligne

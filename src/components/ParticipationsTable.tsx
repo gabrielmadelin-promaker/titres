@@ -55,6 +55,18 @@ const LARGEUR_COL_TOTAL = 110;
 const LARGEUR_COL_DETAIL = 100;
 const LARGEUR_COL_ACTION = 110;
 
+// Une métrique non chaînable (nombre d'actions) n'a jamais de part indirecte
+// ni de cascade à afficher (valeurDirecte == valeurTotale toujours) : pas de
+// colonnes Direct/Indirect/Cascade pour son groupe, seulement Total — sinon
+// ça laisse une colonne d'action vide, sans bouton, à chaque ligne.
+function colonnesPourGroupe(g: GroupeMetrique, afficherDetail: boolean): number {
+  return g.chainable ? 1 + (afficherDetail ? 2 : 0) + 1 : 1;
+}
+
+function largeurPourGroupe(g: GroupeMetrique, afficherDetail: boolean): number {
+  return g.chainable ? LARGEUR_COL_TOTAL + (afficherDetail ? 2 * LARGEUR_COL_DETAIL : 0) + LARGEUR_COL_ACTION : LARGEUR_COL_TOTAL;
+}
+
 interface DetailCheminsProps {
   transactions: Transaction[];
   acheteurId: string;
@@ -131,14 +143,12 @@ export function ParticipationsTable({ societes, transactions }: Props) {
   }
 
   const groupesAffiches = GROUPES.filter((g) => metriquesVisibles.has(g.metrique));
-  const colonnesParGroupe = afficherDetail ? 4 : 2;
   // table-layout: fixed n'empêche vraiment le contenu (en particulier les
   // libellés non coupables) d'élargir les colonnes que si le tableau a une
   // largeur en pixels explicite plutôt que "auto" — on la calcule donc ici
   // pour qu'elle corresponde exactement à la somme des largeurs du colgroup.
-  const largeurGroupe =
-    LARGEUR_COL_TOTAL + (afficherDetail ? 2 * LARGEUR_COL_DETAIL : 0) + LARGEUR_COL_ACTION;
-  const largeurTable = 2 * LARGEUR_COL_NOM + groupesAffiches.length * largeurGroupe;
+  const largeurTable =
+    2 * LARGEUR_COL_NOM + groupesAffiches.reduce((s, g) => s + largeurPourGroupe(g, afficherDetail), 0);
 
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
@@ -300,13 +310,13 @@ export function ParticipationsTable({ societes, transactions }: Props) {
               {groupesAffiches.map((g) => (
                 <Fragment key={g.metrique}>
                   <col style={{ width: LARGEUR_COL_TOTAL }} />
-                  {afficherDetail && (
+                  {g.chainable && afficherDetail && (
                     <>
                       <col style={{ width: LARGEUR_COL_DETAIL }} />
                       <col style={{ width: LARGEUR_COL_DETAIL }} />
                     </>
                   )}
-                  <col style={{ width: LARGEUR_COL_ACTION }} />
+                  {g.chainable && <col style={{ width: LARGEUR_COL_ACTION }} />}
                 </Fragment>
               ))}
             </colgroup>
@@ -329,7 +339,11 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                   Société détenue{flecheTri(tri, "cible")}
                 </th>
                 {groupesAffiches.map((g, i) => (
-                  <th key={g.metrique} colSpan={colonnesParGroupe} className={`groupe-metrique groupe-metrique-${i % 2}`}>
+                  <th
+                    key={g.metrique}
+                    colSpan={colonnesPourGroupe(g, afficherDetail)}
+                    className={`groupe-metrique groupe-metrique-${i % 2}`}
+                  >
                     {g.libelle}
                   </th>
                 ))}
@@ -344,13 +358,13 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                     >
                       Total{flecheTri(tri, `total_${g.metrique}` as Colonne)}
                     </th>
-                    {afficherDetail && (
+                    {g.chainable && afficherDetail && (
                       <>
                         <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Direct</th>
                         <th className={`num groupe-metrique groupe-metrique-${i % 2}`}>Indirect</th>
                       </>
                     )}
-                    <th aria-label="Détail" className={`groupe-metrique groupe-metrique-${i % 2}`} />
+                    {g.chainable && <th aria-label="Détail" className={`groupe-metrique groupe-metrique-${i % 2}`} />}
                   </Fragment>
                 ))}
               </tr>
@@ -374,7 +388,7 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                           <td className={`num ${classeGroupe} groupe-metrique-debut`}>
                             {total === null ? "—" : g.formatValeur(total)}
                           </td>
-                          {afficherDetail && (
+                          {g.chainable && afficherDetail && (
                             <>
                               <td className={`num valeur-secondaire ${classeGroupe}`}>
                                 {direct === null ? "—" : g.formatValeur(direct)}
@@ -384,24 +398,29 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                               </td>
                             </>
                           )}
-                          <td className={`actions ${classeGroupe}`}>
-                            {aIndirect && (
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-small"
-                                onClick={() => setOuvert(estOuverte ? null : { cle: p.cle, metrique: g.metrique })}
-                              >
-                                {estOuverte ? "Masquer" : "Cascade"}
-                              </button>
-                            )}
-                          </td>
+                          {g.chainable && (
+                            <td className={`actions ${classeGroupe}`}>
+                              {aIndirect && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-small"
+                                  onClick={() => setOuvert(estOuverte ? null : { cle: p.cle, metrique: g.metrique })}
+                                >
+                                  {estOuverte ? "Masquer" : "Cascade"}
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </Fragment>
                       );
                     })}
                   </tr>
                   {ouvert?.cle === p.cle && metriquesVisibles.has(ouvert.metrique) && (
                     <tr>
-                      <td colSpan={2 + groupesAffiches.length * colonnesParGroupe}>
+                      <td
+                        className="chemins-cellule"
+                        colSpan={2 + groupesAffiches.reduce((s, g) => s + colonnesPourGroupe(g, afficherDetail), 0)}
+                      >
                         <DetailChemins
                           transactions={transactions}
                           acheteurId={p.acheteurId}
