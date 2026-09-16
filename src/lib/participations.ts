@@ -28,7 +28,13 @@ export interface Participation {
 /**
  * Consolide les transactions par couple (actionnaire, société détenue) pour
  * une métrique donnée (capital, nombre d'actions, droit de vote...) : la
- * valeur détenue est la simple somme des valeurs acquises.
+ * valeur détenue est la somme des valeurs acquises par l'acheteur, moins ce
+ * qu'une éventuelle société vendeuse SUIVIE (vendeurId) a cédé au même
+ * couple — les actions vendues par C à A viennent de la participation de C,
+ * pas de nulle part : sans cette contrepartie, la part de C dans la cible
+ * resterait inchangée tant que personne n'a saisi une seconde transaction
+ * pour l'en déduire à la main, et le total détenu par le groupe serait
+ * gonflé du montant transféré (double compte).
  *
  * Si `dateLimite` est fournie, seules les transactions antérieures ou
  * égales à cette date sont prises en compte — pour reconstituer la
@@ -40,34 +46,32 @@ export function calculerParticipations(
   dateLimite?: string,
 ): Participation[] {
   const extraire = METRIQUES[metrique].extraire;
-  // Un acheteur hors groupe (acheteurId null, nom libre) n'est pas une
-  // société suivie : impossible de le faire figurer comme actionnaire dans
-  // ce calcul (ni, a fortiori, de chaîner au-delà). Ces transactions restent
-  // visibles dans le tableau des transactions, simplement pas ici.
-  const transactionsPertinentes = transactions
-    .filter((t): t is Transaction & { acheteurId: string } => t.acheteurId !== null)
-    .filter((t) => !dateLimite || t.date <= dateLimite);
+  const transactionsPertinentes = transactions.filter((t) => !dateLimite || t.date <= dateLimite);
 
   const parCouple = new Map<string, Participation>();
+
+  function ajouter(acheteurId: string, cibleId: string, valeur: number) {
+    const cle = `${acheteurId}::${cibleId}`;
+    const existante = parCouple.get(cle);
+    if (!existante) {
+      parCouple.set(cle, { acheteurId, cibleId, valeurTotale: valeur, nombreTransactions: 1 });
+      return;
+    }
+    existante.valeurTotale += valeur;
+    existante.nombreTransactions += 1;
+  }
 
   for (const t of transactionsPertinentes) {
     const valeur = extraire(t);
     if (valeur === null || valeur === undefined) continue;
-    const cle = `${t.acheteurId}::${t.cibleId}`;
-    const existante = parCouple.get(cle);
-
-    if (!existante) {
-      parCouple.set(cle, {
-        acheteurId: t.acheteurId,
-        cibleId: t.cibleId,
-        valeurTotale: valeur,
-        nombreTransactions: 1,
-      });
-      continue;
-    }
-
-    existante.valeurTotale += valeur;
-    existante.nombreTransactions += 1;
+    // Un acheteur hors groupe (acheteurId null, nom libre) n'est pas une
+    // société suivie : impossible de le faire figurer comme actionnaire
+    // (ni, a fortiori, de chaîner au-delà) — cette transaction reste
+    // visible dans le tableau des transactions, simplement pas ici.
+    if (t.acheteurId !== null) ajouter(t.acheteurId, t.cibleId, valeur);
+    // Symétrique côté vendeur, uniquement si c'est une société suivie et
+    // différente de l'acheteur (un auto-échange n'a pas de sens).
+    if (t.vendeurId !== null && t.vendeurId !== t.acheteurId) ajouter(t.vendeurId, t.cibleId, -valeur);
   }
 
   return [...parCouple.values()];
