@@ -1,8 +1,6 @@
 export interface Societe {
   id: string;
   nom: string;
-  /** Apparaît comme boîte dans l'arbre central de l'organigramme ; sinon groupée en actionnaire minoritaire. */
-  principale: boolean;
   /** Valeur nominale de l'action, dans la devise de la société. */
   valeurNominale: number | null;
   pays: string | null;
@@ -39,4 +37,12 @@ export interface Transaction {
   /** Prix unitaire de l'action lors de la transaction, en euros. */
   prixAction: number | null;
   qualification: Qualification;
+  /**
+   * Calculée et enregistrée par l'API, en euros — jamais saisie. Nulle si
+   * NombreActions >= 0 (pas une vente), ou si le prix manque sur cette
+   * transaction ou sur la plus ancienne enregistrée pour la même cible.
+   * Sinon : -NombreActions × (PrixAction ici − PrixAction de la transaction
+   * la plus ancienne pour la même société cible).
+   */
+  plusValue: number | null;
 }

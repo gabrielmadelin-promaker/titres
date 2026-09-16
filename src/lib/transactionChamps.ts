@@ -106,5 +106,8 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,
     qualification: c.qualification,
+    // Calculée côté API, jamais saisie : valeur ignorée par le serveur à
+    // l'écriture, remplacée par la vraie valeur renvoyée dans sa réponse.
+    plusValue: null,
   };
 }

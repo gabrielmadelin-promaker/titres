@@ -65,10 +65,14 @@ type Colonne =
   | "dvTheorique"
   | "dvExercable"
   | "prixAction"
-  | "qualification";
+  | "qualification"
+  | "plusValue";
 
-function formatOuTiret(valeur: number | null, formateur: (v: number) => string): string {
-  return valeur === null ? "—" : formateur(valeur);
+function formatOuTiret(valeur: number | null | undefined, formateur: (v: number) => string): string {
+  // == plutôt que === : une transaction venant d'une API pas encore mise à
+  // jour (déploiement en deux temps) peut avoir ce champ absent (undefined)
+  // plutôt qu'explicitement nul — sans ça, ça affichait "NaN" au lieu de "—".
+  return valeur == null ? "—" : formateur(valeur);
 }
 
 export function TransactionsTable({ transactions, societes, onDelete, onUpdate }: Props) {
@@ -136,6 +140,8 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
           return t.prixAction ?? -Infinity;
         case "qualification":
           return t.qualification;
+        case "plusValue":
+          return t.plusValue ?? -Infinity;
       }
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
@@ -160,6 +166,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
         "Droit de vote exerçable (%)": t.droitVoteExercable ?? "",
         "Prix de l'action (€)": t.prixAction ?? "",
         Qualification: t.qualification,
+        "Plus-value (€)": t.plusValue ?? "",
       })),
     );
   }
@@ -239,6 +246,13 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "qualification"))}>
                   Qualification{flecheTri(tri, "qualification")}
                 </th>
+                <th
+                  className="th-tri num"
+                  onClick={() => setTri(basculerTri(tri, "plusValue"))}
+                  title="Calculée : si le nombre d'actions est négatif (vente), -nombre d'actions × (prix de cette transaction − prix de la plus ancienne transaction enregistrée pour cette société), sinon 0."
+                >
+                  Plus-value{flecheTri(tri, "plusValue")}
+                </th>
                 <th aria-label="Actions" />
               </tr>
             </thead>
@@ -256,6 +270,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                     <td className="num">{formatOuTiret(t.droitVoteExercable, formatPourcentage)}</td>
                     <td className="num">{formatOuTiret(t.prixAction, formatMontant)}</td>
                     <td>{t.qualification}</td>
+                    <td className="num">{formatOuTiret(t.plusValue, formatMontant)}</td>
                     <td className="actions">
                       <button
                         type="button"
@@ -271,7 +286,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                   </tr>
                   {ligneEditee === t.id && (
                     <tr>
-                      <td colSpan={11}>
+                      <td colSpan={12}>
                         <TransactionEditRow
                           transaction={t}
                           societes={societes}

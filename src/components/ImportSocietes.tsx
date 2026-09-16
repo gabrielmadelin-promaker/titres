@@ -39,9 +39,6 @@ export function ImportSocietes({ societes, onImport }: Props) {
         vus.add(cle);
         aAjouter.push({
           nom,
-          // Non modifiable depuis l'import : toujours faux, seule une
-          // intervention directe en base peut changer ce champ.
-          principale: false,
           valeurNominale: nombreColonne(ligne, "valeur nominale", "valeur nominale de l'action"),
           pays: texteColonne(ligne, "pays") || null,
           siegeSocial: texteColonne(ligne, "siège social", "siege social") || null,

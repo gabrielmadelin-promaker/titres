@@ -25,9 +25,6 @@ export function SocieteForm({ onAdd }: Props) {
 
     onAdd({
       nom: nomPropre,
-      // Non modifiable depuis l'interface : toujours faux à la création,
-      // seule une intervention directe en base peut changer ce champ.
-      principale: false,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,

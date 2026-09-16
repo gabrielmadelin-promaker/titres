@@ -1,20 +1,28 @@
 import { useEffect, useState } from "react";
 import { ImportSocietes } from "./components/ImportSocietes";
 import { ImportTransactions } from "./components/ImportTransactions";
+import { LoginForm } from "./components/LoginForm";
 import { ParticipationsTable } from "./components/ParticipationsTable";
 import { SocieteForm } from "./components/SocieteForm";
 import { SocietesTable } from "./components/SocietesTable";
 import { TransactionForm } from "./components/TransactionForm";
 import { TransactionsTable } from "./components/TransactionsTable";
+import { UtilisateursPanel } from "./components/UtilisateursPanel";
 import { VisualisationPanel } from "./components/VisualisationPanel";
 import * as api from "./lib/api";
+import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
+import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
 import type { Societe, Transaction } from "./types";
 
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
   { id: "transactions", label: "Transactions" },
   { id: "participations", label: "Participations" },
-  { id: "visualisation", label: "Visualisation" },
+  { id: "utilisateurs", label: "Utilisateurs" },
+  // Onglet retiré de la navigation (demande explicite) mais le code
+  // (VisualisationPanel, organigramme.ts, aretes.ts) reste en place pour le
+  // réactiver facilement plus tard : il suffit de retirer `masque: true`.
+  { id: "visualisation", label: "Visualisation", masque: true },
 ] as const;
 
 type OngletId = (typeof ONGLETS)[number]["id"];
@@ -24,21 +32,68 @@ function messageErreur(e: unknown): string {
 }
 
 function App() {
+  const [utilisateurConnecte, setUtilisateurConnecte] = useState<UtilisateurConnecte | null>(null);
+  const [verificationSession, setVerificationSession] = useState(true);
+
   const [societes, setSocietes] = useState<Societe[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [utilisateurs, setUtilisateurs] = useState<Utilisateur[]>([]);
   const [onglet, setOnglet] = useState<OngletId>("societes");
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
+  function seDeconnecterLocal() {
+    effacerToken();
+    setUtilisateurConnecte(null);
+  }
+
+  // Centralise la réaction à une session expirée/invalide : partout ailleurs
+  // dans ce composant, un catch(e) passe par ici plutôt que par un simple
+  // setErreur, pour ramener l'utilisateur à l'écran de connexion au lieu de
+  // simplement afficher un message d'erreur qu'il ne peut pas résoudre.
+  function gererErreur(e: unknown, prefixe: string) {
+    if (e instanceof SessionExpireeError) {
+      seDeconnecterLocal();
+      return;
+    }
+    setErreur(`${prefixe} : ${messageErreur(e)}`);
+  }
+
   useEffect(() => {
-    Promise.all([api.fetchSocietes(), api.fetchTransactions()])
-      .then(([s, t]) => {
+    const token = lireToken();
+    if (!token) {
+      setVerificationSession(false);
+      return;
+    }
+    api
+      .verifierSession()
+      .then((u) => setUtilisateurConnecte(u))
+      .catch(() => effacerToken())
+      .finally(() => setVerificationSession(false));
+  }, []);
+
+  useEffect(() => {
+    if (!utilisateurConnecte) return;
+    setChargement(true);
+    Promise.all([api.fetchSocietes(), api.fetchTransactions(), api.fetchUtilisateurs()])
+      .then(([s, t, u]) => {
         setSocietes(s);
         setTransactions(t);
+        setUtilisateurs(u);
       })
-      .catch((e) => setErreur(`Impossible de charger les données : ${messageErreur(e)}`))
+      .catch((e) => gererErreur(e, "Impossible de charger les données"))
       .finally(() => setChargement(false));
-  }, []);
+  }, [utilisateurConnecte]);
+
+  async function seDeconnecter() {
+    try {
+      await api.deconnecter();
+    } catch {
+      // Sans conséquence si la requête échoue (session déjà expirée, réseau
+      // coupé...) : le jeton local est effacé de toute façon.
+    }
+    seDeconnecterLocal();
+  }
 
   async function ajouterSociete(societe: Omit<Societe, "id">) {
     try {
@@ -46,7 +101,7 @@ function App() {
       setSocietes((prev) => [...prev, creee]);
       setErreur(null);
     } catch (e) {
-      setErreur(`Impossible d'ajouter la société : ${messageErreur(e)}`);
+      gererErreur(e, "Impossible d'ajouter la société");
     }
   }
 
@@ -59,7 +114,7 @@ function App() {
       setErreur(null);
     } catch (e) {
       setSocietes(avant);
-      setErreur(`Impossible de modifier la société : ${messageErreur(e)}`);
+      gererErreur(e, "Impossible de modifier la société");
     }
   }
 
@@ -78,7 +133,7 @@ function App() {
       setSocietes((prev) => prev.filter((s) => s.id !== id));
       setErreur(null);
     } catch (e) {
-      setErreur(`Impossible de supprimer la société : ${messageErreur(e)}`);
+      gererErreur(e, "Impossible de supprimer la société");
     }
   }
 
@@ -88,7 +143,7 @@ function App() {
       setTransactions((prev) => [...prev, creee]);
       setErreur(null);
     } catch (e) {
-      setErreur(`Impossible d'ajouter la transaction : ${messageErreur(e)}`);
+      gererErreur(e, "Impossible d'ajouter la transaction");
     }
   }
 
@@ -97,11 +152,14 @@ function App() {
     // Optimiste : la table doit réagir immédiatement à l'enregistrement.
     setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...champs } : t)));
     try {
-      await api.modifierTransaction(id, champs);
+      // La réponse du serveur fait autorité pour plusValue : calculée côté
+      // API, sa vraie valeur n'est connue qu'une fois la requête traitée.
+      const misAJour = await api.modifierTransaction(id, champs);
+      setTransactions((prev) => prev.map((t) => (t.id === id ? misAJour : t)));
       setErreur(null);
     } catch (e) {
       setTransactions(avant);
-      setErreur(`Impossible de modifier la transaction : ${messageErreur(e)}`);
+      gererErreur(e, "Impossible de modifier la transaction");
     }
   }
 
@@ -111,7 +169,7 @@ function App() {
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       setErreur(null);
     } catch (e) {
-      setErreur(`Impossible de supprimer la transaction : ${messageErreur(e)}`);
+      gererErreur(e, "Impossible de supprimer la transaction");
     }
   }
 
@@ -122,6 +180,10 @@ function App() {
       try {
         creees.push(await api.creerSociete(candidat));
       } catch (e) {
+        if (e instanceof SessionExpireeError) {
+          seDeconnecterLocal();
+          break;
+        }
         erreursImport.push(`« ${candidat.nom} » : ${messageErreur(e)}`);
       }
     }
@@ -136,11 +198,29 @@ function App() {
       try {
         creees.push(await api.creerTransaction(candidate));
       } catch (e) {
+        if (e instanceof SessionExpireeError) {
+          seDeconnecterLocal();
+          break;
+        }
         erreursImport.push(messageErreur(e));
       }
     }
     if (creees.length > 0) setTransactions((prev) => [...prev, ...creees]);
     return { ajoutees: creees.length, erreurs: erreursImport };
+  }
+
+  if (verificationSession) {
+    return (
+      <div className="app">
+        <p className="empty" style={{ textAlign: "center" }}>
+          Chargement…
+        </p>
+      </div>
+    );
+  }
+
+  if (!utilisateurConnecte) {
+    return <LoginForm onConnecte={setUtilisateurConnecte} />;
   }
 
   return (
@@ -150,6 +230,14 @@ function App() {
         <p className="subtitle">
           Suivez les transactions d'actions entre vos sociétés et la structure actionnariale qui en découle.
         </p>
+        <div className="table-toolbar" style={{ justifyContent: "center", gap: 12, marginTop: 12 }}>
+          <span className="subtitle-panel">
+            Connecté : {utilisateurConnecte.email} · {utilisateurConnecte.role}
+          </span>
+          <button type="button" className="btn btn-secondary btn-small" onClick={seDeconnecter}>
+            Se déconnecter
+          </button>
+        </div>
       </header>
 
       {erreur && (
@@ -159,7 +247,7 @@ function App() {
       )}
 
       <nav className="tabs">
-        {ONGLETS.map((o) => (
+        {ONGLETS.filter((o) => !("masque" in o && o.masque)).map((o) => (
           <button
             key={o.id}
             type="button"
@@ -215,6 +303,14 @@ function App() {
               <p className="subtitle-panel">Qui détient combien du capital de qui.</p>
               <ParticipationsTable societes={societes} transactions={transactions} />
             </section>
+          )}
+
+          {onglet === "utilisateurs" && (
+            <UtilisateursPanel
+              utilisateurs={utilisateurs}
+              onAjoute={(u) => setUtilisateurs((prev) => [...prev, u])}
+              onSupprime={(id) => setUtilisateurs((prev) => prev.filter((u) => u.id !== id))}
+            />
           )}
 
           {onglet === "visualisation" && (

@@ -11,7 +11,11 @@ structure actionnariale qui en découle.
 - **Participations** : qui détient combien du capital de qui, transactions
   cumulées.
 - **Visualisation** : organigramme façon document corporate de la structure
-  actionnariale.
+  actionnariale (fonctionnalité conservée dans le code, retirée pour
+  l'instant de la navigation).
+- **Utilisateurs** : authentification temporaire (email + mot de passe à 10
+  caractères généré automatiquement, en attendant le SSO) — toute
+  l'application est derrière la connexion.
 
 Architecture : un frontend statique (React/Vite, ce dépôt à la racine),
 servi par IIS, qui appelle une API .NET (`server/TitresApi`) sur le port
@@ -55,7 +59,10 @@ Windows pour l'API, ouverture des ports pare-feu) : voir le runbook fourni
 séparément. En résumé, sur le serveur :
 
 1. Exécuter `sql/schema.sql` sur le serveur SQL Server (crée la base, les
-   tables, le compte applicatif `titres_app`).
+   tables, le compte applicatif `titres_app`). Toute l'application étant
+   derrière la connexion, décommentez et complétez (email) le bloc de fin de
+   fichier pour créer le tout premier compte — sans lui, impossible de se
+   connecter pour en créer d'autres depuis l'écran "Utilisateurs".
 2. Télécharger et extraire le zip de la branche `iis-dist` dans le dossier
    du site IIS (port `8090`).
 3. Télécharger et extraire le zip de la branche `api-dist` quelque part sur

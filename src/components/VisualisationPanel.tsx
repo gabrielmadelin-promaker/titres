@@ -207,9 +207,7 @@ export function VisualisationPanel({ societes, transactions }: Props) {
         </div>
         <figcaption className="viz-base">
           Structure actionnariale au {formatDate(date)}. Chaque flèche va de la société actionnaire vers la
-          société détenue (pourcentage cumulé jusqu'à cette date). Pour une société marquée « Principale », au-delà
-          de 2 actionnaires entrants, les suivants (par % décroissant) rejoignent une liste compacte à côté de la
-          boîte plutôt que d'ajouter une flèche.
+          société détenue (pourcentage cumulé jusqu'à cette date).
         </figcaption>
       </figure>
     </section>

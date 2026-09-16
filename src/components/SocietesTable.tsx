@@ -45,9 +45,6 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
     if (!nomPropre) return;
     onSave({
       nom: nomPropre,
-      // Non modifiable depuis l'interface : conservé tel quel, seule une
-      // intervention directe en base peut changer ce champ.
-      principale: societe.principale,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,

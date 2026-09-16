@@ -98,6 +98,8 @@ export function ImportTransactions({ societes, onImport }: Props) {
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
           qualification,
+          // Calculée côté API, jamais importée.
+          plusValue: null,
         });
       });
 

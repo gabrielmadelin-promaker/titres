@@ -86,7 +86,12 @@ export function calculerOrganigramme(
     .filter((p) => p.valeurTotale > 0.001)
     .map((p) => ({ acheteurId: p.acheteurId, cibleId: p.cibleId, pourcentage: p.valeurTotale }));
 
-  const idsPrincipales = new Set(societes.filter((s) => s.principale).map((s) => s.id));
+  // Le champ Societe.principale a été retiré (plus aucune société n'était
+  // jamais marquée comme telle en pratique, l'écran qui le permettait ayant
+  // déjà été supprimé) : l'ensemble reste vide, ce qui correspond au
+  // comportement réel actuel. Conservé comme structure pour pouvoir
+  // réintroduire facilement une notion de "tronc" plus tard si besoin.
+  const idsPrincipales = new Set<string>();
 
   // --- Détection des participations croisées (DFS, sur tout le graphe) ---
   const adjacence = new Map<string, string[]>();
@@ -224,10 +229,7 @@ export function calculerOrganigramme(
     else rangee.tronc.push(s);
   }
   parNiveau.forEach(({ tronc, satellites }) => {
-    tronc.sort((a, b) => {
-      if (a.principale !== b.principale) return a.principale ? -1 : 1;
-      return a.nom.localeCompare(b.nom);
-    });
+    tronc.sort((a, b) => a.nom.localeCompare(b.nom));
     satellites.sort((a, b) => a.nom.localeCompare(b.nom));
   });
 

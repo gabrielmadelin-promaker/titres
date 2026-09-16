@@ -16,10 +16,6 @@ GO
 CREATE TABLE dbo.Societes (
     Id            UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
     Nom           NVARCHAR(200)    NOT NULL,
-    -- Sociétés affichées comme boîtes dans l'arbre central de l'organigramme ;
-    -- les autres n'apparaissent que groupées dans la liste des actionnaires
-    -- minoritaires de la société qu'elles détiennent (voir organigramme.ts).
-    Principale    BIT              NOT NULL DEFAULT 0,
     ValeurNominale DECIMAL(18,4)   NULL,
     Pays          NVARCHAR(100)    NULL,
     SiegeSocial   NVARCHAR(300)    NULL,
@@ -51,6 +47,12 @@ CREATE TABLE dbo.Transactions (
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
     Qualification     NVARCHAR(20)     NOT NULL CONSTRAINT DF_Transactions_Qualification DEFAULT 'Simple'
                         CONSTRAINT CK_Transactions_Qualification CHECK (Qualification IN ('Simple', 'Fusion', 'TUPE')),
+    -- Calculée et enregistrée par l'API à chaque création/modification (pas
+    -- de colonne calculée SQL : le calcul a besoin du prix de la transaction
+    -- la plus ancienne pour la même société, une requête sur d'autres
+    -- lignes). Nulle si NombreActions >= 0 (pas une vente) ou si le prix de
+    -- l'action manque sur cette transaction ou sur la plus ancienne.
+    PlusValue         DECIMAL(18,4)    NULL,
     CONSTRAINT CK_Transactions_Acheteur CHECK (
         (AcheteurId IS NULL AND AcheteurNomExterne IS NOT NULL)
         OR (AcheteurId IS NOT NULL AND AcheteurNomExterne IS NULL)
@@ -63,6 +65,30 @@ CREATE INDEX IX_Transactions_AcheteurId ON dbo.Transactions (AcheteurId);
 CREATE INDEX IX_Transactions_CibleId ON dbo.Transactions (CibleId);
 GO
 
+-- Authentification temporaire (en attendant le SSO) : voir le commentaire
+-- en tête de sql/migrations/2026-09-16-authentification.sql pour le détail
+-- du choix (mot de passe en clair, etc.).
+CREATE TABLE dbo.Utilisateurs (
+    Id         UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Utilisateurs PRIMARY KEY DEFAULT NEWID(),
+    Email      NVARCHAR(255)    NOT NULL,
+    MotDePasse NVARCHAR(10)     NOT NULL,
+    Role       NVARCHAR(50)     NOT NULL CONSTRAINT CK_Utilisateurs_Role CHECK (Role IN ('DSI', 'Direction des titres')),
+    CreeLe     DATETIME2        NOT NULL CONSTRAINT DF_Utilisateurs_CreeLe DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_Utilisateurs_Email UNIQUE (Email)
+);
+GO
+
+CREATE TABLE dbo.Sessions (
+    Token         UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Sessions PRIMARY KEY DEFAULT NEWID(),
+    UtilisateurId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_Sessions_Utilisateur REFERENCES dbo.Utilisateurs (Id) ON DELETE CASCADE,
+    CreeLe        DATETIME2        NOT NULL CONSTRAINT DF_Sessions_CreeLe DEFAULT SYSUTCDATETIME(),
+    ExpireLe      DATETIME2        NOT NULL
+);
+GO
+
+CREATE INDEX IX_Sessions_UtilisateurId ON dbo.Sessions (UtilisateurId);
+GO
+
 -- Compte applicatif dédié (authentification SQL, pas d'accès Windows/AD).
 CREATE LOGIN titres_app WITH PASSWORD = 'CHANGE_ME_STRONG_PASSWORD!';
 GO
@@ -72,4 +98,27 @@ GO
 
 ALTER ROLE db_datareader ADD MEMBER titres_app;
 ALTER ROLE db_datawriter ADD MEMBER titres_app;
+GO
+
+-- ---------------------------------------------------------------------
+-- Premier compte applicatif : toute l'application est derrière la
+-- connexion, il en faut un pour pouvoir se connecter et en créer d'autres
+-- depuis l'écran "Utilisateurs". Remplacez l'email ci-dessous PUIS
+-- décommentez ce bloc avant de l'exécuter.
+-- ---------------------------------------------------------------------
+/*
+DECLARE @Caracteres NVARCHAR(62) = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+DECLARE @MotDePasse NVARCHAR(10) = '';
+DECLARE @i INT = 0;
+WHILE @i < 10
+BEGIN
+    SET @MotDePasse = @MotDePasse + SUBSTRING(@Caracteres, CAST(RAND(CHECKSUM(NEWID())) * LEN(@Caracteres) + 1 AS INT), 1);
+    SET @i += 1;
+END;
+
+INSERT INTO dbo.Utilisateurs (Email, MotDePasse, Role)
+VALUES ('remplacez-moi@bollore.com', @MotDePasse, 'DSI');
+
+SELECT Email, MotDePasse, Role FROM dbo.Utilisateurs WHERE Email = 'remplacez-moi@bollore.com';
+*/
 GO
