@@ -327,16 +327,27 @@ app.MapGet("/api/auth/me", IResult (HttpContext ctx) =>
 
 const string ColonnesUtilisateur = "Id, Email, MotDePasse, Role, CreeLe";
 
-app.MapGet("/api/utilisateurs", async () =>
+// Seul le rôle DSI a accès à cet écran et à ces données (mots de passe en
+// clair inclus) — unique restriction de rôle pour l'instant, sur demande
+// explicite ; tout le reste de l'API reste ouvert à n'importe quel rôle.
+bool EstDsi(HttpContext ctx) => ctx.Items["Role"] as string == "DSI";
+
+app.MapGet("/api/utilisateurs", async (HttpContext ctx) =>
 {
+    if (!EstDsi(ctx))
+        return Results.Problem("Réservé au rôle DSI.", statusCode: StatusCodes.Status403Forbidden);
+
     await using var conn = new SqlConnection(ConnectionString());
     var utilisateurs = await conn.QueryAsync<Utilisateur>(
         $"SELECT {ColonnesUtilisateur} FROM dbo.Utilisateurs ORDER BY Email");
     return Results.Ok(utilisateurs);
 });
 
-app.MapPost("/api/utilisateurs", async (UtilisateurInput input) =>
+app.MapPost("/api/utilisateurs", async (HttpContext ctx, UtilisateurInput input) =>
 {
+    if (!EstDsi(ctx))
+        return Results.Problem("Réservé au rôle DSI.", statusCode: StatusCodes.Status403Forbidden);
+
     var email = input.Email?.Trim();
     if (string.IsNullOrEmpty(email))
         return Results.BadRequest("L'email est requis.");
@@ -358,8 +369,11 @@ app.MapPost("/api/utilisateurs", async (UtilisateurInput input) =>
     return Results.Created($"/api/utilisateurs/{utilisateur.Id}", utilisateur);
 });
 
-app.MapDelete("/api/utilisateurs/{id:guid}", async (Guid id) =>
+app.MapDelete("/api/utilisateurs/{id:guid}", async (HttpContext ctx, Guid id) =>
 {
+    if (!EstDsi(ctx))
+        return Results.Problem("Réservé au rôle DSI.", statusCode: StatusCodes.Status403Forbidden);
+
     await using var conn = new SqlConnection(ConnectionString());
     var total = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.Utilisateurs");
     if (total <= 1)

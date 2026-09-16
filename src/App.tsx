@@ -75,7 +75,12 @@ function App() {
   useEffect(() => {
     if (!utilisateurConnecte) return;
     setChargement(true);
-    Promise.all([api.fetchSocietes(), api.fetchTransactions(), api.fetchUtilisateurs()])
+    // La liste des utilisateurs (avec mots de passe en clair) n'est chargée
+    // que pour le rôle DSI, seul à voir cet écran — pas la peine de faire
+    // transiter ces données jusqu'au navigateur d'un autre rôle, même si
+    // l'écran qui les affiche ne serait de toute façon pas rendu.
+    const estDsi = utilisateurConnecte.role === "DSI";
+    Promise.all([api.fetchSocietes(), api.fetchTransactions(), estDsi ? api.fetchUtilisateurs() : Promise.resolve([])])
       .then(([s, t, u]) => {
         setSocietes(s);
         setTransactions(t);
@@ -223,6 +228,10 @@ function App() {
     return <LoginForm onConnecte={setUtilisateurConnecte} />;
   }
 
+  // Seul le rôle DSI voit et accède à l'écran de gestion des utilisateurs
+  // (seule restriction de rôle pour l'instant, sur demande explicite).
+  const estDsi = utilisateurConnecte.role === "DSI";
+
   return (
     <div className="app">
       <header className="app-header">
@@ -247,7 +256,7 @@ function App() {
       )}
 
       <nav className="tabs">
-        {ONGLETS.filter((o) => !("masque" in o && o.masque)).map((o) => (
+        {ONGLETS.filter((o) => !("masque" in o && o.masque) && (o.id !== "utilisateurs" || estDsi)).map((o) => (
           <button
             key={o.id}
             type="button"
@@ -305,7 +314,7 @@ function App() {
             </section>
           )}
 
-          {onglet === "utilisateurs" && (
+          {onglet === "utilisateurs" && estDsi && (
             <UtilisateursPanel
               utilisateurs={utilisateurs}
               onAjoute={(u) => setUtilisateurs((prev) => [...prev, u])}
