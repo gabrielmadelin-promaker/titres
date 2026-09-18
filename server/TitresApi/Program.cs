@@ -190,14 +190,15 @@ app.MapGet("/api/transactions", async () =>
 }
 
 // PlusValue n'est jamais saisie : calculée et enregistrée à chaque création
-// ou modification d'une transaction. Une vente (NombreActions négatif) est
-// comparée au prix de la transaction la plus ancienne connue pour la même
-// société cible (idAExclure évite qu'une modification se compare à sa
-// propre ancienne valeur en base) ; sinon la plus-value vaut 0.
+// ou modification d'une transaction, qu'il s'agisse d'un achat ou d'une
+// vente. Le prix de cette transaction est comparé au prix de la
+// transaction la plus ancienne connue pour la même société cible
+// (idAExclure évite qu'une modification se compare à sa propre ancienne
+// valeur en base) ; sinon la plus-value vaut 0.
 async Task<decimal?> CalculerPlusValue(
     SqlConnection conn, Guid cibleId, decimal? nombreActions, decimal? prixActionActuel, Guid? idAExclure)
 {
-    if (nombreActions is null || nombreActions >= 0)
+    if (nombreActions is null)
         return 0m;
     if (prixActionActuel is null)
         return null;

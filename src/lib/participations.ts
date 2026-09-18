@@ -251,13 +251,15 @@ export function calculerCheminsParticipation(
 
 /**
  * Valeur globale (capital, nombre d'actions, droit de vote...) détenue par
- * le groupe dans la société : somme des valeurs acquises depuis l'extérieur
- * du groupe. Une cession entre deux sociétés déjà suivies (vendeurId non
- * nul) est un simple transfert interne — les actions cédées ne viennent pas
- * de l'extérieur, elles étaient déjà comptées via la participation
- * existante du vendeur — donc elle n'ajoute rien à ce total ; sans cette
- * exclusion, le même transfert serait compté une deuxième fois en plus de
- * l'acquisition initiale.
+ * l'ensemble des sociétés suivies dans la société cible : la somme des
+ * participations directes de chaque actionnaire suivi (même calcul que
+ * calculerParticipations, agrégé sur tous les actionnaires plutôt que par
+ * couple). Une cession où l'acheteur ET le vendeur sont tous deux des
+ * sociétés suivies est un simple transfert interne, sans effet sur ce
+ * total (les actions étaient déjà comptées via la participation existante
+ * du vendeur) ; mais dès qu'un seul des deux camps est hors groupe, les
+ * actions entrent dans le groupe (achat) ou en sortent (vente à un tiers)
+ * et doivent bien faire varier ce total.
  */
 export function valeurGlobale(
   societeId: string,
@@ -275,8 +277,8 @@ export function valeurGlobale(
     const valeur = extraire(t);
     if (valeur === null || valeur === undefined) continue;
     trouve = true;
-    const transfertInterne = t.vendeurId !== null && t.vendeurId !== t.acheteurId;
-    if (!transfertInterne) somme += valeur;
+    if (t.acheteurId !== null) somme += valeur;
+    if (t.vendeurId !== null && t.vendeurId !== t.acheteurId) somme -= valeur;
   }
   return trouve ? somme : null;
 }
