@@ -250,8 +250,14 @@ export function calculerCheminsParticipation(
 }
 
 /**
- * Valeur globale (capital, nombre d'actions, droit de vote...) cédée par la
- * société : simple somme des valeurs acquises lors de ses transactions.
+ * Valeur globale (capital, nombre d'actions, droit de vote...) détenue par
+ * le groupe dans la société : somme des valeurs acquises depuis l'extérieur
+ * du groupe. Une cession entre deux sociétés déjà suivies (vendeurId non
+ * nul) est un simple transfert interne — les actions cédées ne viennent pas
+ * de l'extérieur, elles étaient déjà comptées via la participation
+ * existante du vendeur — donc elle n'ajoute rien à ce total ; sans cette
+ * exclusion, le même transfert serait compté une deuxième fois en plus de
+ * l'acquisition initiale.
  */
 export function valeurGlobale(
   societeId: string,
@@ -268,8 +274,9 @@ export function valeurGlobale(
   for (const t of pertinentes) {
     const valeur = extraire(t);
     if (valeur === null || valeur === undefined) continue;
-    somme += valeur;
     trouve = true;
+    const transfertInterne = t.vendeurId !== null && t.vendeurId !== t.acheteurId;
+    if (!transfertInterne) somme += valeur;
   }
   return trouve ? somme : null;
 }
