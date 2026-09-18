@@ -194,7 +194,10 @@ app.MapGet("/api/transactions", async () =>
 // vente. Le prix de cette transaction est comparé au prix de la
 // transaction la plus ancienne connue pour la même société cible
 // (idAExclure évite qu'une modification se compare à sa propre ancienne
-// valeur en base) ; sinon la plus-value vaut 0.
+// valeur en base) ; sinon la plus-value vaut 0. La quantité est prise en
+// valeur absolue : que la ligne soit un achat (NombreActions positif) ou
+// une vente (négatif), un prix aujourd'hui plus élevé que le prix de
+// référence doit toujours donner une plus-value positive.
 async Task<decimal?> CalculerPlusValue(
     SqlConnection conn, Guid cibleId, decimal? nombreActions, decimal? prixActionActuel, Guid? idAExclure)
 {
@@ -211,7 +214,7 @@ async Task<decimal?> CalculerPlusValue(
     if (prixAncien is null)
         return null;
 
-    return -nombreActions * (prixActionActuel - prixAncien);
+    return Math.Abs(nombreActions.Value) * (prixActionActuel - prixAncien);
 }
 
 app.MapPost("/api/transactions", async (TransactionInput input) =>

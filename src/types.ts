@@ -39,10 +39,10 @@ export interface Transaction {
   qualification: Qualification;
   /**
    * Calculée et enregistrée par l'API, en euros — jamais saisie. Nulle si
-   * NombreActions >= 0 (pas une vente), ou si le prix manque sur cette
-   * transaction ou sur la plus ancienne enregistrée pour la même cible.
-   * Sinon : -NombreActions × (PrixAction ici − PrixAction de la transaction
-   * la plus ancienne pour la même société cible).
+   * le prix manque sur cette transaction ou sur la plus ancienne
+   * enregistrée pour la même cible. Sinon, pour un achat comme pour une
+   * vente : |NombreActions| × (PrixAction ici − PrixAction de la
+   * transaction la plus ancienne pour la même société cible).
    */
   plusValue: number | null;
 }
