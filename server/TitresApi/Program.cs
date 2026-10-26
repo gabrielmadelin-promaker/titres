@@ -217,6 +217,64 @@ async Task<decimal?> CalculerPlusValue(
     return Math.Abs(nombreActions.Value) * (prixActionActuel - prixAncien);
 }
 
+// Chaque transaction ciblant une société est une "leg" signée pour le
+// couple (actionnaire, cible) : + côté acheteur, - côté vendeur si lui
+// aussi est une société suivie (même règle que calculerParticipations
+// côté frontend). Avant d'accepter une création ou modification, on
+// recalcule ces totaux directs en y ajoutant la transaction candidate, et
+// on refuse toute opération qui ferait sortir la participation d'une
+// société — ou le total cumulé du groupe — de la plage [0, 100] %, ou le
+// nombre d'actions d'une société en dessous de 0.
+async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionInput input, Guid? idAExclure)
+{
+    var lignes = (await conn.QueryAsync<LigneParticipation>(
+        "SELECT AcheteurId, VendeurId, Capital, DroitVoteTheorique, DroitVoteExercable, NombreActions " +
+        "FROM dbo.Transactions WHERE CibleId = @cibleId AND (@idAExclure IS NULL OR Id <> @idAExclure)",
+        new { cibleId = input.CibleId, idAExclure })).ToList();
+    lignes.Add(new LigneParticipation(
+        input.AcheteurId, input.VendeurId, input.Capital, input.DroitVoteTheorique, input.DroitVoteExercable, input.NombreActions));
+
+    var totaux = new Dictionary<Guid, (decimal Capital, decimal DvTheorique, decimal DvExercable, decimal NombreActions)>();
+
+    void Ajouter(Guid id, decimal capital, decimal dvTheorique, decimal dvExercable, decimal nombreActions)
+    {
+        var existant = totaux.TryGetValue(id, out var v) ? v : (0m, 0m, 0m, 0m);
+        totaux[id] = (existant.Capital + capital, existant.DvTheorique + dvTheorique, existant.DvExercable + dvExercable, existant.NombreActions + nombreActions);
+    }
+
+    foreach (var l in lignes)
+    {
+        if (l.AcheteurId is Guid acheteurId)
+            Ajouter(acheteurId, l.Capital, l.DroitVoteTheorique ?? 0, l.DroitVoteExercable ?? 0, l.NombreActions ?? 0);
+        if (l.VendeurId is Guid vendeurId && l.VendeurId != l.AcheteurId)
+            Ajouter(vendeurId, -l.Capital, -(l.DroitVoteTheorique ?? 0), -(l.DroitVoteExercable ?? 0), -(l.NombreActions ?? 0));
+    }
+
+    decimal totalCapital = 0, totalDvTheorique = 0, totalDvExercable = 0;
+    foreach (var total in totaux.Values)
+    {
+        if (total.Capital < 0 || total.Capital > 100)
+            return $"Cette opération ferait passer la part du capital détenue par une société dans la cible à {total.Capital:0.##} %, hors de la plage 0 à 100 %.";
+        if (total.DvTheorique < 0 || total.DvTheorique > 100)
+            return $"Cette opération ferait passer le droit de vote théorique détenu par une société dans la cible à {total.DvTheorique:0.##} %, hors de la plage 0 à 100 %.";
+        if (total.DvExercable < 0 || total.DvExercable > 100)
+            return $"Cette opération ferait passer le droit de vote exerçable détenu par une société dans la cible à {total.DvExercable:0.##} %, hors de la plage 0 à 100 %.";
+        if (total.NombreActions < 0)
+            return $"Cette opération ferait passer le nombre d'actions détenu par une société dans la cible à {total.NombreActions:0.##}, ce qui est négatif.";
+        totalCapital += total.Capital;
+        totalDvTheorique += total.DvTheorique;
+        totalDvExercable += total.DvExercable;
+    }
+    if (totalCapital > 100)
+        return $"Cette opération ferait dépasser 100 % du capital total détenu par le groupe dans la société cible (total {totalCapital:0.##} %).";
+    if (totalDvTheorique > 100)
+        return $"Cette opération ferait dépasser 100 % du droit de vote théorique total détenu par le groupe dans la société cible (total {totalDvTheorique:0.##} %).";
+    if (totalDvExercable > 100)
+        return $"Cette opération ferait dépasser 100 % du droit de vote exerçable total détenu par le groupe dans la société cible (total {totalDvExercable:0.##} %).";
+
+    return null;
+}
+
 app.MapPost("/api/transactions", async (TransactionInput input) =>
 {
     var (erreur, qualification, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
@@ -224,6 +282,11 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
         return Results.BadRequest(erreur);
 
     await using var conn = new SqlConnection(ConnectionString());
+
+    var erreurBornes = await ValiderBornesParticipation(conn, input, null);
+    if (erreurBornes is not null)
+        return Results.BadRequest(erreurBornes);
+
     var plusValue = await CalculerPlusValue(conn, input.CibleId, input.NombreActions, input.PrixAction, null);
 
     var transaction = new Transaction(
@@ -246,6 +309,11 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
         return Results.BadRequest(erreur);
 
     await using var conn = new SqlConnection(ConnectionString());
+
+    var erreurBornes = await ValiderBornesParticipation(conn, input, id);
+    if (erreurBornes is not null)
+        return Results.BadRequest(erreurBornes);
+
     var plusValue = await CalculerPlusValue(conn, input.CibleId, input.NombreActions, input.PrixAction, id);
 
     var lignes = await conn.ExecuteAsync(
@@ -437,6 +505,11 @@ record TransactionInput(
     string? VendeurNomExterne,
     decimal? PrixAction,
     string? Qualification);
+
+// Projection minimale d'une transaction pour ValiderBornesParticipation :
+// seules les colonnes qui contribuent aux totaux par actionnaire.
+record LigneParticipation(
+    Guid? AcheteurId, Guid? VendeurId, decimal Capital, decimal? DroitVoteTheorique, decimal? DroitVoteExercable, decimal? NombreActions);
 
 record SessionInfo(string Email, string Role);
 

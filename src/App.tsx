@@ -124,15 +124,13 @@ function App() {
   }
 
   async function supprimerSociete(id: string) {
-    const utilisee = transactions.some((t) => t.acheteurId === id || t.cibleId === id);
-    if (
-      utilisee &&
-      !window.confirm(
-        "Cette société est référencée par au moins une transaction. La supprimer quand même ?",
-      )
-    ) {
-      return;
-    }
+    const utilisee = transactions.some(
+      (t) => t.acheteurId === id || t.cibleId === id || t.vendeurId === id,
+    );
+    const message = utilisee
+      ? "Cette société est référencée par au moins une transaction (comme acheteuse, cible ou vendeuse). Les transactions concernées resteront, mais afficheront une société supprimée. La supprimer quand même ?"
+      : "Supprimer cette société ?";
+    if (!window.confirm(message)) return;
     try {
       await api.supprimerSociete(id);
       setSocietes((prev) => prev.filter((s) => s.id !== id));
@@ -169,6 +167,7 @@ function App() {
   }
 
   async function supprimerTransaction(id: string) {
+    if (!window.confirm("Supprimer cette transaction ? Les calculs de participations en tiendront compte immédiatement.")) return;
     try {
       await api.supprimerTransaction(id);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
