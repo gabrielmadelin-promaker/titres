@@ -234,37 +234,50 @@ async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionIn
     lignes.Add(new LigneParticipation(
         input.AcheteurId, input.VendeurId, input.Capital, input.DroitVoteTheorique, input.DroitVoteExercable, input.NombreActions));
 
-    var totaux = new Dictionary<Guid, (decimal Capital, decimal DvTheorique, decimal DvExercable, decimal NombreActions)>();
+    var capitalParId = new Dictionary<Guid, decimal>();
+    var dvTheoriqueParId = new Dictionary<Guid, decimal>();
+    var dvExercableParId = new Dictionary<Guid, decimal>();
+    var nombreActionsParId = new Dictionary<Guid, decimal>();
 
-    void Ajouter(Guid id, decimal capital, decimal dvTheorique, decimal dvExercable, decimal nombreActions)
+    void Ajouter(Dictionary<Guid, decimal> dict, Guid id, decimal valeur)
     {
-        var existant = totaux.TryGetValue(id, out var v) ? v : (0m, 0m, 0m, 0m);
-        totaux[id] = (existant.Capital + capital, existant.DvTheorique + dvTheorique, existant.DvExercable + dvExercable, existant.NombreActions + nombreActions);
+        dict[id] = dict.GetValueOrDefault(id) + valeur;
     }
 
     foreach (var l in lignes)
     {
         if (l.AcheteurId is Guid acheteurId)
-            Ajouter(acheteurId, l.Capital, l.DroitVoteTheorique ?? 0, l.DroitVoteExercable ?? 0, l.NombreActions ?? 0);
+        {
+            Ajouter(capitalParId, acheteurId, l.Capital);
+            Ajouter(dvTheoriqueParId, acheteurId, l.DroitVoteTheorique ?? 0);
+            Ajouter(dvExercableParId, acheteurId, l.DroitVoteExercable ?? 0);
+            Ajouter(nombreActionsParId, acheteurId, l.NombreActions ?? 0);
+        }
         if (l.VendeurId is Guid vendeurId && l.VendeurId != l.AcheteurId)
-            Ajouter(vendeurId, -l.Capital, -(l.DroitVoteTheorique ?? 0), -(l.DroitVoteExercable ?? 0), -(l.NombreActions ?? 0));
+        {
+            Ajouter(capitalParId, vendeurId, -l.Capital);
+            Ajouter(dvTheoriqueParId, vendeurId, -(l.DroitVoteTheorique ?? 0));
+            Ajouter(dvExercableParId, vendeurId, -(l.DroitVoteExercable ?? 0));
+            Ajouter(nombreActionsParId, vendeurId, -(l.NombreActions ?? 0));
+        }
     }
 
-    decimal totalCapital = 0, totalDvTheorique = 0, totalDvExercable = 0;
-    foreach (var total in totaux.Values)
-    {
-        if (total.Capital < 0 || total.Capital > 100)
-            return $"Cette opération ferait passer la part du capital détenue par une société dans la cible à {total.Capital:0.##} %, hors de la plage 0 à 100 %.";
-        if (total.DvTheorique < 0 || total.DvTheorique > 100)
-            return $"Cette opération ferait passer le droit de vote théorique détenu par une société dans la cible à {total.DvTheorique:0.##} %, hors de la plage 0 à 100 %.";
-        if (total.DvExercable < 0 || total.DvExercable > 100)
-            return $"Cette opération ferait passer le droit de vote exerçable détenu par une société dans la cible à {total.DvExercable:0.##} %, hors de la plage 0 à 100 %.";
-        if (total.NombreActions < 0)
-            return $"Cette opération ferait passer le nombre d'actions détenu par une société dans la cible à {total.NombreActions:0.##}, ce qui est négatif.";
-        totalCapital += total.Capital;
-        totalDvTheorique += total.DvTheorique;
-        totalDvExercable += total.DvExercable;
-    }
+    foreach (var capital in capitalParId.Values)
+        if (capital < 0 || capital > 100)
+            return $"Cette opération ferait passer la part du capital détenue par une société dans la cible à {capital:0.##} %, hors de la plage 0 à 100 %.";
+    foreach (var dv in dvTheoriqueParId.Values)
+        if (dv < 0 || dv > 100)
+            return $"Cette opération ferait passer le droit de vote théorique détenu par une société dans la cible à {dv:0.##} %, hors de la plage 0 à 100 %.";
+    foreach (var dv in dvExercableParId.Values)
+        if (dv < 0 || dv > 100)
+            return $"Cette opération ferait passer le droit de vote exerçable détenu par une société dans la cible à {dv:0.##} %, hors de la plage 0 à 100 %.";
+    foreach (var n in nombreActionsParId.Values)
+        if (n < 0)
+            return $"Cette opération ferait passer le nombre d'actions détenu par une société dans la cible à {n:0.##}, ce qui est négatif.";
+
+    var totalCapital = capitalParId.Values.Sum();
+    var totalDvTheorique = dvTheoriqueParId.Values.Sum();
+    var totalDvExercable = dvExercableParId.Values.Sum();
     if (totalCapital > 100)
         return $"Cette opération ferait dépasser 100 % du capital total détenu par le groupe dans la société cible (total {totalCapital:0.##} %).";
     if (totalDvTheorique > 100)
