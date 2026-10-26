@@ -236,16 +236,18 @@ export function SocietesTable({ societes, transactions, onDelete, onUpdate }: Pr
                   <td className="num">{dvTheorique === null ? "—" : formatPourcentage(dvTheorique)}</td>
                   <td className="num">{dvExercable === null ? "—" : formatPourcentage(dvExercable)}</td>
                   <td className="actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-small"
-                      onClick={() => setLigneEditee(ligneEditee === societe.id ? null : societe.id)}
-                    >
-                      Modifier
-                    </button>
-                    <button type="button" className="btn btn-danger btn-small" onClick={() => onDelete(societe.id)}>
-                      Supprimer
-                    </button>
+                    <div className="actions-groupe">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-small"
+                        onClick={() => setLigneEditee(ligneEditee === societe.id ? null : societe.id)}
+                      >
+                        Modifier
+                      </button>
+                      <button type="button" className="btn btn-danger btn-small" onClick={() => onDelete(societe.id)}>
+                        Supprimer
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 {ligneEditee === societe.id && (

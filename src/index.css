@@ -205,19 +205,6 @@ h3 {
   white-space: nowrap;
 }
 
-/* .table td.actions passe en display: flex pour aligner 2 boutons
-   (Modifier/Supprimer) dans Sociétés et Transactions — mais ça sort la
-   cellule du modèle table-cell, et une cellule vide (aucun bouton "Cascade"
-   pour une ligne sans détention indirecte, ou pour la métrique "Nombre
-   d'actions" qui n'a jamais de cascade) ne s'étire alors plus à la hauteur
-   de la ligne : elle flotte, plus petite, au milieu de la cellule. Ici il
-   n'y a jamais qu'un seul bouton, pas besoin de flex : une cellule normale
-   alignée à droite suffit et reste correctement étirée sur toute la ligne. */
-.table.table-participations td.actions {
-  display: table-cell;
-  text-align: right;
-}
-
 /* Les libellés de métrique ("Droit de vote théorique (%)") sont trop longs
    pour les colonnes volontairement étroites et fixes de ce tableau : plutôt
    que de forcer la colonne à s'élargir pour les faire tenir sur une ligne
@@ -293,6 +280,7 @@ h3 {
 
 .table td.actions {
   white-space: nowrap;
+  text-align: right;
 }
 
 .th-tri {
@@ -461,6 +449,7 @@ h3 {
   border-radius: 999px;
   background: var(--border);
   color: var(--text);
+  white-space: nowrap;
 }
 
 .num .badge {
@@ -628,10 +617,15 @@ h3 {
   gap: 2px;
 }
 
-.table td.actions {
-  display: flex;
+/* Jamais display: flex directement sur .table td.actions : ça sort la
+   cellule du modèle table-cell, qui ne s'étire alors plus à la hauteur de
+   la ligne — elle flotte, plus petite, en son milieu, et son alignement
+   vertical saute d'une ligne à l'autre dès qu'une cellule voisine occupe
+   plusieurs lignes (texte long). Le flex (pour aligner côte à côte les
+   boutons Modifier/Supprimer) va sur un élément interne à la cellule. */
+.actions-groupe {
+  display: inline-flex;
   gap: 6px;
-  justify-content: flex-end;
 }
 
 .table td.warning {

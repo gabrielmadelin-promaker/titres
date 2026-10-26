@@ -272,16 +272,18 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                     <td>{t.qualification}</td>
                     <td className="num">{formatOuTiret(t.plusValue, formatMontant)}</td>
                     <td className="actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-small"
-                        onClick={() => setLigneEditee(ligneEditee === t.id ? null : t.id)}
-                      >
-                        Modifier
-                      </button>
-                      <button type="button" className="btn btn-danger btn-small" onClick={() => onDelete(t.id)}>
-                        Supprimer
-                      </button>
+                      <div className="actions-groupe">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-small"
+                          onClick={() => setLigneEditee(ligneEditee === t.id ? null : t.id)}
+                        >
+                          Modifier
+                        </button>
+                        <button type="button" className="btn btn-danger btn-small" onClick={() => onDelete(t.id)}>
+                          Supprimer
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {ligneEditee === t.id && (
