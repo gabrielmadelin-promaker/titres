@@ -5,7 +5,7 @@ import { TransactionChampsFields } from "./TransactionChamps";
 
 interface Props {
   societes: Societe[];
-  onAdd: (transaction: Omit<Transaction, "id">) => void;
+  onAdd: (transaction: Omit<Transaction, "id">) => Promise<boolean>;
 }
 
 export function TransactionForm({ societes, onAdd }: Props) {
@@ -20,16 +20,19 @@ export function TransactionForm({ societes, onAdd }: Props) {
     );
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const messageErreur = validerChamps(champs);
     if (messageErreur) {
       setErreur(messageErreur);
       return;
     }
-    onAdd(champsVersTransaction(champs));
     setErreur(null);
-    setChamps(champsVides());
+    // En cas d'échec (ex. refusé par le serveur car hors bornes), les champs
+    // ne sont pas vidés : l'utilisateur doit pouvoir ajuster sa saisie
+    // plutôt que de tout ressaisir depuis zéro.
+    const reussi = await onAdd(champsVersTransaction(champs));
+    if (reussi) setChamps(champsVides());
   }
 
   return (

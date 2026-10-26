@@ -105,8 +105,10 @@ function App() {
       const creee = await api.creerSociete(societe);
       setSocietes((prev) => [...prev, creee]);
       setErreur(null);
+      return true;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter la société");
+      return false;
     }
   }
 
@@ -145,8 +147,10 @@ function App() {
       const creee = await api.creerTransaction(transaction);
       setTransactions((prev) => [...prev, creee]);
       setErreur(null);
+      return true;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter la transaction");
+      return false;
     }
   }
 

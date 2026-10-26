@@ -3,7 +3,7 @@ import type { Societe } from "../types";
 import { PAYS } from "../lib/pays";
 
 interface Props {
-  onAdd: (societe: Omit<Societe, "id">) => void;
+  onAdd: (societe: Omit<Societe, "id">) => Promise<boolean>;
 }
 
 function champVide(): string {
@@ -18,12 +18,14 @@ export function SocieteForm({ onAdd }: Props) {
   const [siren, setSiren] = useState(champVide());
   const [lei, setLei] = useState(champVide());
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const nomPropre = nom.trim();
     if (!nomPropre) return;
 
-    onAdd({
+    // En cas d'échec, les champs ne sont pas vidés : l'utilisateur doit
+    // pouvoir ajuster sa saisie plutôt que de tout ressaisir depuis zéro.
+    const reussi = await onAdd({
       nom: nomPropre,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
       pays: pays || null,
@@ -31,6 +33,7 @@ export function SocieteForm({ onAdd }: Props) {
       siren: siren.trim() || null,
       lei: lei.trim() || null,
     });
+    if (!reussi) return;
 
     setNom("");
     setValeurNominale(champVide());
