@@ -114,3 +114,17 @@ export function fetchDroitsVoteTheorique(): Promise<Titre[]> {
 export function fetchDroitsVoteExercable(): Promise<Titre[]> {
   return request("/titres/droits-vote-exercable");
 }
+
+export interface ResultatInitialisationTitres {
+  transactionsTraitees: number;
+  actions: number;
+  droitsVoteTheorique: number;
+  droitsVoteExercable: number;
+}
+
+// Vide puis régénère entièrement les 3 tables de titres à partir de
+// l'historique des transactions — opération ponctuelle (bouton de
+// l'onglet Titres), jamais appelée automatiquement.
+export function initialiserTitres(): Promise<ResultatInitialisationTitres> {
+  return request("/titres/initialiser", { method: "POST" });
+}

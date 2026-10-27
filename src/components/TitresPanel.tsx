@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Societe, Titre } from "../types";
+import type { ResultatInitialisationTitres } from "../lib/api";
 import { formatDate, formatMontant } from "../lib/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
@@ -9,6 +10,8 @@ interface Props {
   actions: Titre[];
   droitsVoteTheorique: Titre[];
   droitsVoteExercable: Titre[];
+  /** Régénère les 3 tables de titres à partir des transactions ; renvoie null en cas d'échec (déjà signalé ailleurs). */
+  onInitialiser: () => Promise<ResultatInitialisationTitres | null>;
 }
 
 type Notion = "actions" | "dvTheorique" | "dvExercable";
@@ -29,11 +32,34 @@ type Colonne = "emettrice" | "categorie" | "detenteur" | "prixInitial" | "prixAc
  * main : pas de formulaire d'ajout ici, uniquement une consultation
  * filtrable et exportable.
  */
-export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVoteExercable }: Props) {
+export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVoteExercable, onInitialiser }: Props) {
   const [notion, setNotion] = useState<Notion>("actions");
   const [filtreEmettriceId, setFiltreEmettriceId] = useState("");
   const [filtreDetenteurId, setFiltreDetenteurId] = useState("");
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "emettrice", sens: "asc" });
+  const [initialisationEnCours, setInitialisationEnCours] = useState(false);
+  const [messageInitialisation, setMessageInitialisation] = useState<string | null>(null);
+
+  async function handleInitialiser() {
+    if (
+      !window.confirm(
+        "Régénérer entièrement les 3 tables de titres à partir de l'historique des transactions ? " +
+          "Les lignes existantes seront remplacées par le résultat du recalcul (sans effet sur les transactions elles-mêmes).",
+      )
+    ) {
+      return;
+    }
+    setInitialisationEnCours(true);
+    setMessageInitialisation(null);
+    const resultat = await onInitialiser();
+    setInitialisationEnCours(false);
+    if (resultat) {
+      setMessageInitialisation(
+        `${resultat.transactionsTraitees} transaction(s) traitée(s) : ${resultat.actions} action(s), ` +
+          `${resultat.droitsVoteTheorique} droit(s) de vote théorique, ${resultat.droitsVoteExercable} droit(s) de vote exerçable.`,
+      );
+    }
+  }
 
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string | null) => (id ? (nomParId.get(id) ?? "(supprimée)") : null);
@@ -144,11 +170,21 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
           </div>
         </div>
         <div className="viz-actions">
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            onClick={handleInitialiser}
+            disabled={initialisationEnCours}
+          >
+            {initialisationEnCours ? "Initialisation en cours…" : "Initialiser depuis les transactions"}
+          </button>
           <button type="button" className="btn btn-secondary btn-small" onClick={exporter}>
             Exporter en xlsx
           </button>
         </div>
       </div>
+
+      {messageInitialisation && <p className="import-result">{messageInitialisation}</p>}
 
       {titres.length === 0 ? (
         <p className="empty">Aucun titre « {libelleNotion.toLowerCase()} » pour le moment.</p>
