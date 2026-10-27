@@ -199,31 +199,20 @@ app.MapGet("/api/transactions", async () =>
 }
 
 // PlusValue n'est jamais saisie : calculée et enregistrée à chaque création
-// ou modification d'une transaction, qu'il s'agisse d'un achat ou d'une
-// vente. Le prix de cette transaction est comparé au prix de la
-// transaction la plus ancienne connue pour la même société cible
-// (idAExclure évite qu'une modification se compare à sa propre ancienne
-// valeur en base) ; sinon la plus-value vaut 0. La quantité est prise en
-// valeur absolue : que la ligne soit un achat (NombreActions positif) ou
-// une vente (négatif), un prix aujourd'hui plus élevé que le prix de
-// référence doit toujours donner une plus-value positive.
-async Task<decimal?> CalculerPlusValue(
-    SqlConnection conn, Guid cibleId, decimal? nombreActions, decimal? prixActionActuel, Guid? idAExclure)
+// ou modification d'une transaction. Basée sur le FIFO réel des lots
+// d'Actions consommés par cette transaction (voir ConsommerLots) : prix de
+// cette transaction moins le prix d'origine moyen, pondéré par quantité,
+// des titres effectivement vendus — mathématiquement équivalent à la somme
+// tranche par tranche (prix de vente − prix de chaque lot consommé) × sa
+// quantité, puisque la vente se fait à un prix unique pour toute la
+// transaction. Nulle si cette transaction n'a fait perdre aucun titre à
+// personne (ex. achat externe pur, sans consommation d'un lot existant) :
+// il n'y a alors pas de prix d'origine auquel se comparer.
+decimal? CalculerPlusValue(decimal? nombreActions, decimal? prixAction, decimal? prixInitialReporteActions)
 {
-    if (nombreActions is null)
-        return 0m;
-    if (prixActionActuel is null)
+    if (nombreActions is null or 0 || prixAction is null || prixInitialReporteActions is null)
         return null;
-
-    var prixAncien = await conn.QuerySingleOrDefaultAsync<decimal?>(
-        "SELECT TOP 1 PrixAction FROM dbo.Transactions " +
-        "WHERE CibleId = @cibleId AND (@idAExclure IS NULL OR Id <> @idAExclure) " +
-        "ORDER BY [Date] ASC, Id ASC",
-        new { cibleId, idAExclure });
-    if (prixAncien is null)
-        return null;
-
-    return Math.Abs(nombreActions.Value) * (prixActionActuel - prixAncien);
+    return Math.Abs(nombreActions.Value) * (prixAction.Value - prixInitialReporteActions.Value);
 }
 
 // Chaque transaction ciblant une société est une "leg" signée pour le
@@ -394,25 +383,29 @@ async Task CreerLot(
 // symétrique côté vendeur s'il est renseigné — même règle que
 // ValiderBornesParticipation/calculerParticipations). Le camp perdant est
 // toujours traité en premier, pour pouvoir reporter le prix d'origine de ses
-// lignes retirées sur les nouvelles lignes du camp gagnant.
-async Task SynchroniserTitresMetrique(
+// lignes retirées sur les nouvelles lignes du camp gagnant. Renvoie ce même
+// prix d'origine moyen reporté (null si personne n'a consommé de lot dans
+// cet appel), utilisé par l'appelant (SynchroniserTitres) pour calculer la
+// plus-value côté Actions.
+async Task<decimal?> SynchroniserTitresMetrique(
     SqlConnection conn, IDbTransaction tx, string table, Guid cibleId, string? categorie,
     Guid? acheteurId, string? acheteurNomExterne, decimal? quantiteSignee,
     Guid? vendeurId, string? vendeurNomExterne,
     decimal? prixAction, string date, Guid transactionId)
 {
     if (quantiteSignee is not decimal variation || variation == 0)
-        return;
+        return null;
 
     var vendeurRenseigne = vendeurId is not null || vendeurNomExterne is not null;
     if (vendeurRenseigne && vendeurId is not null && vendeurId == acheteurId)
-        return; // acheteur == vendeur : rien à faire (cas déjà écarté par ValiderTransaction, par précaution).
+        return null; // acheteur == vendeur : rien à faire (cas déjà écarté par ValiderTransaction, par précaution).
 
     if (variation < 0)
     {
         var prixInitialReporte = await ConsommerLots(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, -variation);
         if (vendeurRenseigne)
             await CreerLot(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, -variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+        return prixInitialReporte;
     }
     else
     {
@@ -420,6 +413,7 @@ async Task SynchroniserTitresMetrique(
         if (vendeurRenseigne)
             prixInitialReporte = await ConsommerLots(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, variation);
         await CreerLot(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+        return prixInitialReporte;
     }
 }
 
@@ -433,13 +427,18 @@ async Task SynchroniserTitresMetrique(
 // Un correctif manuel dans l'onglet Titres peut être nécessaire dans ce cas,
 // normalement rare (modification peu après la saisie, ou correction d'une
 // erreur de saisie).
-async Task SynchroniserTitres(
+//
+// Renvoie le prix d'origine moyen reporté côté Actions (seule notion dont se
+// sert CalculerPlusValue — les droits de vote n'entrent pas dans la
+// plus-value), pour que l'appelant puisse calculer la plus-value de la
+// transaction une fois les titres synchronisés.
+async Task<decimal?> SynchroniserTitres(
     SqlConnection conn, IDbTransaction tx, Guid cibleId, string? categorie,
     Guid? acheteurId, string? acheteurNomExterne, Guid? vendeurId, string? vendeurNomExterne,
     decimal? nombreActions, decimal? nombreDroitVoteTheorique, decimal? nombreDroitVoteExercable,
     decimal? prixAction, string date, Guid transactionId)
 {
-    await SynchroniserTitresMetrique(
+    var prixInitialReporteActions = await SynchroniserTitresMetrique(
         conn, tx, "Actions", cibleId, categorie, acheteurId, acheteurNomExterne, nombreActions,
         vendeurId, vendeurNomExterne, prixAction, date, transactionId);
     await SynchroniserTitresMetrique(
@@ -448,6 +447,7 @@ async Task SynchroniserTitres(
     await SynchroniserTitresMetrique(
         conn, tx, "DroitsVoteExercable", cibleId, categorie, acheteurId, acheteurNomExterne, nombreDroitVoteExercable,
         vendeurId, vendeurNomExterne, prixAction, date, transactionId);
+    return prixInitialReporteActions;
 }
 
 // Retire, dans les trois tables, toutes les lignes créées par cette
@@ -470,13 +470,21 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
     if (erreurBornes is not null)
         return Results.BadRequest(erreurBornes);
 
-    var plusValue = await CalculerPlusValue(conn, input.CibleId, input.NombreActions, input.PrixAction, null);
-
     var transactionId = Guid.NewGuid();
     await conn.OpenAsync();
     await using var sqlTx = await conn.BeginTransactionAsync();
     try
     {
+        // Synchronise les titres AVANT d'insérer la ligne de transaction
+        // (sans contrainte de clé étrangère entre les deux, l'ordre est
+        // libre) pour connaître le prix d'origine moyen reporté côté
+        // Actions et pouvoir calculer PlusValue avant l'INSERT plutôt que
+        // par une seconde requête.
+        var prixInitialReporteActions = await SynchroniserTitres(
+            conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
+            input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, transactionId);
+        var plusValue = CalculerPlusValue(input.NombreActions, input.PrixAction, prixInitialReporteActions);
+
         await conn.ExecuteAsync(
             "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, " +
             "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue) " +
@@ -489,10 +497,6 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
                 vendeurNomExterne, input.PrixAction, Qualification = qualification, PlusValue = plusValue,
             },
             sqlTx);
-
-        await SynchroniserTitres(
-            conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
-            input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, transactionId);
 
         await sqlTx.CommitAsync();
     }
@@ -519,34 +523,38 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
     if (erreurBornes is not null)
         return Results.BadRequest(erreurBornes);
 
-    var plusValue = await CalculerPlusValue(conn, input.CibleId, input.NombreActions, input.PrixAction, id);
-
     await conn.OpenAsync();
     await using var sqlTx = await conn.BeginTransactionAsync();
     int lignes;
     try
     {
+        // PlusValue n'est pas connue avant d'avoir synchronisé les titres
+        // (voir plus bas) : ce premier UPDATE met à jour tout le reste, et
+        // sert aussi à vérifier que la ligne existe (lignes > 0) avant de
+        // toucher aux titres.
         lignes = await conn.ExecuteAsync(
             "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, AcheteurNomExterne = @AcheteurNomExterne, " +
             "CibleId = @CibleId, [Date] = @Date, NombreActions = @NombreActions, " +
             "NombreDroitVoteTheorique = @NombreDroitVoteTheorique, NombreDroitVoteExercable = @NombreDroitVoteExercable, " +
             "Categorie = @Categorie, VendeurId = @VendeurId, " +
-            "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Qualification = @Qualification, " +
-            "PlusValue = @PlusValue WHERE Id = @id",
+            "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Qualification = @Qualification " +
+            "WHERE Id = @id",
             new
             {
                 id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
                 input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
-                vendeurNomExterne, input.PrixAction, Qualification = qualification, PlusValue = plusValue,
+                vendeurNomExterne, input.PrixAction, Qualification = qualification,
             },
             sqlTx);
 
         if (lignes > 0)
         {
             await RetirerTitresDeTransaction(conn, sqlTx, id);
-            await SynchroniserTitres(
+            var prixInitialReporteActions = await SynchroniserTitres(
                 conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
                 input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, id);
+            var plusValue = CalculerPlusValue(input.NombreActions, input.PrixAction, prixInitialReporteActions);
+            await conn.ExecuteAsync("UPDATE dbo.Transactions SET PlusValue = @plusValue WHERE Id = @id", new { plusValue, id }, sqlTx);
         }
 
         await sqlTx.CommitAsync();

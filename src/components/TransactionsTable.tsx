@@ -275,7 +275,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "plusValue"))}
-                  title="Calculée automatiquement (achat comme vente) : |nombre d'actions| × (prix de cette transaction − prix de la plus ancienne transaction enregistrée pour cette société)."
+                  title="Calculée automatiquement, en FIFO sur les lots d'Actions consommés par cette transaction : |nombre d'actions| × (prix de cette transaction − prix d'origine moyen des titres vendus). Vide si aucun titre n'a été consommé (ex. achat externe pur)."
                 >
                   Plus-value{flecheTri(tri, "plusValue")}
                 </th>
