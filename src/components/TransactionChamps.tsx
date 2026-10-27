@@ -125,47 +125,43 @@ export function TransactionChampsFields({ champs, onChange, societes, idPrefix }
           placeholder="Ex : 100 (achat) ou -100 (vente)"
           value={champs.nombreActions}
           onChange={(e) => set("nombreActions", e.target.value)}
-        />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor={`${idPrefix}-capital`}>Capital (%)</label>
-        <input
-          id={`${idPrefix}-capital`}
-          type="number"
-          min="-100"
-          max="100"
-          step="0.01"
-          placeholder="Ex : 10 (achat) ou -10 (vente)"
-          value={champs.capital}
-          onChange={(e) => set("capital", e.target.value)}
           required
         />
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-dv-theorique`}>Droit de vote théorique (%)</label>
+        <label htmlFor={`${idPrefix}-dv-theorique`}>Nombre de droits de vote théorique</label>
         <input
           id={`${idPrefix}-dv-theorique`}
           type="number"
-          min="-100"
-          max="100"
           step="0.01"
-          value={champs.droitVoteTheorique}
-          onChange={(e) => set("droitVoteTheorique", e.target.value)}
+          placeholder="Ex : 100 (achat) ou -100 (vente)"
+          value={champs.nombreDroitVoteTheorique}
+          onChange={(e) => set("nombreDroitVoteTheorique", e.target.value)}
         />
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-dv-exercable`}>Droit de vote exerçable (%)</label>
+        <label htmlFor={`${idPrefix}-dv-exercable`}>Nombre de droits de vote exerçable</label>
         <input
           id={`${idPrefix}-dv-exercable`}
           type="number"
-          min="-100"
-          max="100"
           step="0.01"
-          value={champs.droitVoteExercable}
-          onChange={(e) => set("droitVoteExercable", e.target.value)}
+          placeholder="Ex : 100 (achat) ou -100 (vente)"
+          value={champs.nombreDroitVoteExercable}
+          onChange={(e) => set("nombreDroitVoteExercable", e.target.value)}
+        />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor={`${idPrefix}-categorie`}>Catégorie</label>
+        <input
+          id={`${idPrefix}-categorie`}
+          type="text"
+          maxLength={10}
+          placeholder="Ex : A, B, C..."
+          value={champs.categorie}
+          onChange={(e) => set("categorie", e.target.value)}
         />
       </div>
 

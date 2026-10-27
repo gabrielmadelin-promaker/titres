@@ -1,21 +1,81 @@
-import type { Transaction } from "../types";
+import type { Societe, Transaction } from "../types";
 
-export type Metrique = "capital" | "nombreActions" | "droitVoteTheorique" | "droitVoteExercable";
+export type Metrique =
+  | "capital"
+  | "nombreActions"
+  | "droitVoteTheorique"
+  | "droitVoteExercable"
+  | "nombreDroitVoteTheorique"
+  | "nombreDroitVoteExercable";
+
+type ChampTotalSociete = "nombreTotalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
+
+/**
+ * Un pourcentage (capital, droit de vote théorique/exerçable) n'est plus
+ * saisi directement : il se dérive de la quantité correspondante saisie sur
+ * la transaction (nombre d'actions / de DV théorique / de DV exerçable),
+ * rapportée au total émis par la société cible (NombreTotalX, saisi une
+ * fois sur la société). Si la transaction porte une quantité mais que la
+ * cible n'a pas de total renseigné, le % n'est pas calculable (pas de
+ * dénominateur connu) : on renvoie null plutôt que de réutiliser un vieux
+ * pourcentage, qui serait incohérent avec la quantité désormais saisie.
+ *
+ * Si la transaction n'a PAS de quantité renseignée (données saisies avant
+ * l'introduction des quantités), elle garde son pourcentage historique
+ * affiché en repli — décision actée pour ne rien casser sur les données
+ * existantes, sans script de correction forcé.
+ */
+function extrairePourcentage(
+  nombre: number | null,
+  legacy: number | null,
+  cibleId: string,
+  societes: Societe[],
+  champTotal: ChampTotalSociete,
+): number | null {
+  if (nombre === null) return legacy;
+  const total = societes.find((s) => s.id === cibleId)?.[champTotal] ?? null;
+  return total ? (nombre / total) * 100 : null;
+}
 
 /**
  * Seul le capital et les droits de vote se composent en chaîne (50% de 40%
  * = 20% indirect) : ce sont des parts d'un tout ramené à 100. Un nombre
- * d'actions est une quantité absolue — multiplier deux nombres d'actions
- * entre eux n'a pas de sens dimensionnel sans connaître le nombre total
- * d'actions de chaque société intermédiaire, une donnée qu'on ne modélise
- * pas ici. Pour ce indicateur, le "total" se limite donc au direct.
+ * d'actions (ou de droits de vote) est une quantité absolue — multiplier
+ * deux quantités entre elles n'a pas de sens dimensionnel sans connaître le
+ * nombre total émis par chaque société intermédiaire, ce qui n'est pas pris
+ * en compte ici (c'est précisément le rôle de la dérivation en %). Pour ces
+ * indicateurs "nombre", le "total" se limite donc au direct.
  */
-const METRIQUES: Record<Metrique, { extraire: (t: Transaction) => number | null; chainable: boolean }> = {
-  capital: { extraire: (t) => t.capital, chainable: true },
+const METRIQUES: Record<Metrique, { extraire: (t: Transaction, societes: Societe[]) => number | null; chainable: boolean }> = {
+  capital: {
+    extraire: (t, societes) => extrairePourcentage(t.nombreActions, t.capital, t.cibleId, societes, "nombreTotalActions"),
+    chainable: true,
+  },
+  droitVoteTheorique: {
+    extraire: (t, societes) =>
+      extrairePourcentage(t.nombreDroitVoteTheorique, t.droitVoteTheorique, t.cibleId, societes, "nombreTotalDroitVoteTheorique"),
+    chainable: true,
+  },
+  droitVoteExercable: {
+    extraire: (t, societes) =>
+      extrairePourcentage(t.nombreDroitVoteExercable, t.droitVoteExercable, t.cibleId, societes, "nombreTotalDroitVoteExercable"),
+    chainable: true,
+  },
   nombreActions: { extraire: (t) => t.nombreActions, chainable: false },
-  droitVoteTheorique: { extraire: (t) => t.droitVoteTheorique, chainable: true },
-  droitVoteExercable: { extraire: (t) => t.droitVoteExercable, chainable: true },
+  nombreDroitVoteTheorique: { extraire: (t) => t.nombreDroitVoteTheorique, chainable: false },
+  nombreDroitVoteExercable: { extraire: (t) => t.nombreDroitVoteExercable, chainable: false },
 };
+
+/**
+ * Valeur d'une métrique pour une transaction précise — même dérivation que
+ * dans les agrégats ci-dessous (nombre rapporté au total de la société
+ * cible, avec repli sur l'ancien pourcentage si aucune quantité n'est
+ * renseignée). Utilisé pour l'affichage brut d'une transaction (tableau des
+ * transactions), indépendamment de tout agrégat par actionnaire.
+ */
+export function extraireValeurTransaction(t: Transaction, metrique: Metrique, societes: Societe[]): number | null {
+  return METRIQUES[metrique].extraire(t, societes);
+}
 
 export interface Participation {
   acheteurId: string;
@@ -43,6 +103,7 @@ export interface Participation {
 export function calculerParticipations(
   transactions: Transaction[],
   metrique: Metrique,
+  societes: Societe[],
   dateLimite?: string,
 ): Participation[] {
   const extraire = METRIQUES[metrique].extraire;
@@ -62,7 +123,7 @@ export function calculerParticipations(
   }
 
   for (const t of transactionsPertinentes) {
-    const valeur = extraire(t);
+    const valeur = extraire(t, societes);
     if (valeur === null || valeur === undefined) continue;
     // Un acheteur hors groupe (acheteurId null, nom libre) n'est pas une
     // société suivie : impossible de le faire figurer comme actionnaire
@@ -91,9 +152,10 @@ const SEUIL_PARTICIPATION = 0.001;
 function construireDirect(
   transactions: Transaction[],
   metrique: Metrique,
+  societes: Societe[],
   dateLimite?: string,
 ): Map<string, Map<string, number>> {
-  const directs = calculerParticipations(transactions, metrique, dateLimite);
+  const directs = calculerParticipations(transactions, metrique, societes, dateLimite);
   const direct = new Map<string, Map<string, number>>();
   directs.forEach((p) => {
     if (!direct.has(p.acheteurId)) direct.set(p.acheteurId, new Map());
@@ -122,9 +184,10 @@ function construireDirect(
 export function calculerParticipationsDetaillees(
   transactions: Transaction[],
   metrique: Metrique,
+  societes: Societe[],
   dateLimite?: string,
 ): ParticipationDetaillee[] {
-  const direct = construireDirect(transactions, metrique, dateLimite);
+  const direct = construireDirect(transactions, metrique, societes, dateLimite);
 
   if (!METRIQUES[metrique].chainable) {
     const resultat: ParticipationDetaillee[] = [];
@@ -203,9 +266,10 @@ export function calculerCheminsParticipation(
   acheteurId: string,
   cibleId: string,
   metrique: Metrique,
+  societes: Societe[],
   dateLimite?: string,
 ): CheminParticipation[] {
-  const direct = construireDirect(transactions, metrique, dateLimite);
+  const direct = construireDirect(transactions, metrique, societes, dateLimite);
 
   if (!METRIQUES[metrique].chainable) {
     const valeur = direct.get(acheteurId)?.get(cibleId);
@@ -265,6 +329,7 @@ export function valeurGlobale(
   societeId: string,
   transactions: Transaction[],
   metrique: Metrique,
+  societes: Societe[],
   dateLimite?: string,
 ): number | null {
   const extraire = METRIQUES[metrique].extraire;
@@ -274,7 +339,7 @@ export function valeurGlobale(
   let somme = 0;
   let trouve = false;
   for (const t of pertinentes) {
-    const valeur = extraire(t);
+    const valeur = extraire(t, societes);
     if (valeur === null || valeur === undefined) continue;
     trouve = true;
     if (t.acheteurId !== null) somme += valeur;

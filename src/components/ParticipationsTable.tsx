@@ -69,6 +69,7 @@ function largeurPourGroupe(g: GroupeMetrique, afficherDetail: boolean): number {
 
 interface DetailCheminsProps {
   transactions: Transaction[];
+  societes: Societe[];
   acheteurId: string;
   cibleId: string;
   metrique: Metrique;
@@ -77,10 +78,10 @@ interface DetailCheminsProps {
 }
 
 /** Cascade des chemins de détention (direct + indirects) qui composent la valeur totale d'une métrique. */
-function DetailChemins({ transactions, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
+function DetailChemins({ transactions, societes, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
   const chemins = useMemo(
-    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique),
-    [transactions, acheteurId, cibleId, metrique],
+    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique, societes),
+    [transactions, societes, acheteurId, cibleId, metrique],
   );
   const affiches = chemins.slice(0, MAX_CHEMINS_AFFICHES);
   const reste = chemins.slice(MAX_CHEMINS_AFFICHES);
@@ -157,11 +158,11 @@ export function ParticipationsTable({ societes, transactions }: Props) {
   const parMetrique = useMemo(() => {
     const map = new Map<Metrique, Map<string, ParticipationDetaillee>>();
     for (const g of GROUPES) {
-      const detail = calculerParticipationsDetaillees(transactions, g.metrique);
+      const detail = calculerParticipationsDetaillees(transactions, g.metrique, societes);
       map.set(g.metrique, new Map(detail.map((d) => [`${d.acheteurId}::${d.cibleId}`, d])));
     }
     return map;
-  }, [transactions]);
+  }, [transactions, societes]);
 
   // La liste des couples (actionnaire, cible) à afficher est l'union de ce
   // que chaque métrique a pu produire — une métrique facultative (nombre
@@ -423,6 +424,7 @@ export function ParticipationsTable({ societes, transactions }: Props) {
                       >
                         <DetailChemins
                           transactions={transactions}
+                          societes={societes}
                           acheteurId={p.acheteurId}
                           cibleId={p.cibleId}
                           metrique={ouvert.metrique}

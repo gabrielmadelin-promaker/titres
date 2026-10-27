@@ -20,7 +20,14 @@ CREATE TABLE dbo.Societes (
     Pays          NVARCHAR(100)    NULL,
     SiegeSocial   NVARCHAR(300)    NULL,
     Siren         NVARCHAR(20)     NULL,
-    Lei           NVARCHAR(20)     NULL
+    Lei           NVARCHAR(20)     NULL,
+    -- Total émis par la société : dénominateur des pourcentages (Capital,
+    -- DV théorique, DV exerçable) calculés automatiquement à partir des
+    -- quantités des transactions. Tant qu'un total est NULL, le pourcentage
+    -- correspondant ne peut pas être calculé.
+    NombreTotalActions            DECIMAL(18,4) NULL,
+    NombreTotalDroitVoteTheorique DECIMAL(18,4) NULL,
+    NombreTotalDroitVoteExercable DECIMAL(18,4) NULL
 );
 GO
 
@@ -37,9 +44,21 @@ CREATE TABLE dbo.Transactions (
     AcheteurNomExterne NVARCHAR(300)   NULL,
     CibleId           UNIQUEIDENTIFIER NOT NULL,
     [Date]            DATE             NOT NULL,
-    NombreActions     DECIMAL(18,4)    NULL,
     -- Positif = achat, négatif = vente (cession d'une partie de la participation détenue).
-    Capital           DECIMAL(6,2)     NOT NULL CONSTRAINT CK_Transactions_Capital CHECK (Capital <> 0 AND Capital BETWEEN -100 AND 100),
+    NombreActions     DECIMAL(18,4)    NULL,
+    NombreDroitVoteTheorique DECIMAL(18,4) NULL,
+    NombreDroitVoteExercable DECIMAL(18,4) NULL,
+    -- Catégorie du titre (lettre : A, B, C...), facultative — sert à
+    -- l'alimentation automatique des tables Actions/DroitsVoteTheorique/
+    -- DroitsVoteExercable (voir plus bas).
+    Categorie         NVARCHAR(10)     NULL,
+    -- Pourcentages de repli, conservés pour l'historique antérieur à
+    -- l'introduction des quantités ci-dessus : plus jamais saisis ni écrits
+    -- par l'application, qui calcule désormais le pourcentage à partir des
+    -- quantités et du total de la société cible (Societes.NombreTotalX).
+    -- N'affiché que si la quantité correspondante est absente sur une
+    -- transaction (donnée ancienne).
+    Capital           DECIMAL(6,2)     NULL,
     DroitVoteTheorique DECIMAL(6,2)    NULL CONSTRAINT CK_Transactions_DVTheorique CHECK (DroitVoteTheorique BETWEEN -100 AND 100),
     DroitVoteExercable DECIMAL(6,2)    NULL CONSTRAINT CK_Transactions_DVExercable CHECK (DroitVoteExercable BETWEEN -100 AND 100),
     VendeurId         UNIQUEIDENTIFIER NULL,
@@ -63,6 +82,77 @@ GO
 
 CREATE INDEX IX_Transactions_AcheteurId ON dbo.Transactions (AcheteurId);
 CREATE INDEX IX_Transactions_CibleId ON dbo.Transactions (CibleId);
+GO
+
+-- Suivi du cycle de vie des titres : une ligne par titre (pas par lot),
+-- alimentée automatiquement par l'API à chaque création/modification/
+-- suppression de transaction (TransactionOrigineId trace la transaction à
+-- l'origine de la ligne, pour pouvoir l'annuler) — jamais saisie à la main.
+-- Même structure, une table par notion ; pas de clé étrangère vers
+-- Societes/Transactions, même choix que pour Transactions plus haut (une
+-- société ou une transaction supprimée ne doit pas bloquer/casser en
+-- cascade).
+CREATE TABLE dbo.Actions (
+    Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Actions PRIMARY KEY DEFAULT NEWID(),
+    SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
+    Categorie            NVARCHAR(10)     NULL,
+    SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
+    DetenteurNomExterne  NVARCHAR(300)    NULL,
+    PrixInitial          DECIMAL(18,4)    NULL,
+    PrixAcquisition      DECIMAL(18,4)    NULL,
+    DateAcquisition      DATE             NULL,
+    TransactionOrigineId UNIQUEIDENTIFIER NULL,
+    CONSTRAINT CK_Actions_Detenteur CHECK (
+        (SocieteDetentriceId IS NULL AND DetenteurNomExterne IS NOT NULL)
+        OR (SocieteDetentriceId IS NOT NULL AND DetenteurNomExterne IS NULL)
+    )
+);
+GO
+CREATE INDEX IX_Actions_SocieteEmettriceId ON dbo.Actions (SocieteEmettriceId);
+CREATE INDEX IX_Actions_SocieteDetentriceId ON dbo.Actions (SocieteDetentriceId);
+CREATE INDEX IX_Actions_TransactionOrigineId ON dbo.Actions (TransactionOrigineId);
+GO
+
+CREATE TABLE dbo.DroitsVoteTheorique (
+    Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_DroitsVoteTheorique PRIMARY KEY DEFAULT NEWID(),
+    SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
+    Categorie            NVARCHAR(10)     NULL,
+    SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
+    DetenteurNomExterne  NVARCHAR(300)    NULL,
+    PrixInitial          DECIMAL(18,4)    NULL,
+    PrixAcquisition      DECIMAL(18,4)    NULL,
+    DateAcquisition      DATE             NULL,
+    TransactionOrigineId UNIQUEIDENTIFIER NULL,
+    CONSTRAINT CK_DroitsVoteTheorique_Detenteur CHECK (
+        (SocieteDetentriceId IS NULL AND DetenteurNomExterne IS NOT NULL)
+        OR (SocieteDetentriceId IS NOT NULL AND DetenteurNomExterne IS NULL)
+    )
+);
+GO
+CREATE INDEX IX_DroitsVoteTheorique_SocieteEmettriceId ON dbo.DroitsVoteTheorique (SocieteEmettriceId);
+CREATE INDEX IX_DroitsVoteTheorique_SocieteDetentriceId ON dbo.DroitsVoteTheorique (SocieteDetentriceId);
+CREATE INDEX IX_DroitsVoteTheorique_TransactionOrigineId ON dbo.DroitsVoteTheorique (TransactionOrigineId);
+GO
+
+CREATE TABLE dbo.DroitsVoteExercable (
+    Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_DroitsVoteExercable PRIMARY KEY DEFAULT NEWID(),
+    SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
+    Categorie            NVARCHAR(10)     NULL,
+    SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
+    DetenteurNomExterne  NVARCHAR(300)    NULL,
+    PrixInitial          DECIMAL(18,4)    NULL,
+    PrixAcquisition      DECIMAL(18,4)    NULL,
+    DateAcquisition      DATE             NULL,
+    TransactionOrigineId UNIQUEIDENTIFIER NULL,
+    CONSTRAINT CK_DroitsVoteExercable_Detenteur CHECK (
+        (SocieteDetentriceId IS NULL AND DetenteurNomExterne IS NOT NULL)
+        OR (SocieteDetentriceId IS NOT NULL AND DetenteurNomExterne IS NULL)
+    )
+);
+GO
+CREATE INDEX IX_DroitsVoteExercable_SocieteEmettriceId ON dbo.DroitsVoteExercable (SocieteEmettriceId);
+CREATE INDEX IX_DroitsVoteExercable_SocieteDetentriceId ON dbo.DroitsVoteExercable (SocieteDetentriceId);
+CREATE INDEX IX_DroitsVoteExercable_TransactionOrigineId ON dbo.DroitsVoteExercable (TransactionOrigineId);
 GO
 
 -- Authentification temporaire (en attendant le SSO) : voir le commentaire

@@ -7,6 +7,17 @@ export interface Societe {
   siegeSocial: string | null;
   siren: string | null;
   lei: string | null;
+  /**
+   * Nombre total d'actions / de droits de vote théorique / de droits de
+   * vote exerçable émis par cette société : dénominateur servant à calculer
+   * automatiquement les % affichés dans l'application (capital, droit de
+   * vote théorique/exerçable). Tant que le total correspondant n'est pas
+   * renseigné, le % ne peut pas être calculé pour les transactions qui
+   * portent une quantité (voir participations.ts).
+   */
+  nombreTotalActions: number | null;
+  nombreTotalDroitVoteTheorique: number | null;
+  nombreTotalDroitVoteExercable: number | null;
 }
 
 export const QUALIFICATIONS = ["Simple", "Fusion", "TUPE"] as const;
@@ -24,11 +35,21 @@ export interface Transaction {
   date: string;
   /** Nombre d'actions échangées (positif = achat, négatif = vente). */
   nombreActions: number | null;
-  /** Part du capital de la société cible échangée (positif = achat, négatif = vente). */
-  capital: number;
-  /** Droit de vote théorique (peut différer du capital : actions à droit de vote double, sans droit de vote...). */
+  /** Nombre de droits de vote théorique échangés (positif = achat, négatif = vente). */
+  nombreDroitVoteTheorique: number | null;
+  /** Nombre de droits de vote exerçable échangés (positif = achat, négatif = vente). */
+  nombreDroitVoteExercable: number | null;
+  /** Catégorie du titre (lettre de classe d'action A/B/C...), facultative. */
+  categorie: string | null;
+  /**
+   * Pourcentages historiques, saisis directement avant l'introduction des
+   * quantités ci-dessus : plus jamais écrits par l'application pour une
+   * transaction créée ou modifiée désormais (toujours null dans ce cas).
+   * Ils ne servent plus qu'en repli d'affichage pour une transaction
+   * ancienne qui n'a pas de quantité correspondante — voir participations.ts.
+   */
+  capital: number | null;
   droitVoteTheorique: number | null;
-  /** Droit de vote effectivement exerçable (peut différer du théorique : droits suspendus, autocontrôle...). */
   droitVoteExercable: number | null;
   /** Société ayant cédé les actions, si connue et membre du groupe (sinon null, voir vendeurNomExterne). */
   vendeurId: string | null;
@@ -45,4 +66,30 @@ export interface Transaction {
    * transaction la plus ancienne pour la même société cible).
    */
   plusValue: number | null;
+}
+
+/**
+ * Une ligne des tables Actions / DroitsVoteTheorique / DroitsVoteExercable :
+ * le suivi unitaire du cycle de vie d'un titre précis (qui le détient, à
+ * quel prix il a été acquis), généré et mis à jour automatiquement par
+ * l'API à chaque création/modification/suppression de transaction — jamais
+ * saisi à la main.
+ */
+export interface Titre {
+  id: string;
+  /** Société cible qui a émis ce titre. */
+  societeEmettriceId: string;
+  /** Lettre de catégorie (classe d'action A/B/C...), facultative. */
+  categorie: string | null;
+  /** Détenteur actuel, si c'est une société suivie (sinon null, voir detenteurNomExterne). */
+  societeDetentriceId: string | null;
+  /** Nom libre du détenteur actuel quand il est hors groupe (societeDetentriceId alors null). */
+  detenteurNomExterne: string | null;
+  /** Prix à l'émission d'origine : ne change jamais après la création de la ligne. */
+  prixInitial: number | null;
+  /** Prix payé par le détenteur actuel (= prixInitial à l'émission, sinon prix de la dernière cession). */
+  prixAcquisition: number | null;
+  dateAcquisition: string | null;
+  /** Transaction à l'origine de l'état actuel de cette ligne. */
+  transactionOrigineId: string | null;
 }

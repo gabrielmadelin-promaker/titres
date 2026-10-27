@@ -7,17 +7,19 @@ import { SocieteForm } from "./components/SocieteForm";
 import { SocietesTable } from "./components/SocietesTable";
 import { TransactionForm } from "./components/TransactionForm";
 import { TransactionsTable } from "./components/TransactionsTable";
+import { TitresPanel } from "./components/TitresPanel";
 import { UtilisateursPanel } from "./components/UtilisateursPanel";
 import { VisualisationPanel } from "./components/VisualisationPanel";
 import * as api from "./lib/api";
 import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
 import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
-import type { Societe, Transaction } from "./types";
+import type { Societe, Titre, Transaction } from "./types";
 
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
   { id: "transactions", label: "Transactions" },
   { id: "participations", label: "Participations" },
+  { id: "titres", label: "Titres" },
   { id: "utilisateurs", label: "Utilisateurs" },
   // Onglet retiré de la navigation (demande explicite) mais le code
   // (VisualisationPanel, organigramme.ts, aretes.ts) reste en place pour le
@@ -37,6 +39,9 @@ function App() {
 
   const [societes, setSocietes] = useState<Societe[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [actions, setActions] = useState<Titre[]>([]);
+  const [droitsVoteTheorique, setDroitsVoteTheorique] = useState<Titre[]>([]);
+  const [droitsVoteExercable, setDroitsVoteExercable] = useState<Titre[]>([]);
   const [utilisateurs, setUtilisateurs] = useState<Utilisateur[]>([]);
   const [onglet, setOnglet] = useState<OngletId>("societes");
   const [chargement, setChargement] = useState(true);
@@ -80,15 +85,44 @@ function App() {
     // transiter ces données jusqu'au navigateur d'un autre rôle, même si
     // l'écran qui les affiche ne serait de toute façon pas rendu.
     const estDsi = utilisateurConnecte.role === "DSI";
-    Promise.all([api.fetchSocietes(), api.fetchTransactions(), estDsi ? api.fetchUtilisateurs() : Promise.resolve([])])
-      .then(([s, t, u]) => {
+    Promise.all([
+      api.fetchSocietes(),
+      api.fetchTransactions(),
+      api.fetchActions(),
+      api.fetchDroitsVoteTheorique(),
+      api.fetchDroitsVoteExercable(),
+      estDsi ? api.fetchUtilisateurs() : Promise.resolve([]),
+    ])
+      .then(([s, t, a, dvt, dve, u]) => {
         setSocietes(s);
         setTransactions(t);
+        setActions(a);
+        setDroitsVoteTheorique(dvt);
+        setDroitsVoteExercable(dve);
         setUtilisateurs(u);
       })
       .catch((e) => gererErreur(e, "Impossible de charger les données"))
       .finally(() => setChargement(false));
   }, [utilisateurConnecte]);
+
+  // Les 3 tables de titres sont régénérées côté serveur à chaque
+  // création/modification/suppression de transaction : impossible de les
+  // mettre à jour de façon optimiste côté client (la logique de synchro
+  // n'est pas dupliquée ici), on les recharge donc après coup.
+  async function rechargerTitres() {
+    try {
+      const [a, dvt, dve] = await Promise.all([
+        api.fetchActions(),
+        api.fetchDroitsVoteTheorique(),
+        api.fetchDroitsVoteExercable(),
+      ]);
+      setActions(a);
+      setDroitsVoteTheorique(dvt);
+      setDroitsVoteExercable(dve);
+    } catch (e) {
+      gererErreur(e, "Impossible de recharger les titres");
+    }
+  }
 
   async function seDeconnecter() {
     try {
@@ -147,6 +181,7 @@ function App() {
       const creee = await api.creerTransaction(transaction);
       setTransactions((prev) => [...prev, creee]);
       setErreur(null);
+      await rechargerTitres();
       return true;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter la transaction");
@@ -164,6 +199,7 @@ function App() {
       const misAJour = await api.modifierTransaction(id, champs);
       setTransactions((prev) => prev.map((t) => (t.id === id ? misAJour : t)));
       setErreur(null);
+      await rechargerTitres();
     } catch (e) {
       setTransactions(avant);
       gererErreur(e, "Impossible de modifier la transaction");
@@ -176,6 +212,7 @@ function App() {
       await api.supprimerTransaction(id);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       setErreur(null);
+      await rechargerTitres();
     } catch (e) {
       gererErreur(e, "Impossible de supprimer la transaction");
     }
@@ -213,7 +250,10 @@ function App() {
         erreursImport.push(messageErreur(e));
       }
     }
-    if (creees.length > 0) setTransactions((prev) => [...prev, ...creees]);
+    if (creees.length > 0) {
+      setTransactions((prev) => [...prev, ...creees]);
+      await rechargerTitres();
+    }
     return { ajoutees: creees.length, erreurs: erreursImport };
   }
 
@@ -314,6 +354,22 @@ function App() {
               <h2>Participations</h2>
               <p className="subtitle-panel">Qui détient combien du capital de qui.</p>
               <ParticipationsTable societes={societes} transactions={transactions} />
+            </section>
+          )}
+
+          {onglet === "titres" && (
+            <section className="panel">
+              <h2>Titres</h2>
+              <p className="subtitle-panel">
+                Cycle de vie unitaire des titres — qui détient précisément quel titre, de quelle catégorie, à quel
+                prix il a été acquis. Généré automatiquement à partir des transactions : lecture seule.
+              </p>
+              <TitresPanel
+                societes={societes}
+                actions={actions}
+                droitsVoteTheorique={droitsVoteTheorique}
+                droitsVoteExercable={droitsVoteExercable}
+              />
             </section>
           )}
 

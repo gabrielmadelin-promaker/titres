@@ -61,12 +61,19 @@ export function ImportTransactions({ societes, onImport }: Props) {
           return;
         }
 
-        const capitalBrut = valeurColonne(ligne, "capital", "pourcentage", "%", "pct");
-        const capital = Number(capitalBrut);
-        if (!capitalBrut || Number.isNaN(capital) || capital === 0 || capital < -100 || capital > 100) {
-          lignesErreurs.push(
-            `Ligne ${numeroLigne} : capital (%) invalide (« ${String(capitalBrut)} », attendu entre -100 et 100, non nul).`,
-          );
+        const nombreActions = nombreColonne(ligne, "nombre d'actions", "nombre actions");
+        if (nombreActions === null || nombreActions === 0) {
+          // Pas de conversion automatique depuis un ancien fichier en %
+          // (pas de dénominateur fiable au moment de l'import) : message
+          // explicite plutôt qu'un simple "champ manquant" si c'est le cas.
+          const ancienCapital = valeurColonne(ligne, "capital", "pourcentage", "%", "pct");
+          if (ancienCapital !== undefined && ancienCapital !== "") {
+            lignesErreurs.push(
+              `Ligne ${numeroLigne} : colonne « Capital (%) » détectée mais plus acceptée à l'import — renseignez « Nombre d'actions » (aucune conversion automatique possible sans le nombre total émis par la société cible).`,
+            );
+          } else {
+            lignesErreurs.push(`Ligne ${numeroLigne} : nombre d'actions invalide ou manquant (requis, non nul).`);
+          }
           return;
         }
 
@@ -90,10 +97,28 @@ export function ImportTransactions({ societes, onImport }: Props) {
           acheteurNomExterne: acheteur ? null : nomAcheteur,
           cibleId: cible.id,
           date,
-          nombreActions: nombreColonne(ligne, "nombre d'actions", "nombre actions"),
-          capital,
-          droitVoteTheorique: nombreColonne(ligne, "droit de vote théorique", "droit de vote theorique", "dv théorique", "dv theorique"),
-          droitVoteExercable: nombreColonne(ligne, "droit de vote exerçable", "droit de vote exercable", "dv exerçable", "dv exercable"),
+          nombreActions,
+          nombreDroitVoteTheorique: nombreColonne(
+            ligne,
+            "nombre de droits de vote théorique",
+            "nombre de droits de vote theorique",
+            "nombre dv théorique",
+            "nombre dv theorique",
+          ),
+          nombreDroitVoteExercable: nombreColonne(
+            ligne,
+            "nombre de droits de vote exerçable",
+            "nombre de droits de vote exercable",
+            "nombre dv exerçable",
+            "nombre dv exercable",
+          ),
+          categorie: texteColonne(ligne, "catégorie", "categorie") || null,
+          // Pourcentages historiques : plus jamais importés directement
+          // (voir le rejet explicite ci-dessus si une colonne « Capital »
+          // est détectée).
+          capital: null,
+          droitVoteTheorique: null,
+          droitVoteExercable: null,
           vendeurId: vendeur?.id ?? null,
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
@@ -125,10 +150,12 @@ export function ImportTransactions({ societes, onImport }: Props) {
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
       <p className="import-hint">
-        Colonnes : « Acheteur », « Cible », « Capital » (-100 à 100, négatif pour une vente), « Date » (requises) ;
-        « Nombre d'actions », « Droit de vote théorique », « Droit de vote exerçable », « Vendeur », « Prix de
-        l'action », « Qualification » (Simple/Fusion/TUPE — facultatives). « Cible » doit être une société déjà
-        importée ; « Acheteur »/« Vendeur » non reconnus sont importés tels quels comme sociétés hors groupe.
+        Colonnes : « Acheteur », « Cible », « Nombre d'actions » (non nul, négatif pour une vente), « Date »
+        (requises) ; « Nombre de droits de vote théorique », « Nombre de droits de vote exerçable », « Catégorie »,
+        « Vendeur », « Prix de l'action », « Qualification » (Simple/Fusion/TUPE — facultatives). « Cible » doit être
+        une société déjà importée ; « Acheteur »/« Vendeur » non reconnus sont importés tels quels comme sociétés
+        hors groupe. Les pourcentages (anciens fichiers) ne sont plus acceptés à l'import : ils sont désormais
+        calculés automatiquement à partir du nombre d'actions et du total émis par la société cible.
       </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (

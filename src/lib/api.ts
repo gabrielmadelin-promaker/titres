@@ -1,4 +1,4 @@
-import type { Societe, Transaction } from "../types";
+import type { Societe, Titre, Transaction } from "../types";
 import { lireToken, SessionExpireeError } from "./auth";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8091/api`;
@@ -98,4 +98,19 @@ export function modifierTransaction(id: string, champs: Omit<Transaction, "id">)
 
 export function supprimerTransaction(id: string): Promise<void> {
   return request(`/transactions/${id}`, { method: "DELETE" });
+}
+
+// Lecture seule : ces trois tables sont alimentées automatiquement par
+// l'API à chaque transaction, jamais saisies à la main — pas de
+// POST/PUT/DELETE côté client.
+export function fetchActions(): Promise<Titre[]> {
+  return request("/titres/actions");
+}
+
+export function fetchDroitsVoteTheorique(): Promise<Titre[]> {
+  return request("/titres/droits-vote-theorique");
+}
+
+export function fetchDroitsVoteExercable(): Promise<Titre[]> {
+  return request("/titres/droits-vote-exercable");
 }

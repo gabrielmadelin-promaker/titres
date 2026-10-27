@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import type { Societe, Transaction } from "../types";
 import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../lib/format";
+import { extraireValeurTransaction } from "../lib/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { champsDepuisTransaction, champsVersTransaction, validerChamps } from "../lib/transactionChamps";
 import { TransactionChampsFields } from "./TransactionChamps";
@@ -61,6 +62,9 @@ type Colonne =
   | "cible"
   | "vendeur"
   | "nombreActions"
+  | "nombreDvTheorique"
+  | "nombreDvExercable"
+  | "categorie"
   | "capital"
   | "dvTheorique"
   | "dvExercable"
@@ -130,12 +134,18 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
           return t.vendeurId ? (nomParId.get(t.vendeurId) ?? "(supprimée)") : (t.vendeurNomExterne ?? "");
         case "nombreActions":
           return t.nombreActions ?? -Infinity;
+        case "nombreDvTheorique":
+          return t.nombreDroitVoteTheorique ?? -Infinity;
+        case "nombreDvExercable":
+          return t.nombreDroitVoteExercable ?? -Infinity;
+        case "categorie":
+          return t.categorie ?? "";
         case "capital":
-          return t.capital;
+          return extraireValeurTransaction(t, "capital", societes) ?? -Infinity;
         case "dvTheorique":
-          return t.droitVoteTheorique ?? -Infinity;
+          return extraireValeurTransaction(t, "droitVoteTheorique", societes) ?? -Infinity;
         case "dvExercable":
-          return t.droitVoteExercable ?? -Infinity;
+          return extraireValeurTransaction(t, "droitVoteExercable", societes) ?? -Infinity;
         case "prixAction":
           return t.prixAction ?? -Infinity;
         case "qualification":
@@ -145,7 +155,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
       }
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
-  }, [filtrees, tri, nomParId]);
+  }, [filtrees, tri, nomParId, societes]);
 
   function exporter() {
     return exporterXlsx(
@@ -161,9 +171,12 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
             ? `${t.vendeurNomExterne} (hors groupe)`
             : "",
         "Nombre d'actions": t.nombreActions ?? "",
-        "Capital (%)": t.capital,
-        "Droit de vote théorique (%)": t.droitVoteTheorique ?? "",
-        "Droit de vote exerçable (%)": t.droitVoteExercable ?? "",
+        "Nombre de droits de vote théorique": t.nombreDroitVoteTheorique ?? "",
+        "Nombre de droits de vote exerçable": t.nombreDroitVoteExercable ?? "",
+        Catégorie: t.categorie ?? "",
+        "Capital (%)": extraireValeurTransaction(t, "capital", societes) ?? "",
+        "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", societes) ?? "",
+        "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", societes) ?? "",
         "Prix de l'action (€)": t.prixAction ?? "",
         Qualification: t.qualification,
         "Plus-value (€)": t.plusValue ?? "",
@@ -231,7 +244,20 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreActions"))}>
                   Nombre d'actions{flecheTri(tri, "nombreActions")}
                 </th>
-                <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "capital"))}>
+                <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreDvTheorique"))}>
+                  Nombre DV théorique{flecheTri(tri, "nombreDvTheorique")}
+                </th>
+                <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreDvExercable"))}>
+                  Nombre DV exerçable{flecheTri(tri, "nombreDvExercable")}
+                </th>
+                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "categorie"))}>
+                  Catégorie{flecheTri(tri, "categorie")}
+                </th>
+                <th
+                  className="th-tri num"
+                  onClick={() => setTri(basculerTri(tri, "capital"))}
+                  title="Calculé automatiquement (nombre d'actions ÷ total émis par la société cible). Pour une ancienne transaction sans nombre d'actions, affiche l'ancien pourcentage saisi."
+                >
                   Capital %{flecheTri(tri, "capital")}
                 </th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvTheorique"))}>
@@ -265,9 +291,16 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                     <td>{nomDe(t.cibleId)}</td>
                     <td>{celluleVendeur(t)}</td>
                     <td className="num">{formatOuTiret(t.nombreActions, formatDecimal)}</td>
-                    <td className="num">{formatPourcentage(t.capital)}</td>
-                    <td className="num">{formatOuTiret(t.droitVoteTheorique, formatPourcentage)}</td>
-                    <td className="num">{formatOuTiret(t.droitVoteExercable, formatPourcentage)}</td>
+                    <td className="num">{formatOuTiret(t.nombreDroitVoteTheorique, formatDecimal)}</td>
+                    <td className="num">{formatOuTiret(t.nombreDroitVoteExercable, formatDecimal)}</td>
+                    <td>{t.categorie ?? "—"}</td>
+                    <td className="num">{formatOuTiret(extraireValeurTransaction(t, "capital", societes), formatPourcentage)}</td>
+                    <td className="num">
+                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteTheorique", societes), formatPourcentage)}
+                    </td>
+                    <td className="num">
+                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", societes), formatPourcentage)}
+                    </td>
                     <td className="num">{formatOuTiret(t.prixAction, formatMontant)}</td>
                     <td>{t.qualification}</td>
                     <td className="num">{formatOuTiret(t.plusValue, formatMontant)}</td>
@@ -288,7 +321,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                   </tr>
                   {ligneEditee === t.id && (
                     <tr>
-                      <td colSpan={12}>
+                      <td colSpan={15}>
                         <TransactionEditRow
                           transaction={t}
                           societes={societes}

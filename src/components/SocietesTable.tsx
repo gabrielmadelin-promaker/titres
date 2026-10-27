@@ -38,6 +38,13 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   const [siegeSocial, setSiegeSocial] = useState(societe.siegeSocial ?? "");
   const [siren, setSiren] = useState(societe.siren ?? "");
   const [lei, setLei] = useState(societe.lei ?? "");
+  const [nombreTotalActions, setNombreTotalActions] = useState(societe.nombreTotalActions?.toString() ?? "");
+  const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(
+    societe.nombreTotalDroitVoteTheorique?.toString() ?? "",
+  );
+  const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(
+    societe.nombreTotalDroitVoteExercable?.toString() ?? "",
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,6 +57,9 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
       lei: lei.trim() || null,
+      nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
+      nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
+      nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
   }
 
@@ -92,6 +102,36 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
         <label>LEI</label>
         <input type="text" value={lei} onChange={(e) => setLei(e.target.value)} />
       </div>
+      <div className="form-field">
+        <label>Nombre total d'actions émises</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={nombreTotalActions}
+          onChange={(e) => setNombreTotalActions(e.target.value)}
+        />
+      </div>
+      <div className="form-field">
+        <label>Nombre total de droits de vote théorique émis</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={nombreTotalDroitVoteTheorique}
+          onChange={(e) => setNombreTotalDroitVoteTheorique(e.target.value)}
+        />
+      </div>
+      <div className="form-field">
+        <label>Nombre total de droits de vote exerçable émis</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          value={nombreTotalDroitVoteExercable}
+          onChange={(e) => setNombreTotalDroitVoteExercable(e.target.value)}
+        />
+      </div>
       <div className="edit-row-actions">
         <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
           Annuler
@@ -112,10 +152,10 @@ export function SocietesTable({ societes, transactions, onDelete, onUpdate }: Pr
     () =>
       societes.map((s) => ({
         societe: s,
-        totalActions: valeurGlobale(s.id, transactions, "nombreActions"),
-        capital: valeurGlobale(s.id, transactions, "capital"),
-        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique"),
-        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable"),
+        totalActions: valeurGlobale(s.id, transactions, "nombreActions", societes),
+        capital: valeurGlobale(s.id, transactions, "capital", societes),
+        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", societes),
+        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", societes),
       })),
     [societes, transactions],
   );

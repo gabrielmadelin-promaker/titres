@@ -81,7 +81,7 @@ export function calculerOrganigramme(
   dateLimite?: string,
 ): Organigramme {
   const societeParId = new Map(societes.map((s) => [s.id, s]));
-  const participations = calculerParticipations(transactions, "capital", dateLimite);
+  const participations = calculerParticipations(transactions, "capital", societes, dateLimite);
   const tousLiens = participations
     .filter((p) => p.valeurTotale > 0.001)
     .map((p) => ({ acheteurId: p.acheteurId, cibleId: p.cibleId, pourcentage: p.valeurTotale }));

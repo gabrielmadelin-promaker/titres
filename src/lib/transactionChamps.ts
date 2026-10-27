@@ -13,9 +13,9 @@ export interface TransactionChamps {
   vendeurNomExterne: string;
   date: string;
   nombreActions: string;
-  capital: string;
-  droitVoteTheorique: string;
-  droitVoteExercable: string;
+  nombreDroitVoteTheorique: string;
+  nombreDroitVoteExercable: string;
+  categorie: string;
   prixAction: string;
   qualification: Qualification;
 }
@@ -35,9 +35,9 @@ export function champsVides(): TransactionChamps {
     vendeurNomExterne: "",
     date: today(),
     nombreActions: "",
-    capital: "",
-    droitVoteTheorique: "",
-    droitVoteExercable: "",
+    nombreDroitVoteTheorique: "",
+    nombreDroitVoteExercable: "",
+    categorie: "",
     prixAction: "",
     qualification: "Simple",
   };
@@ -54,19 +54,19 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
     vendeurNomExterne: t.vendeurNomExterne ?? "",
     date: t.date,
     nombreActions: t.nombreActions?.toString() ?? "",
-    capital: t.capital.toString(),
-    droitVoteTheorique: t.droitVoteTheorique?.toString() ?? "",
-    droitVoteExercable: t.droitVoteExercable?.toString() ?? "",
+    nombreDroitVoteTheorique: t.nombreDroitVoteTheorique?.toString() ?? "",
+    nombreDroitVoteExercable: t.nombreDroitVoteExercable?.toString() ?? "",
+    categorie: t.categorie ?? "",
     prixAction: t.prixAction?.toString() ?? "",
     qualification: t.qualification,
   };
 }
 
-/** Valide un champ pourcentage optionnel : vide accepté, sinon -100..100. */
-function pourcentageOptionnelValide(brut: string): boolean {
+/** Valide un champ nombre de droits de vote optionnel : vide accepté, sinon un nombre valide, non nul. */
+function nombreOptionnelValide(brut: string): boolean {
   if (!brut) return true;
   const v = Number(brut);
-  return !Number.isNaN(v) && v >= -100 && v <= 100;
+  return !Number.isNaN(v) && v !== 0;
 }
 
 export function validerChamps(c: TransactionChamps): string | null {
@@ -80,12 +80,16 @@ export function validerChamps(c: TransactionChamps): string | null {
   if (c.vendeurExterne && !c.vendeurNomExterne.trim()) {
     return "Renseignez le nom de la société vendeuse, ou décochez « Hors groupe » si elle n'est pas connue.";
   }
-  const pctCapital = Number(c.capital);
-  if (!c.capital || pctCapital === 0 || pctCapital < -100 || pctCapital > 100) {
-    return "Le capital (%) doit être compris entre -100 et 100, sans être nul (positif pour un achat, négatif pour une vente).";
+  const nombreActions = Number(c.nombreActions);
+  if (!c.nombreActions || Number.isNaN(nombreActions) || nombreActions === 0) {
+    return "Le nombre d'actions est requis, et ne peut pas être nul (négatif pour une vente).";
   }
-  if (!pourcentageOptionnelValide(c.droitVoteTheorique)) return "Le droit de vote théorique (%) doit être compris entre -100 et 100.";
-  if (!pourcentageOptionnelValide(c.droitVoteExercable)) return "Le droit de vote exerçable (%) doit être compris entre -100 et 100.";
+  if (!nombreOptionnelValide(c.nombreDroitVoteTheorique)) {
+    return "Le nombre de droits de vote théorique doit être un nombre non nul.";
+  }
+  if (!nombreOptionnelValide(c.nombreDroitVoteExercable)) {
+    return "Le nombre de droits de vote exerçable doit être un nombre non nul.";
+  }
   if (c.prixAction && Number(c.prixAction) < 0) return "Le prix de l'action ne peut pas être négatif.";
   if (!c.date) return "Renseignez une date.";
   return null;
@@ -98,10 +102,16 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     acheteurNomExterne: c.acheteurExterne ? c.acheteurNomExterne.trim() : null,
     cibleId: c.cibleId,
     date: c.date,
-    nombreActions: c.nombreActions ? Number(c.nombreActions) : null,
-    capital: Number(c.capital),
-    droitVoteTheorique: c.droitVoteTheorique ? Number(c.droitVoteTheorique) : null,
-    droitVoteExercable: c.droitVoteExercable ? Number(c.droitVoteExercable) : null,
+    nombreActions: Number(c.nombreActions),
+    nombreDroitVoteTheorique: c.nombreDroitVoteTheorique ? Number(c.nombreDroitVoteTheorique) : null,
+    nombreDroitVoteExercable: c.nombreDroitVoteExercable ? Number(c.nombreDroitVoteExercable) : null,
+    categorie: c.categorie.trim() || null,
+    // Pourcentages historiques : plus jamais saisis ni envoyés par le
+    // formulaire — toujours null pour une transaction créée ou modifiée
+    // désormais (voir Transaction dans types.ts).
+    capital: null,
+    droitVoteTheorique: null,
+    droitVoteExercable: null,
     vendeurId: c.vendeurExterne ? null : c.vendeurId || null,
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,

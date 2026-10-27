@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using Dapper;
 using Microsoft.Data.SqlClient;
@@ -99,7 +100,9 @@ app.MapGet("/api/health", async () =>
     }
 });
 
-const string ColonnesSociete = "Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei";
+const string ColonnesSociete =
+    "Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei, " +
+    "NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable";
 
 app.MapGet("/api/societes", async () =>
 {
@@ -115,11 +118,14 @@ app.MapPost("/api/societes", async (SocieteInput input) =>
         return Results.BadRequest("Le nom est requis.");
 
     var societe = new Societe(
-        Guid.NewGuid(), nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei);
+        Guid.NewGuid(), nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei,
+        input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable);
     await using var conn = new SqlConnection(ConnectionString());
     await conn.ExecuteAsync(
-        "INSERT INTO dbo.Societes (Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei) " +
-        "VALUES (@Id, @Nom, @ValeurNominale, @Pays, @SiegeSocial, @Siren, @Lei)",
+        "INSERT INTO dbo.Societes (Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei, " +
+        "NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable) " +
+        "VALUES (@Id, @Nom, @ValeurNominale, @Pays, @SiegeSocial, @Siren, @Lei, " +
+        "@NombreTotalActions, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable)",
         societe);
     return Results.Created($"/api/societes/{societe.Id}", societe);
 });
@@ -133,8 +139,14 @@ app.MapPut("/api/societes/{id:guid}", async (Guid id, SocieteUpdate input) =>
     await using var conn = new SqlConnection(ConnectionString());
     var lignes = await conn.ExecuteAsync(
         "UPDATE dbo.Societes SET Nom = @Nom, ValeurNominale = @ValeurNominale, " +
-        "Pays = @Pays, SiegeSocial = @SiegeSocial, Siren = @Siren, Lei = @Lei WHERE Id = @id",
-        new { id, Nom = nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei });
+        "Pays = @Pays, SiegeSocial = @SiegeSocial, Siren = @Siren, Lei = @Lei, " +
+        "NombreTotalActions = @NombreTotalActions, NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, " +
+        "NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable WHERE Id = @id",
+        new
+        {
+            id, Nom = nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei,
+            input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable,
+        });
     return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
 
@@ -146,7 +158,8 @@ app.MapDelete("/api/societes/{id:guid}", async (Guid id) =>
 });
 
 const string ColonnesTransaction =
-    "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, Capital, " +
+    "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, " +
+    "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, Capital, " +
     "DroitVoteTheorique, DroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue";
 
 app.MapGet("/api/transactions", async () =>
@@ -171,12 +184,8 @@ app.MapGet("/api/transactions", async () =>
         return ("La société vendeuse ne peut pas être à la fois suivie et hors groupe.", "", null, null);
     if (input.AcheteurId is not null && input.AcheteurId == input.CibleId)
         return ("La société acheteuse doit être différente de la société cible.", "", null, null);
-    if (input.Capital == 0 || input.Capital < -100 || input.Capital > 100)
-        return ("Le capital (%) doit être compris entre -100 et 100, sans être nul (négatif pour une vente).", "", null, null);
-    if (input.DroitVoteTheorique is < -100 or > 100)
-        return ("Le droit de vote théorique (%) doit être compris entre -100 et 100.", "", null, null);
-    if (input.DroitVoteExercable is < -100 or > 100)
-        return ("Le droit de vote exerçable (%) doit être compris entre -100 et 100.", "", null, null);
+    if (input.NombreActions is null or 0)
+        return ("Le nombre d'actions est requis, et ne peut pas être nul (négatif pour une vente).", "", null, null);
     if (input.PrixAction is < 0)
         return ("Le prix de l'action ne peut pas être négatif.", "", null, null);
     if (string.IsNullOrWhiteSpace(input.Date))
@@ -221,23 +230,26 @@ async Task<decimal?> CalculerPlusValue(
 // couple (actionnaire, cible) : + côté acheteur, - côté vendeur si lui
 // aussi est une société suivie (même règle que calculerParticipations
 // côté frontend). Avant d'accepter une création ou modification, on
-// recalcule ces totaux directs en y ajoutant la transaction candidate, et
-// on refuse toute opération qui ferait sortir la participation d'une
-// société — ou le total cumulé du groupe — de la plage [0, 100] %, ou le
-// nombre d'actions d'une société en dessous de 0.
+// recalcule ces totaux directs en y ajoutant la transaction candidate.
+// En dessous de 0, c'est toujours refusé (vendre plus qu'on ne détient),
+// que la société cible ait ou non un total de référence renseigné. Le
+// dépassement du total émis (NombreTotalX sur la société cible) n'est
+// contrôlé que si ce total est renseigné — sans lui, aucune borne connue.
 async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionInput input, Guid? idAExclure)
 {
+    var cible = await conn.QuerySingleOrDefaultAsync<Societe>(
+        $"SELECT {ColonnesSociete} FROM dbo.Societes WHERE Id = @cibleId", new { cibleId = input.CibleId });
+
     var lignes = (await conn.QueryAsync<LigneParticipation>(
-        "SELECT AcheteurId, VendeurId, Capital, DroitVoteTheorique, DroitVoteExercable, NombreActions " +
+        "SELECT AcheteurId, VendeurId, NombreActions, NombreDroitVoteTheorique, NombreDroitVoteExercable " +
         "FROM dbo.Transactions WHERE CibleId = @cibleId AND (@idAExclure IS NULL OR Id <> @idAExclure)",
         new { cibleId = input.CibleId, idAExclure })).ToList();
     lignes.Add(new LigneParticipation(
-        input.AcheteurId, input.VendeurId, input.Capital, input.DroitVoteTheorique, input.DroitVoteExercable, input.NombreActions));
+        input.AcheteurId, input.VendeurId, input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable));
 
-    var capitalParId = new Dictionary<Guid, decimal>();
+    var actionsParId = new Dictionary<Guid, decimal>();
     var dvTheoriqueParId = new Dictionary<Guid, decimal>();
     var dvExercableParId = new Dictionary<Guid, decimal>();
-    var nombreActionsParId = new Dictionary<Guid, decimal>();
 
     void Ajouter(Dictionary<Guid, decimal> dict, Guid id, decimal valeur)
     {
@@ -248,44 +260,172 @@ async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionIn
     {
         if (l.AcheteurId is Guid acheteurId)
         {
-            Ajouter(capitalParId, acheteurId, l.Capital);
-            Ajouter(dvTheoriqueParId, acheteurId, l.DroitVoteTheorique ?? 0);
-            Ajouter(dvExercableParId, acheteurId, l.DroitVoteExercable ?? 0);
-            Ajouter(nombreActionsParId, acheteurId, l.NombreActions ?? 0);
+            Ajouter(actionsParId, acheteurId, l.NombreActions ?? 0);
+            Ajouter(dvTheoriqueParId, acheteurId, l.NombreDroitVoteTheorique ?? 0);
+            Ajouter(dvExercableParId, acheteurId, l.NombreDroitVoteExercable ?? 0);
         }
         if (l.VendeurId is Guid vendeurId && l.VendeurId != l.AcheteurId)
         {
-            Ajouter(capitalParId, vendeurId, -l.Capital);
-            Ajouter(dvTheoriqueParId, vendeurId, -(l.DroitVoteTheorique ?? 0));
-            Ajouter(dvExercableParId, vendeurId, -(l.DroitVoteExercable ?? 0));
-            Ajouter(nombreActionsParId, vendeurId, -(l.NombreActions ?? 0));
+            Ajouter(actionsParId, vendeurId, -(l.NombreActions ?? 0));
+            Ajouter(dvTheoriqueParId, vendeurId, -(l.NombreDroitVoteTheorique ?? 0));
+            Ajouter(dvExercableParId, vendeurId, -(l.NombreDroitVoteExercable ?? 0));
         }
     }
 
-    foreach (var capital in capitalParId.Values)
-        if (capital < 0 || capital > 100)
-            return $"Cette opération ferait passer la part du capital détenue par une société dans la cible à {capital:0.##} %, hors de la plage 0 à 100 %.";
-    foreach (var dv in dvTheoriqueParId.Values)
-        if (dv < 0 || dv > 100)
-            return $"Cette opération ferait passer le droit de vote théorique détenu par une société dans la cible à {dv:0.##} %, hors de la plage 0 à 100 %.";
-    foreach (var dv in dvExercableParId.Values)
-        if (dv < 0 || dv > 100)
-            return $"Cette opération ferait passer le droit de vote exerçable détenu par une société dans la cible à {dv:0.##} %, hors de la plage 0 à 100 %.";
-    foreach (var n in nombreActionsParId.Values)
+    foreach (var n in actionsParId.Values)
         if (n < 0)
             return $"Cette opération ferait passer le nombre d'actions détenu par une société dans la cible à {n:0.##}, ce qui est négatif.";
+    foreach (var n in dvTheoriqueParId.Values)
+        if (n < 0)
+            return $"Cette opération ferait passer le nombre de droits de vote théorique détenu par une société dans la cible à {n:0.##}, ce qui est négatif.";
+    foreach (var n in dvExercableParId.Values)
+        if (n < 0)
+            return $"Cette opération ferait passer le nombre de droits de vote exerçable détenu par une société dans la cible à {n:0.##}, ce qui est négatif.";
 
-    var totalCapital = capitalParId.Values.Sum();
-    var totalDvTheorique = dvTheoriqueParId.Values.Sum();
-    var totalDvExercable = dvExercableParId.Values.Sum();
-    if (totalCapital > 100)
-        return $"Cette opération ferait dépasser 100 % du capital total détenu par le groupe dans la société cible (total {totalCapital:0.##} %).";
-    if (totalDvTheorique > 100)
-        return $"Cette opération ferait dépasser 100 % du droit de vote théorique total détenu par le groupe dans la société cible (total {totalDvTheorique:0.##} %).";
-    if (totalDvExercable > 100)
-        return $"Cette opération ferait dépasser 100 % du droit de vote exerçable total détenu par le groupe dans la société cible (total {totalDvExercable:0.##} %).";
+    if (cible is null)
+        return null;
+
+    if (cible.NombreTotalActions is decimal totalActions)
+    {
+        var somme = actionsParId.Values.Sum();
+        if (somme > totalActions)
+            return $"Cette opération ferait dépasser le nombre total d'actions émises par la société cible ({somme:0.##} pour un total de {totalActions:0.##}).";
+    }
+    if (cible.NombreTotalDroitVoteTheorique is decimal totalDvTheorique)
+    {
+        var somme = dvTheoriqueParId.Values.Sum();
+        if (somme > totalDvTheorique)
+            return $"Cette opération ferait dépasser le nombre total de droits de vote théorique émis par la société cible ({somme:0.##} pour un total de {totalDvTheorique:0.##}).";
+    }
+    if (cible.NombreTotalDroitVoteExercable is decimal totalDvExercable)
+    {
+        var somme = dvExercableParId.Values.Sum();
+        if (somme > totalDvExercable)
+            return $"Cette opération ferait dépasser le nombre total de droits de vote exerçable émis par la société cible ({somme:0.##} pour un total de {totalDvExercable:0.##}).";
+    }
 
     return null;
+}
+
+// Noms des trois tables de titres, alimentées automatiquement à partir des
+// transactions (jamais saisies à la main) : une par notion.
+string[] TablesTitres = ["Actions", "DroitsVoteTheorique", "DroitsVoteExercable"];
+
+// Retire jusqu'à `quantite` lignes existantes appartenant à ce détenteur
+// (les plus anciennes par date d'acquisition d'abord), pour cette société
+// émettrice et cette catégorie ; renvoie le prix d'origine moyen des lignes
+// retirées (null si aucune, ou si leurs PrixInitial sont tous NULL), pour
+// pouvoir le reporter sur les lignes créées en contrepartie côté acheteur.
+// Toujours un INSERT/DELETE ensembliste (jamais une boucle ligne à ligne)
+// pour rester praticable même avec des centaines de milliers de titres.
+async Task<decimal?> SupprimerTitres(
+    SqlConnection conn, IDbTransaction tx, string table, Guid societeEmettriceId, string? categorie,
+    Guid? detenteurId, string? detenteurNomExterne, decimal quantite)
+{
+    if (quantite <= 0)
+        return null;
+    return await conn.ExecuteScalarAsync<decimal?>(
+        "DECLARE @Supprimes TABLE (PrixInitial DECIMAL(18,4) NULL); " +
+        $"DELETE FROM dbo.{table} " +
+        "OUTPUT deleted.PrixInitial INTO @Supprimes " +
+        "WHERE Id IN (" +
+        $"  SELECT TOP (@quantite) Id FROM dbo.{table} " +
+        "  WHERE SocieteEmettriceId = @societeEmettriceId " +
+        "    AND ((@detenteurId IS NOT NULL AND SocieteDetentriceId = @detenteurId) OR (@detenteurId IS NULL AND DetenteurNomExterne = @detenteurNomExterne)) " +
+        "    AND ((@categorie IS NULL AND Categorie IS NULL) OR Categorie = @categorie) " +
+        "  ORDER BY DateAcquisition ASC, Id ASC" +
+        "); " +
+        "SELECT AVG(PrixInitial) FROM @Supprimes;",
+        new { quantite = (int)quantite, societeEmettriceId, detenteurId, detenteurNomExterne, categorie },
+        tx);
+}
+
+// Crée `quantite` nouvelles lignes identiques pour ce détenteur, en un seul
+// INSERT ensembliste (table de nombres générée par produit cartésien de
+// sys.all_objects, sans dépendre d'une table de tally dédiée ni d'une limite
+// de récursion).
+async Task CreerTitres(
+    SqlConnection conn, IDbTransaction tx, string table, Guid societeEmettriceId, string? categorie,
+    Guid? detenteurId, string? detenteurNomExterne, decimal quantite,
+    decimal? prixAcquisition, decimal? prixInitial, string date, Guid transactionId)
+{
+    if (quantite <= 0)
+        return;
+    await conn.ExecuteAsync(
+        $"INSERT INTO dbo.{table} (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId) " +
+        "SELECT NEWID(), @societeEmettriceId, @categorie, @detenteurId, @detenteurNomExterne, @prixInitial, @prixAcquisition, @date, @transactionId " +
+        "FROM (SELECT TOP (@quantite) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres",
+        new { quantite = (int)quantite, societeEmettriceId, categorie, detenteurId, detenteurNomExterne, prixInitial, prixAcquisition, date, transactionId },
+        tx);
+}
+
+// Synchronise une seule table de titres avec la quantité signée d'une
+// transaction (positif = l'acheteur gagne, négatif = l'acheteur perd ;
+// symétrique côté vendeur s'il est renseigné — même règle que
+// ValiderBornesParticipation/calculerParticipations). Le camp perdant est
+// toujours traité en premier, pour pouvoir reporter le prix d'origine de ses
+// lignes retirées sur les nouvelles lignes du camp gagnant.
+async Task SynchroniserTitresMetrique(
+    SqlConnection conn, IDbTransaction tx, string table, Guid cibleId, string? categorie,
+    Guid? acheteurId, string? acheteurNomExterne, decimal? quantiteSignee,
+    Guid? vendeurId, string? vendeurNomExterne,
+    decimal? prixAction, string date, Guid transactionId)
+{
+    if (quantiteSignee is not decimal variation || variation == 0)
+        return;
+
+    var vendeurRenseigne = vendeurId is not null || vendeurNomExterne is not null;
+    if (vendeurRenseigne && vendeurId is not null && vendeurId == acheteurId)
+        return; // acheteur == vendeur : rien à faire (cas déjà écarté par ValiderTransaction, par précaution).
+
+    if (variation < 0)
+    {
+        var prixInitialReporte = await SupprimerTitres(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, -variation);
+        if (vendeurRenseigne)
+            await CreerTitres(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, -variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+    }
+    else
+    {
+        decimal? prixInitialReporte = null;
+        if (vendeurRenseigne)
+            prixInitialReporte = await SupprimerTitres(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, variation);
+        await CreerTitres(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+    }
+}
+
+// Point d'entrée : applique une transaction aux trois tables de titres, une
+// fois par métrique.
+//
+// Limite connue : modifier ou supprimer une transaction retire les lignes
+// qu'elle avait créées (via TransactionOrigineId, voir RetirerTitresDeTransaction),
+// mais ne restitue pas celles qu'elle avait consommées chez le camp perdant
+// — leur identité précise n'est pas conservée au-delà du prix moyen reporté.
+// Un correctif manuel dans l'onglet Titres peut être nécessaire dans ce cas,
+// normalement rare (modification peu après la saisie, ou correction d'une
+// erreur de saisie).
+async Task SynchroniserTitres(
+    SqlConnection conn, IDbTransaction tx, Guid cibleId, string? categorie,
+    Guid? acheteurId, string? acheteurNomExterne, Guid? vendeurId, string? vendeurNomExterne,
+    decimal? nombreActions, decimal? nombreDroitVoteTheorique, decimal? nombreDroitVoteExercable,
+    decimal? prixAction, string date, Guid transactionId)
+{
+    await SynchroniserTitresMetrique(
+        conn, tx, "Actions", cibleId, categorie, acheteurId, acheteurNomExterne, nombreActions,
+        vendeurId, vendeurNomExterne, prixAction, date, transactionId);
+    await SynchroniserTitresMetrique(
+        conn, tx, "DroitsVoteTheorique", cibleId, categorie, acheteurId, acheteurNomExterne, nombreDroitVoteTheorique,
+        vendeurId, vendeurNomExterne, prixAction, date, transactionId);
+    await SynchroniserTitresMetrique(
+        conn, tx, "DroitsVoteExercable", cibleId, categorie, acheteurId, acheteurNomExterne, nombreDroitVoteExercable,
+        vendeurId, vendeurNomExterne, prixAction, date, transactionId);
+}
+
+// Retire, dans les trois tables, toutes les lignes créées par cette
+// transaction (voir la limite documentée sur SynchroniserTitres).
+async Task RetirerTitresDeTransaction(SqlConnection conn, IDbTransaction tx, Guid transactionId)
+{
+    foreach (var table in TablesTitres)
+        await conn.ExecuteAsync($"DELETE FROM dbo.{table} WHERE TransactionOrigineId = @transactionId", new { transactionId }, tx);
 }
 
 app.MapPost("/api/transactions", async (TransactionInput input) =>
@@ -302,17 +442,39 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
 
     var plusValue = await CalculerPlusValue(conn, input.CibleId, input.NombreActions, input.PrixAction, null);
 
-    var transaction = new Transaction(
-        Guid.NewGuid(), input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
-        input.Capital, input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, vendeurNomExterne,
-        input.PrixAction, qualification, plusValue);
-    await conn.ExecuteAsync(
-        "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, Capital, " +
-        "DroitVoteTheorique, DroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue) " +
-        "VALUES (@Id, @AcheteurId, @AcheteurNomExterne, @CibleId, @Date, @NombreActions, @Capital, @DroitVoteTheorique, " +
-        "@DroitVoteExercable, @VendeurId, @VendeurNomExterne, @PrixAction, @Qualification, @PlusValue)",
-        transaction);
-    return Results.Created($"/api/transactions/{transaction.Id}", transaction);
+    var transactionId = Guid.NewGuid();
+    await conn.OpenAsync();
+    await using var sqlTx = await conn.BeginTransactionAsync();
+    try
+    {
+        await conn.ExecuteAsync(
+            "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, " +
+            "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue) " +
+            "VALUES (@Id, @AcheteurId, @AcheteurNomExterne, @CibleId, @Date, @NombreActions, " +
+            "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @Categorie, @VendeurId, @VendeurNomExterne, @PrixAction, @Qualification, @PlusValue)",
+            new
+            {
+                Id = transactionId, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
+                input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
+                vendeurNomExterne, input.PrixAction, Qualification = qualification, PlusValue = plusValue,
+            },
+            sqlTx);
+
+        await SynchroniserTitres(
+            conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
+            input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, transactionId);
+
+        await sqlTx.CommitAsync();
+    }
+    catch
+    {
+        await sqlTx.RollbackAsync();
+        throw;
+    }
+
+    var transactionCreee = await conn.QuerySingleAsync<Transaction>(
+        $"SELECT {ColonnesTransaction} FROM dbo.Transactions WHERE Id = @transactionId", new { transactionId });
+    return Results.Created($"/api/transactions/{transactionCreee.Id}", transactionCreee);
 });
 
 app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input) =>
@@ -329,33 +491,92 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
 
     var plusValue = await CalculerPlusValue(conn, input.CibleId, input.NombreActions, input.PrixAction, id);
 
-    var lignes = await conn.ExecuteAsync(
-        "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, AcheteurNomExterne = @AcheteurNomExterne, " +
-        "CibleId = @CibleId, [Date] = @Date, NombreActions = @NombreActions, Capital = @Capital, " +
-        "DroitVoteTheorique = @DroitVoteTheorique, DroitVoteExercable = @DroitVoteExercable, VendeurId = @VendeurId, " +
-        "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Qualification = @Qualification, " +
-        "PlusValue = @PlusValue WHERE Id = @id",
-        new
+    await conn.OpenAsync();
+    await using var sqlTx = await conn.BeginTransactionAsync();
+    int lignes;
+    try
+    {
+        lignes = await conn.ExecuteAsync(
+            "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, AcheteurNomExterne = @AcheteurNomExterne, " +
+            "CibleId = @CibleId, [Date] = @Date, NombreActions = @NombreActions, " +
+            "NombreDroitVoteTheorique = @NombreDroitVoteTheorique, NombreDroitVoteExercable = @NombreDroitVoteExercable, " +
+            "Categorie = @Categorie, VendeurId = @VendeurId, " +
+            "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Qualification = @Qualification, " +
+            "PlusValue = @PlusValue WHERE Id = @id",
+            new
+            {
+                id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
+                input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
+                vendeurNomExterne, input.PrixAction, Qualification = qualification, PlusValue = plusValue,
+            },
+            sqlTx);
+
+        if (lignes > 0)
         {
-            id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions, input.Capital,
-            input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, vendeurNomExterne, input.PrixAction,
-            Qualification = qualification, PlusValue = plusValue,
-        });
+            await RetirerTitresDeTransaction(conn, sqlTx, id);
+            await SynchroniserTitres(
+                conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
+                input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, id);
+        }
+
+        await sqlTx.CommitAsync();
+    }
+    catch
+    {
+        await sqlTx.RollbackAsync();
+        throw;
+    }
+
     if (lignes == 0)
         return Results.NotFound();
 
-    var transaction = new Transaction(
-        id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
-        input.Capital, input.DroitVoteTheorique, input.DroitVoteExercable, input.VendeurId, vendeurNomExterne,
-        input.PrixAction, qualification, plusValue);
-    return Results.Ok(transaction);
+    var transactionModifiee = await conn.QuerySingleAsync<Transaction>(
+        $"SELECT {ColonnesTransaction} FROM dbo.Transactions WHERE Id = @id", new { id });
+    return Results.Ok(transactionModifiee);
 });
 
 app.MapDelete("/api/transactions/{id:guid}", async (Guid id) =>
 {
     await using var conn = new SqlConnection(ConnectionString());
-    await conn.ExecuteAsync("DELETE FROM dbo.Transactions WHERE Id = @id", new { id });
+    await conn.OpenAsync();
+    await using var sqlTx = await conn.BeginTransactionAsync();
+    try
+    {
+        await RetirerTitresDeTransaction(conn, sqlTx, id);
+        await conn.ExecuteAsync("DELETE FROM dbo.Transactions WHERE Id = @id", new { id }, sqlTx);
+        await sqlTx.CommitAsync();
+    }
+    catch
+    {
+        await sqlTx.RollbackAsync();
+        throw;
+    }
     return Results.NoContent();
+});
+
+const string ColonnesTitre =
+    "Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, " +
+    "CONVERT(varchar(10), DateAcquisition, 23) AS DateAcquisition, TransactionOrigineId";
+
+app.MapGet("/api/titres/actions", async () =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.Actions ORDER BY DateAcquisition DESC");
+    return Results.Ok(titres);
+});
+
+app.MapGet("/api/titres/droits-vote-theorique", async () =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.DroitsVoteTheorique ORDER BY DateAcquisition DESC");
+    return Results.Ok(titres);
+});
+
+app.MapGet("/api/titres/droits-vote-exercable", async () =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.DroitsVoteExercable ORDER BY DateAcquisition DESC");
+    return Results.Ok(titres);
 });
 
 // Génère un mot de passe temporaire de 10 caractères, sans les caractères
@@ -471,7 +692,8 @@ app.MapDelete("/api/utilisateurs/{id:guid}", async (HttpContext ctx, Guid id) =>
 app.Run();
 
 record Societe(
-    Guid Id, string Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
+    Guid Id, string Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei,
+    decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
 
 record SocieteInput(
     string? Nom,
@@ -479,7 +701,10 @@ record SocieteInput(
     string? Pays = null,
     string? SiegeSocial = null,
     string? Siren = null,
-    string? Lei = null);
+    string? Lei = null,
+    decimal? NombreTotalActions = null,
+    decimal? NombreTotalDroitVoteTheorique = null,
+    decimal? NombreTotalDroitVoteExercable = null);
 
 record SocieteUpdate(
     string? Nom,
@@ -487,7 +712,10 @@ record SocieteUpdate(
     string? Pays,
     string? SiegeSocial,
     string? Siren,
-    string? Lei);
+    string? Lei,
+    decimal? NombreTotalActions,
+    decimal? NombreTotalDroitVoteTheorique,
+    decimal? NombreTotalDroitVoteExercable);
 
 record Transaction(
     Guid Id,
@@ -496,7 +724,15 @@ record Transaction(
     Guid CibleId,
     string Date,
     decimal? NombreActions,
-    decimal Capital,
+    decimal? NombreDroitVoteTheorique,
+    decimal? NombreDroitVoteExercable,
+    string? Categorie,
+    // Pourcentages de repli, hérités des transactions saisies avant
+    // l'introduction des quantités ci-dessus : jamais écrits par l'API pour
+    // une transaction créée ou modifiée désormais (toujours NULL dans ce
+    // cas), uniquement lus pour l'affichage d'anciennes lignes qui n'ont pas
+    // de quantité correspondante.
+    decimal? Capital,
     decimal? DroitVoteTheorique,
     decimal? DroitVoteExercable,
     Guid? VendeurId,
@@ -511,9 +747,9 @@ record TransactionInput(
     Guid CibleId,
     string Date,
     decimal? NombreActions,
-    decimal Capital,
-    decimal? DroitVoteTheorique,
-    decimal? DroitVoteExercable,
+    decimal? NombreDroitVoteTheorique,
+    decimal? NombreDroitVoteExercable,
+    string? Categorie,
     Guid? VendeurId,
     string? VendeurNomExterne,
     decimal? PrixAction,
@@ -522,7 +758,19 @@ record TransactionInput(
 // Projection minimale d'une transaction pour ValiderBornesParticipation :
 // seules les colonnes qui contribuent aux totaux par actionnaire.
 record LigneParticipation(
-    Guid? AcheteurId, Guid? VendeurId, decimal Capital, decimal? DroitVoteTheorique, decimal? DroitVoteExercable, decimal? NombreActions);
+    Guid? AcheteurId, Guid? VendeurId, decimal? NombreActions, decimal? NombreDroitVoteTheorique, decimal? NombreDroitVoteExercable);
+
+// Projection d'une ligne des tables Actions/DroitsVoteTheorique/DroitsVoteExercable.
+record Titre(
+    Guid Id,
+    Guid SocieteEmettriceId,
+    string? Categorie,
+    Guid? SocieteDetentriceId,
+    string? DetenteurNomExterne,
+    decimal? PrixInitial,
+    decimal? PrixAcquisition,
+    string? DateAcquisition,
+    Guid? TransactionOrigineId);
 
 record SessionInfo(string Email, string Role);
 

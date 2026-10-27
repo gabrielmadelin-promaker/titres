@@ -44,6 +44,21 @@ export function ImportSocietes({ societes, onImport }: Props) {
           siegeSocial: texteColonne(ligne, "siège social", "siege social") || null,
           siren: texteColonne(ligne, "siren") || null,
           lei: texteColonne(ligne, "lei") || null,
+          nombreTotalActions: nombreColonne(ligne, "nombre total d'actions", "total actions", "nombre total actions"),
+          nombreTotalDroitVoteTheorique: nombreColonne(
+            ligne,
+            "nombre total de droits de vote théorique",
+            "nombre total de droits de vote theorique",
+            "total dv théorique",
+            "total dv theorique",
+          ),
+          nombreTotalDroitVoteExercable: nombreColonne(
+            ligne,
+            "nombre total de droits de vote exerçable",
+            "nombre total de droits de vote exercable",
+            "total dv exerçable",
+            "total dv exercable",
+          ),
         });
       });
 
@@ -69,8 +84,9 @@ export function ImportSocietes({ societes, onImport }: Props) {
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
       <p className="import-hint">
-        Colonnes : « Nom » (requise), « Valeur nominale », « Pays », « Siège social », « SIREN », « LEI » (toutes
-        facultatives).
+        Colonnes : « Nom » (requise), « Valeur nominale », « Pays », « Siège social », « SIREN », « LEI », « Nombre
+        total d'actions », « Nombre total de droits de vote théorique », « Nombre total de droits de vote exerçable »
+        (toutes facultatives).
       </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (
