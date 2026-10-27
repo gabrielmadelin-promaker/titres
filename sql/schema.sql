@@ -84,20 +84,24 @@ CREATE INDEX IX_Transactions_AcheteurId ON dbo.Transactions (AcheteurId);
 CREATE INDEX IX_Transactions_CibleId ON dbo.Transactions (CibleId);
 GO
 
--- Suivi du cycle de vie des titres : une ligne par titre (pas par lot),
--- alimentée automatiquement par l'API à chaque création/modification/
--- suppression de transaction (TransactionOrigineId trace la transaction à
--- l'origine de la ligne, pour pouvoir l'annuler) — jamais saisie à la main.
--- Même structure, une table par notion ; pas de clé étrangère vers
--- Societes/Transactions, même choix que pour Transactions plus haut (une
--- société ou une transaction supprimée ne doit pas bloquer/casser en
--- cascade).
+-- Suivi du cycle de vie des titres : une ligne par LOT (regroupement de
+-- titres acquis ensemble — même société émettrice, catégorie, détenteur,
+-- prix et date d'acquisition — avec un nombre Quantite), pas par titre
+-- unitaire (un lot de plusieurs millions de titres tient sur une seule
+-- ligne). Alimentée automatiquement par l'API à chaque création/
+-- modification/suppression de transaction (TransactionOrigineId trace la
+-- transaction à l'origine de la ligne, pour pouvoir l'annuler) — jamais
+-- saisie à la main. Même structure, une table par notion ; pas de clé
+-- étrangère vers Societes/Transactions, même choix que pour Transactions
+-- plus haut (une société ou une transaction supprimée ne doit pas
+-- bloquer/casser en cascade).
 CREATE TABLE dbo.Actions (
     Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Actions PRIMARY KEY DEFAULT NEWID(),
     SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
     Categorie            NVARCHAR(10)     NULL,
     SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne  NVARCHAR(300)    NULL,
+    Quantite             DECIMAL(18,4)    NOT NULL,
     PrixInitial          DECIMAL(18,4)    NULL,
     PrixAcquisition      DECIMAL(18,4)    NULL,
     DateAcquisition      DATE             NULL,
@@ -119,6 +123,7 @@ CREATE TABLE dbo.DroitsVoteTheorique (
     Categorie            NVARCHAR(10)     NULL,
     SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne  NVARCHAR(300)    NULL,
+    Quantite             DECIMAL(18,4)    NOT NULL,
     PrixInitial          DECIMAL(18,4)    NULL,
     PrixAcquisition      DECIMAL(18,4)    NULL,
     DateAcquisition      DATE             NULL,
@@ -140,6 +145,7 @@ CREATE TABLE dbo.DroitsVoteExercable (
     Categorie            NVARCHAR(10)     NULL,
     SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne  NVARCHAR(300)    NULL,
+    Quantite             DECIMAL(18,4)    NOT NULL,
     PrixInitial          DECIMAL(18,4)    NULL,
     PrixAcquisition      DECIMAL(18,4)    NULL,
     DateAcquisition      DATE             NULL,

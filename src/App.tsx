@@ -361,8 +361,8 @@ function App() {
             <section className="panel">
               <h2>Titres</h2>
               <p className="subtitle-panel">
-                Cycle de vie unitaire des titres — qui détient précisément quel titre, de quelle catégorie, à quel
-                prix il a été acquis. Généré automatiquement à partir des transactions : lecture seule.
+                Lots de titres — qui détient combien, de quelle catégorie, à quel prix. Généré automatiquement à
+                partir des transactions : lecture seule.
               </p>
               <TitresPanel
                 societes={societes}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Societe, Titre } from "../types";
-import { formatDate, formatMontant } from "../lib/format";
+import { formatDate, formatDecimal, formatMontant } from "../lib/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
 
@@ -19,15 +19,14 @@ const NOTIONS: { id: Notion; libelle: string }[] = [
   { id: "dvExercable", libelle: "Droits de vote exerçable" },
 ];
 
-type Colonne = "emettrice" | "categorie" | "detenteur" | "prixInitial" | "prixAcquisition" | "dateAcquisition";
+type Colonne = "emettrice" | "categorie" | "detenteur" | "quantite" | "prixInitial" | "prixAcquisition" | "dateAcquisition";
 
 /**
- * Consultation en lecture seule du cycle de vie unitaire des titres (qui
- * détient précisément quel titre, à quel prix il a été acquis) — ces trois
- * tables sont alimentées automatiquement par l'API à chaque
- * création/modification/suppression de transaction, jamais saisies à la
- * main : pas de formulaire d'ajout ici, uniquement une consultation
- * filtrable et exportable.
+ * Consultation en lecture seule des lots de titres (qui détient combien,
+ * de quelle catégorie, à quel prix) — ces trois tables sont alimentées
+ * automatiquement par l'API à chaque création/modification/suppression de
+ * transaction, jamais saisies à la main : pas de formulaire d'ajout ici,
+ * uniquement une consultation filtrable et exportable.
  */
 export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVoteExercable }: Props) {
   const [notion, setNotion] = useState<Notion>("actions");
@@ -71,6 +70,8 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
           return t.categorie ?? "";
         case "detenteur":
           return detenteurTexte(t);
+        case "quantite":
+          return t.quantite;
         case "prixInitial":
           return t.prixInitial ?? -Infinity;
         case "prixAcquisition":
@@ -91,6 +92,7 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
         "Société émettrice": nomDe(t.societeEmettriceId) ?? "(supprimée)",
         Catégorie: t.categorie ?? "",
         Détenteur: detenteurTexte(t),
+        Quantité: t.quantite,
         "Prix initial (€)": t.prixInitial ?? "",
         "Prix d'acquisition (€)": t.prixAcquisition ?? "",
         "Date d'acquisition": t.dateAcquisition ?? "",
@@ -168,6 +170,9 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "detenteur"))}>
                   Détenteur{flecheTri(tri, "detenteur")}
                 </th>
+                <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "quantite"))}>
+                  Quantité{flecheTri(tri, "quantite")}
+                </th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "prixInitial"))}>
                   Prix initial{flecheTri(tri, "prixInitial")}
                 </th>
@@ -193,6 +198,7 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
                       </>
                     )}
                   </td>
+                  <td className="num">{formatDecimal(t.quantite)}</td>
                   <td className="num">{t.prixInitial === null ? "—" : formatMontant(t.prixInitial)}</td>
                   <td className="num">{t.prixAcquisition === null ? "—" : formatMontant(t.prixAcquisition)}</td>
                   <td>{t.dateAcquisition ? formatDate(t.dateAcquisition) : "—"}</td>

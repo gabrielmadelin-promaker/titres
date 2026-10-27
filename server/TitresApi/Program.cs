@@ -311,40 +311,71 @@ async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionIn
 // transactions (jamais saisies à la main) : une par notion.
 string[] TablesTitres = ["Actions", "DroitsVoteTheorique", "DroitsVoteExercable"];
 
-// Retire jusqu'à `quantite` lignes existantes appartenant à ce détenteur
-// (les plus anciennes par date d'acquisition d'abord), pour cette société
-// émettrice et cette catégorie ; renvoie le prix d'origine moyen des lignes
-// retirées (null si aucune, ou si leurs PrixInitial sont tous NULL), pour
-// pouvoir le reporter sur les lignes créées en contrepartie côté acheteur.
-// Toujours un INSERT/DELETE ensembliste (jamais une boucle ligne à ligne)
-// pour rester praticable même avec des centaines de milliers de titres.
-async Task<decimal?> SupprimerTitres(
+// Consomme jusqu'à `quantite` titres appartenant à ce détenteur, pour cette
+// société émettrice et cette catégorie, en épuisant les lots existants du
+// plus ancien au plus récent (FIFO par date d'acquisition) : un lot dont la
+// quantité est entièrement consommée est supprimé, un lot partiellement
+// consommé voit sa Quantite réduite d'autant (jamais supprimé ni recréé,
+// pour ne pas perdre son PrixInitial d'origine sur la portion restante).
+// Renvoie le prix d'origine moyen, pondéré par quantité, des titres
+// consommés (null si aucun titre consommé, ou si leurs PrixInitial sont
+// tous NULL), pour pouvoir le reporter sur le lot créé en contrepartie côté
+// acheteur. Le nombre de lots touchés est borné par le nombre de lots
+// existants pour ce détenteur (donc par le nombre de transactions
+// historiques), jamais par la quantité elle-même — contrairement à l'ancien
+// suivi unitaire, une quantité très élevée (même des milliards) ne
+// nécessite jamais plus d'une poignée de lignes modifiées.
+async Task<decimal?> ConsommerLots(
     SqlConnection conn, IDbTransaction tx, string table, Guid societeEmettriceId, string? categorie,
     Guid? detenteurId, string? detenteurNomExterne, decimal quantite)
 {
     if (quantite <= 0)
         return null;
-    return await conn.ExecuteScalarAsync<decimal?>(
-        "DECLARE @Supprimes TABLE (PrixInitial DECIMAL(18,4) NULL); " +
-        $"DELETE FROM dbo.{table} " +
-        "OUTPUT deleted.PrixInitial INTO @Supprimes " +
-        "WHERE Id IN (" +
-        $"  SELECT TOP (@quantite) Id FROM dbo.{table} " +
-        "  WHERE SocieteEmettriceId = @societeEmettriceId " +
-        "    AND ((@detenteurId IS NOT NULL AND SocieteDetentriceId = @detenteurId) OR (@detenteurId IS NULL AND DetenteurNomExterne = @detenteurNomExterne)) " +
-        "    AND ((@categorie IS NULL AND Categorie IS NULL) OR Categorie = @categorie) " +
-        "  ORDER BY DateAcquisition ASC, Id ASC" +
-        "); " +
-        "SELECT AVG(PrixInitial) FROM @Supprimes;",
-        new { quantite = (int)quantite, societeEmettriceId, detenteurId, detenteurNomExterne, categorie },
-        tx);
+
+    var lots = (await conn.QueryAsync<Lot>(
+        $"SELECT Id, Quantite, PrixInitial FROM dbo.{table} " +
+        "WHERE SocieteEmettriceId = @societeEmettriceId " +
+        "  AND ((@detenteurId IS NOT NULL AND SocieteDetentriceId = @detenteurId) OR (@detenteurId IS NULL AND DetenteurNomExterne = @detenteurNomExterne)) " +
+        "  AND ((@categorie IS NULL AND Categorie IS NULL) OR Categorie = @categorie) " +
+        "ORDER BY DateAcquisition ASC, Id ASC",
+        new { societeEmettriceId, detenteurId, detenteurNomExterne, categorie },
+        tx)).ToList();
+
+    var restant = quantite;
+    decimal sommePrixPondere = 0;
+    decimal sommeQuantiteConsommee = 0;
+
+    foreach (var lot in lots)
+    {
+        if (restant <= 0)
+            break;
+        var consomme = Math.Min(lot.Quantite, restant);
+
+        if (lot.PrixInitial is decimal prix)
+        {
+            sommePrixPondere += prix * consomme;
+            sommeQuantiteConsommee += consomme;
+        }
+
+        if (consomme >= lot.Quantite)
+            await conn.ExecuteAsync($"DELETE FROM dbo.{table} WHERE Id = @id", new { id = lot.Id }, tx);
+        else
+            await conn.ExecuteAsync($"UPDATE dbo.{table} SET Quantite = Quantite - @consomme WHERE Id = @id", new { consomme, id = lot.Id }, tx);
+
+        restant -= consomme;
+    }
+
+    return sommeQuantiteConsommee > 0 ? sommePrixPondere / sommeQuantiteConsommee : null;
 }
 
-// Crée `quantite` nouvelles lignes identiques pour ce détenteur, en un seul
-// INSERT ensembliste (table de nombres générée par produit cartésien de
-// sys.all_objects, sans dépendre d'une table de tally dédiée ni d'une limite
-// de récursion).
-async Task CreerTitres(
+// Crée un nouveau lot de `quantite` titres pour ce détenteur — toujours une
+// seule ligne, quelle que soit la quantité (contrairement à l'ancien suivi
+// unitaire). Jamais fusionné avec un lot existant même identique : chaque
+// lot reste associé à la transaction qui l'a créé (TransactionOrigineId),
+// pour pouvoir le retirer précisément si cette transaction est modifiée ou
+// supprimée (voir RetirerTitresDeTransaction) — fusionner perdrait cette
+// traçabilité.
+async Task CreerLot(
     SqlConnection conn, IDbTransaction tx, string table, Guid societeEmettriceId, string? categorie,
     Guid? detenteurId, string? detenteurNomExterne, decimal quantite,
     decimal? prixAcquisition, decimal? prixInitial, string date, Guid transactionId)
@@ -352,10 +383,9 @@ async Task CreerTitres(
     if (quantite <= 0)
         return;
     await conn.ExecuteAsync(
-        $"INSERT INTO dbo.{table} (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId) " +
-        "SELECT NEWID(), @societeEmettriceId, @categorie, @detenteurId, @detenteurNomExterne, @prixInitial, @prixAcquisition, @date, @transactionId " +
-        "FROM (SELECT TOP (@quantite) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres",
-        new { quantite = (int)quantite, societeEmettriceId, categorie, detenteurId, detenteurNomExterne, prixInitial, prixAcquisition, date, transactionId },
+        $"INSERT INTO dbo.{table} (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId) " +
+        "VALUES (NEWID(), @societeEmettriceId, @categorie, @detenteurId, @detenteurNomExterne, @quantite, @prixInitial, @prixAcquisition, @date, @transactionId)",
+        new { societeEmettriceId, categorie, detenteurId, detenteurNomExterne, quantite, prixInitial, prixAcquisition, date, transactionId },
         tx);
 }
 
@@ -380,16 +410,16 @@ async Task SynchroniserTitresMetrique(
 
     if (variation < 0)
     {
-        var prixInitialReporte = await SupprimerTitres(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, -variation);
+        var prixInitialReporte = await ConsommerLots(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, -variation);
         if (vendeurRenseigne)
-            await CreerTitres(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, -variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+            await CreerLot(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, -variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
     }
     else
     {
         decimal? prixInitialReporte = null;
         if (vendeurRenseigne)
-            prixInitialReporte = await SupprimerTitres(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, variation);
-        await CreerTitres(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+            prixInitialReporte = await ConsommerLots(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, variation);
+        await CreerLot(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
     }
 }
 
@@ -555,7 +585,7 @@ app.MapDelete("/api/transactions/{id:guid}", async (Guid id) =>
 });
 
 const string ColonnesTitre =
-    "Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, " +
+    "Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, " +
     "CONVERT(varchar(10), DateAcquisition, 23) AS DateAcquisition, TransactionOrigineId";
 
 app.MapGet("/api/titres/actions", async () =>
@@ -760,13 +790,17 @@ record TransactionInput(
 record LigneParticipation(
     Guid? AcheteurId, Guid? VendeurId, decimal? NombreActions, decimal? NombreDroitVoteTheorique, decimal? NombreDroitVoteExercable);
 
-// Projection d'une ligne des tables Actions/DroitsVoteTheorique/DroitsVoteExercable.
+// Projection d'un lot existant, pour la consommation FIFO dans ConsommerLots.
+record Lot(Guid Id, decimal Quantite, decimal? PrixInitial);
+
+// Projection d'une ligne (un lot) des tables Actions/DroitsVoteTheorique/DroitsVoteExercable.
 record Titre(
     Guid Id,
     Guid SocieteEmettriceId,
     string? Categorie,
     Guid? SocieteDetentriceId,
     string? DetenteurNomExterne,
+    decimal Quantite,
     decimal? PrixInitial,
     decimal? PrixAcquisition,
     string? DateAcquisition,

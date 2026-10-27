@@ -1,36 +1,31 @@
 -- Script d'initialisation de la base de titres (dbo.Actions,
 -- dbo.DroitsVoteTheorique, dbo.DroitsVoteExercable) à partir de
--- l'historique des transactions déjà en base.
+-- l'historique des transactions déjà en base — version PAR LOT (une ligne
+-- par lot acquis ensemble, avec un nombre Quantite), à exécuter après
+-- 2026-10-27-titres-par-lot.sql.
 --
--- Principe : pour chaque transaction, dans l'ordre chronologique, génère
--- une ligne par titre UNITAIRE pour chacune des 3 notions — une
--- transaction de 1000 actions de catégorie A achetées par une société à
--- une autre crée 1000 lignes dans dbo.Actions (SocieteEmettriceId =
--- société cible, Categorie = 'A', SocieteDetentriceId = l'acheteur). Même
--- logique que la synchronisation automatique de l'API à chaque
--- création/modification/suppression de transaction (fonction
--- SynchroniserTitres dans server/TitresApi/Program.cs), rejouée ici une
--- transaction à la fois dans l'ordre chronologique : le camp qui perd des
--- titres (vente, ou le vendeur d'une cession interne au groupe) est
--- toujours traité avant le camp qui en gagne, pour pouvoir reporter le
--- prix d'origine des lignes retirées sur les lignes créées en
--- contrepartie (PrixInitial, distinct de PrixAcquisition qui est toujours
--- le prix de CETTE transaction).
+-- Principe : pour chaque transaction, dans l'ordre chronologique, le camp
+-- qui perd des titres (vente, ou le vendeur d'une cession interne au
+-- groupe) consomme ses lots existants du plus ancien au plus récent
+-- (FIFO par date d'acquisition) — un lot entièrement consommé est
+-- supprimé, un lot partiellement consommé voit juste sa Quantite réduite
+-- — puis le camp qui gagne reçoit UN SEUL nouveau lot (Quantite = la
+-- quantité de la transaction), avec le prix d'origine moyen (pondéré) des
+-- lots consommés reporté dessus s'il s'agit d'une cession interne. Même
+-- logique que la synchronisation automatique de l'API (fonction
+-- SynchroniserTitresMetrique/ConsommerLots/CreerLot dans
+-- server/TitresApi/Program.cs), rejouée ici une transaction à la fois.
 --
--- Volontairement écrit sans SQL dynamique ni procédure stockée (une
--- première version utilisant sp_executesql + paramètre OUTPUT a échoué à
--- l'exécution) : la même logique est simplement répétée une fois par
--- table (Actions, DroitsVoteTheorique, DroitsVoteExercable), avec des
--- instructions SQL directes sur des noms de table/colonne écrits en dur.
+-- Par lot plutôt que par titre unitaire : une transaction (même avec une
+-- quantité très élevée, y compris une valeur aberrante par erreur de
+-- saisie) ne crée jamais plus d'UNE ligne par table — le nombre de lignes
+-- est borné par le nombre de transactions, jamais par le nombre de
+-- titres. Contrairement à la version précédente de ce script (une ligne
+-- par titre), pas besoin de garde-fou sur la quantité : même plusieurs
+-- milliards de titres sur une seule transaction restent une seule ligne.
 --
--- Garde-fou (@QteMax ci-dessous) : une transaction dont la quantité
--- (nombre d'actions / de droits de vote) dépasse ce seuil est IGNORÉE
--- pour la notion concernée (message affiché, rien d'inséré) plutôt que de
--- tenter de générer autant de lignes une à une — sans ce garde-fou, une
--- quantité aberrante (ex. une erreur de saisie à plusieurs milliards) fait
--- tenter au script de générer des milliards de lignes, ce qui sature le
--- disque et ne se termine jamais en pratique. Ajustez @QteMax si vos
--- transactions portent légitimement sur plus d'un million de titres.
+-- Écrit sans SQL dynamique (une procédure stockée temporaire par table,
+-- avec des paramètres typés classiques — pas de sp_executesql).
 --
 -- Script destructif et idempotent à la fois : il commence par VIDER les 3
 -- tables, puis les reconstruit entièrement à partir de zéro — peut être
@@ -39,13 +34,13 @@
 -- Sans aucun effet sur la table Transactions elle-même.
 --
 -- À exécuter après 2026-10-27-titres-et-quantites.sql,
--- 2026-10-27-backfill-categorie-droits-vote.sql et
--- 2026-10-27-backfill-totaux-societes.sql.
+-- 2026-10-27-backfill-categorie-droits-vote.sql,
+-- 2026-10-27-backfill-totaux-societes.sql et 2026-10-27-titres-par-lot.sql.
 --
 -- Limite héritée de la synchronisation automatique de l'API : si une
 -- transaction est ensuite modifiée ou supprimée depuis l'application, elle
--- ne peut retirer que les lignes qu'elle avait elle-même créées (via
--- TransactionOrigineId), pas restituer celles qu'elle avait consommées
+-- ne peut retirer que le lot qu'elle avait elle-même créé (via
+-- TransactionOrigineId), pas restituer les lots qu'elle avait consommés
 -- côté perdant — rejouer ce script entièrement reconstruit alors un état
 -- cohérent si besoin.
 --
@@ -63,16 +58,159 @@ DELETE FROM dbo.DroitsVoteTheorique;
 DELETE FROM dbo.DroitsVoteExercable;
 GO
 
-DECLARE @QteMax INT = 1000000;
+-- Procédures temporaires locales (portée à cette seule session/connexion,
+-- disparaissent automatiquement à la fin ; aussi explicitement supprimées
+-- plus bas) : consomme @Qte titres chez un détenteur, lot par lot, du plus
+-- ancien au plus récent, et renvoie le prix d'origine moyen pondéré des
+-- titres consommés. Une procédure par table (pas de SQL dynamique).
 
+CREATE PROCEDURE #ConsommerLotsActions
+    @CibleId UNIQUEIDENTIFIER, @Categorie NVARCHAR(10), @DetenteurId UNIQUEIDENTIFIER, @DetenteurNomExterne NVARCHAR(300),
+    @Qte DECIMAL(18,4), @PrixReporte DECIMAL(18,4) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @PrixReporte = NULL;
+    DECLARE @Restant DECIMAL(18,4) = @Qte;
+    DECLARE @SommePrixPondere DECIMAL(38,4) = 0;
+    DECLARE @SommeQuantiteConsommee DECIMAL(18,4) = 0;
+    DECLARE @LotId UNIQUEIDENTIFIER, @LotQuantite DECIMAL(18,4), @LotPrixInitial DECIMAL(18,4), @Consomme DECIMAL(18,4);
+
+    DECLARE curseurLots CURSOR LOCAL FAST_FORWARD FOR
+        SELECT Id, Quantite, PrixInitial FROM dbo.Actions
+        WHERE SocieteEmettriceId = @CibleId
+          AND ((@DetenteurId IS NOT NULL AND SocieteDetentriceId = @DetenteurId) OR (@DetenteurId IS NULL AND DetenteurNomExterne = @DetenteurNomExterne))
+          AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
+        ORDER BY DateAcquisition ASC, Id ASC;
+
+    OPEN curseurLots;
+    FETCH NEXT FROM curseurLots INTO @LotId, @LotQuantite, @LotPrixInitial;
+    WHILE @@FETCH_STATUS = 0 AND @Restant > 0
+    BEGIN
+        SET @Consomme = CASE WHEN @LotQuantite < @Restant THEN @LotQuantite ELSE @Restant END;
+        IF @LotPrixInitial IS NOT NULL
+        BEGIN
+            SET @SommePrixPondere = @SommePrixPondere + @LotPrixInitial * @Consomme;
+            SET @SommeQuantiteConsommee = @SommeQuantiteConsommee + @Consomme;
+        END
+
+        IF @Consomme >= @LotQuantite
+            DELETE FROM dbo.Actions WHERE Id = @LotId;
+        ELSE
+            UPDATE dbo.Actions SET Quantite = Quantite - @Consomme WHERE Id = @LotId;
+
+        SET @Restant = @Restant - @Consomme;
+        FETCH NEXT FROM curseurLots INTO @LotId, @LotQuantite, @LotPrixInitial;
+    END
+    CLOSE curseurLots;
+    DEALLOCATE curseurLots;
+
+    IF @SommeQuantiteConsommee > 0
+        SET @PrixReporte = @SommePrixPondere / @SommeQuantiteConsommee;
+END
+GO
+
+CREATE PROCEDURE #ConsommerLotsDroitsVoteTheorique
+    @CibleId UNIQUEIDENTIFIER, @Categorie NVARCHAR(10), @DetenteurId UNIQUEIDENTIFIER, @DetenteurNomExterne NVARCHAR(300),
+    @Qte DECIMAL(18,4), @PrixReporte DECIMAL(18,4) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @PrixReporte = NULL;
+    DECLARE @Restant DECIMAL(18,4) = @Qte;
+    DECLARE @SommePrixPondere DECIMAL(38,4) = 0;
+    DECLARE @SommeQuantiteConsommee DECIMAL(18,4) = 0;
+    DECLARE @LotId UNIQUEIDENTIFIER, @LotQuantite DECIMAL(18,4), @LotPrixInitial DECIMAL(18,4), @Consomme DECIMAL(18,4);
+
+    DECLARE curseurLots CURSOR LOCAL FAST_FORWARD FOR
+        SELECT Id, Quantite, PrixInitial FROM dbo.DroitsVoteTheorique
+        WHERE SocieteEmettriceId = @CibleId
+          AND ((@DetenteurId IS NOT NULL AND SocieteDetentriceId = @DetenteurId) OR (@DetenteurId IS NULL AND DetenteurNomExterne = @DetenteurNomExterne))
+          AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
+        ORDER BY DateAcquisition ASC, Id ASC;
+
+    OPEN curseurLots;
+    FETCH NEXT FROM curseurLots INTO @LotId, @LotQuantite, @LotPrixInitial;
+    WHILE @@FETCH_STATUS = 0 AND @Restant > 0
+    BEGIN
+        SET @Consomme = CASE WHEN @LotQuantite < @Restant THEN @LotQuantite ELSE @Restant END;
+        IF @LotPrixInitial IS NOT NULL
+        BEGIN
+            SET @SommePrixPondere = @SommePrixPondere + @LotPrixInitial * @Consomme;
+            SET @SommeQuantiteConsommee = @SommeQuantiteConsommee + @Consomme;
+        END
+
+        IF @Consomme >= @LotQuantite
+            DELETE FROM dbo.DroitsVoteTheorique WHERE Id = @LotId;
+        ELSE
+            UPDATE dbo.DroitsVoteTheorique SET Quantite = Quantite - @Consomme WHERE Id = @LotId;
+
+        SET @Restant = @Restant - @Consomme;
+        FETCH NEXT FROM curseurLots INTO @LotId, @LotQuantite, @LotPrixInitial;
+    END
+    CLOSE curseurLots;
+    DEALLOCATE curseurLots;
+
+    IF @SommeQuantiteConsommee > 0
+        SET @PrixReporte = @SommePrixPondere / @SommeQuantiteConsommee;
+END
+GO
+
+CREATE PROCEDURE #ConsommerLotsDroitsVoteExercable
+    @CibleId UNIQUEIDENTIFIER, @Categorie NVARCHAR(10), @DetenteurId UNIQUEIDENTIFIER, @DetenteurNomExterne NVARCHAR(300),
+    @Qte DECIMAL(18,4), @PrixReporte DECIMAL(18,4) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @PrixReporte = NULL;
+    DECLARE @Restant DECIMAL(18,4) = @Qte;
+    DECLARE @SommePrixPondere DECIMAL(38,4) = 0;
+    DECLARE @SommeQuantiteConsommee DECIMAL(18,4) = 0;
+    DECLARE @LotId UNIQUEIDENTIFIER, @LotQuantite DECIMAL(18,4), @LotPrixInitial DECIMAL(18,4), @Consomme DECIMAL(18,4);
+
+    DECLARE curseurLots CURSOR LOCAL FAST_FORWARD FOR
+        SELECT Id, Quantite, PrixInitial FROM dbo.DroitsVoteExercable
+        WHERE SocieteEmettriceId = @CibleId
+          AND ((@DetenteurId IS NOT NULL AND SocieteDetentriceId = @DetenteurId) OR (@DetenteurId IS NULL AND DetenteurNomExterne = @DetenteurNomExterne))
+          AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
+        ORDER BY DateAcquisition ASC, Id ASC;
+
+    OPEN curseurLots;
+    FETCH NEXT FROM curseurLots INTO @LotId, @LotQuantite, @LotPrixInitial;
+    WHILE @@FETCH_STATUS = 0 AND @Restant > 0
+    BEGIN
+        SET @Consomme = CASE WHEN @LotQuantite < @Restant THEN @LotQuantite ELSE @Restant END;
+        IF @LotPrixInitial IS NOT NULL
+        BEGIN
+            SET @SommePrixPondere = @SommePrixPondere + @LotPrixInitial * @Consomme;
+            SET @SommeQuantiteConsommee = @SommeQuantiteConsommee + @Consomme;
+        END
+
+        IF @Consomme >= @LotQuantite
+            DELETE FROM dbo.DroitsVoteExercable WHERE Id = @LotId;
+        ELSE
+            UPDATE dbo.DroitsVoteExercable SET Quantite = Quantite - @Consomme WHERE Id = @LotId;
+
+        SET @Restant = @Restant - @Consomme;
+        FETCH NEXT FROM curseurLots INTO @LotId, @LotQuantite, @LotPrixInitial;
+    END
+    CLOSE curseurLots;
+    DEALLOCATE curseurLots;
+
+    IF @SommeQuantiteConsommee > 0
+        SET @PrixReporte = @SommePrixPondere / @SommeQuantiteConsommee;
+END
+GO
+
+-- Parcourt toutes les transactions, dans l'ordre chronologique, et
+-- applique la logique ci-dessus pour les 3 notions à chaque fois.
 DECLARE @TransactionId UNIQUEIDENTIFIER, @AcheteurId UNIQUEIDENTIFIER, @AcheteurNomExterne NVARCHAR(300),
         @CibleId UNIQUEIDENTIFIER, @Date DATE, @NombreActions DECIMAL(18,4), @NombreDroitVoteTheorique DECIMAL(18,4),
         @NombreDroitVoteExercable DECIMAL(18,4), @Categorie NVARCHAR(10), @VendeurId UNIQUEIDENTIFIER,
         @VendeurNomExterne NVARCHAR(300), @PrixAction DECIMAL(18,4);
 
 DECLARE @VendeurRenseigne BIT, @AcheteurEgalVendeur BIT;
-DECLARE @Qte INT, @PrixReporte DECIMAL(18,4);
-DECLARE @Supprimes TABLE (PrixInitial DECIMAL(18,4) NULL);
+DECLARE @Qte DECIMAL(18,4), @PrixReporte DECIMAL(18,4);
 
 DECLARE curseurTransactions CURSOR LOCAL FAST_FORWARD FOR
     SELECT Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, NombreDroitVoteTheorique,
@@ -93,179 +231,77 @@ BEGIN
     -- ========================= Actions =========================
     IF @AcheteurEgalVendeur = 0 AND @NombreActions IS NOT NULL AND @NombreActions <> 0
     BEGIN
-        IF ABS(@NombreActions) > @QteMax
+        IF @NombreActions < 0
         BEGIN
-            PRINT 'IGNORÉE (Actions) : transaction ' + CONVERT(NVARCHAR(36), @TransactionId) + ' du ' + CONVERT(NVARCHAR(10), @Date, 23)
-                + ' — quantité ' + CONVERT(NVARCHAR(30), @NombreActions) + ' au-delà du maximum raisonnable (' + CONVERT(NVARCHAR(20), @QteMax)
-                + '). À corriger manuellement si c''est une erreur, puis relancer ce script.';
+            -- Vente : l'acheteur de la transaction est le camp qui PERD des titres.
+            SET @Qte = -@NombreActions;
+            EXEC #ConsommerLotsActions @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, @PrixReporte OUTPUT;
+            IF @VendeurRenseigne = 1
+            BEGIN
+                INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
+                VALUES (NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
+            END
         END
         ELSE
         BEGIN
-            DELETE FROM @Supprimes;
+            -- Achat : l'acheteur GAGNE des titres ; si un vendeur suivi est renseigné, il les perd d'abord.
+            SET @Qte = @NombreActions;
             SET @PrixReporte = NULL;
+            IF @VendeurRenseigne = 1
+                EXEC #ConsommerLotsActions @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, @PrixReporte OUTPUT;
 
-            IF @NombreActions < 0
-            BEGIN
-                -- Vente : l'acheteur de la transaction est le camp qui PERD des titres.
-                SET @Qte = CONVERT(INT, -@NombreActions);
-                DELETE FROM dbo.Actions
-                OUTPUT deleted.PrixInitial INTO @Supprimes
-                WHERE Id IN (
-                    SELECT TOP (@Qte) Id FROM dbo.Actions
-                    WHERE SocieteEmettriceId = @CibleId
-                      AND ((@AcheteurId IS NOT NULL AND SocieteDetentriceId = @AcheteurId) OR (@AcheteurId IS NULL AND DetenteurNomExterne = @AcheteurNomExterne))
-                      AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
-                    ORDER BY DateAcquisition ASC, Id ASC
-                );
-                SELECT @PrixReporte = AVG(PrixInitial) FROM @Supprimes;
-
-                IF @VendeurRenseigne = 1
-                BEGIN
-                    INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
-                    SELECT NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId
-                    FROM (SELECT TOP (@Qte) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres;
-                END
-            END
-            ELSE
-            BEGIN
-                -- Achat : l'acheteur GAGNE des titres ; si un vendeur suivi est renseigné, il les perd d'abord.
-                SET @Qte = CONVERT(INT, @NombreActions);
-                IF @VendeurRenseigne = 1
-                BEGIN
-                    DELETE FROM dbo.Actions
-                    OUTPUT deleted.PrixInitial INTO @Supprimes
-                    WHERE Id IN (
-                        SELECT TOP (@Qte) Id FROM dbo.Actions
-                        WHERE SocieteEmettriceId = @CibleId
-                          AND ((@VendeurId IS NOT NULL AND SocieteDetentriceId = @VendeurId) OR (@VendeurId IS NULL AND DetenteurNomExterne = @VendeurNomExterne))
-                          AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
-                        ORDER BY DateAcquisition ASC, Id ASC
-                    );
-                    SELECT @PrixReporte = AVG(PrixInitial) FROM @Supprimes;
-                END
-
-                INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
-                SELECT NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId
-                FROM (SELECT TOP (@Qte) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres;
-            END
+            INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
+            VALUES (NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
         END
     END
 
     -- ==================== DroitsVoteTheorique ====================
     IF @AcheteurEgalVendeur = 0 AND @NombreDroitVoteTheorique IS NOT NULL AND @NombreDroitVoteTheorique <> 0
     BEGIN
-        IF ABS(@NombreDroitVoteTheorique) > @QteMax
+        IF @NombreDroitVoteTheorique < 0
         BEGIN
-            PRINT 'IGNORÉE (DroitsVoteTheorique) : transaction ' + CONVERT(NVARCHAR(36), @TransactionId) + ' du ' + CONVERT(NVARCHAR(10), @Date, 23)
-                + ' — quantité ' + CONVERT(NVARCHAR(30), @NombreDroitVoteTheorique) + ' au-delà du maximum raisonnable (' + CONVERT(NVARCHAR(20), @QteMax)
-                + '). À corriger manuellement si c''est une erreur, puis relancer ce script.';
+            SET @Qte = -@NombreDroitVoteTheorique;
+            EXEC #ConsommerLotsDroitsVoteTheorique @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, @PrixReporte OUTPUT;
+            IF @VendeurRenseigne = 1
+            BEGIN
+                INSERT INTO dbo.DroitsVoteTheorique (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
+                VALUES (NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
+            END
         END
         ELSE
         BEGIN
-            DELETE FROM @Supprimes;
+            SET @Qte = @NombreDroitVoteTheorique;
             SET @PrixReporte = NULL;
+            IF @VendeurRenseigne = 1
+                EXEC #ConsommerLotsDroitsVoteTheorique @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, @PrixReporte OUTPUT;
 
-            IF @NombreDroitVoteTheorique < 0
-            BEGIN
-                SET @Qte = CONVERT(INT, -@NombreDroitVoteTheorique);
-                DELETE FROM dbo.DroitsVoteTheorique
-                OUTPUT deleted.PrixInitial INTO @Supprimes
-                WHERE Id IN (
-                    SELECT TOP (@Qte) Id FROM dbo.DroitsVoteTheorique
-                    WHERE SocieteEmettriceId = @CibleId
-                      AND ((@AcheteurId IS NOT NULL AND SocieteDetentriceId = @AcheteurId) OR (@AcheteurId IS NULL AND DetenteurNomExterne = @AcheteurNomExterne))
-                      AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
-                    ORDER BY DateAcquisition ASC, Id ASC
-                );
-                SELECT @PrixReporte = AVG(PrixInitial) FROM @Supprimes;
-
-                IF @VendeurRenseigne = 1
-                BEGIN
-                    INSERT INTO dbo.DroitsVoteTheorique (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
-                    SELECT NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId
-                    FROM (SELECT TOP (@Qte) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres;
-                END
-            END
-            ELSE
-            BEGIN
-                SET @Qte = CONVERT(INT, @NombreDroitVoteTheorique);
-                IF @VendeurRenseigne = 1
-                BEGIN
-                    DELETE FROM dbo.DroitsVoteTheorique
-                    OUTPUT deleted.PrixInitial INTO @Supprimes
-                    WHERE Id IN (
-                        SELECT TOP (@Qte) Id FROM dbo.DroitsVoteTheorique
-                        WHERE SocieteEmettriceId = @CibleId
-                          AND ((@VendeurId IS NOT NULL AND SocieteDetentriceId = @VendeurId) OR (@VendeurId IS NULL AND DetenteurNomExterne = @VendeurNomExterne))
-                          AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
-                        ORDER BY DateAcquisition ASC, Id ASC
-                    );
-                    SELECT @PrixReporte = AVG(PrixInitial) FROM @Supprimes;
-                END
-
-                INSERT INTO dbo.DroitsVoteTheorique (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
-                SELECT NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId
-                FROM (SELECT TOP (@Qte) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres;
-            END
+            INSERT INTO dbo.DroitsVoteTheorique (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
+            VALUES (NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
         END
     END
 
     -- ==================== DroitsVoteExercable ====================
     IF @AcheteurEgalVendeur = 0 AND @NombreDroitVoteExercable IS NOT NULL AND @NombreDroitVoteExercable <> 0
     BEGIN
-        IF ABS(@NombreDroitVoteExercable) > @QteMax
+        IF @NombreDroitVoteExercable < 0
         BEGIN
-            PRINT 'IGNORÉE (DroitsVoteExercable) : transaction ' + CONVERT(NVARCHAR(36), @TransactionId) + ' du ' + CONVERT(NVARCHAR(10), @Date, 23)
-                + ' — quantité ' + CONVERT(NVARCHAR(30), @NombreDroitVoteExercable) + ' au-delà du maximum raisonnable (' + CONVERT(NVARCHAR(20), @QteMax)
-                + '). À corriger manuellement si c''est une erreur, puis relancer ce script.';
+            SET @Qte = -@NombreDroitVoteExercable;
+            EXEC #ConsommerLotsDroitsVoteExercable @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, @PrixReporte OUTPUT;
+            IF @VendeurRenseigne = 1
+            BEGIN
+                INSERT INTO dbo.DroitsVoteExercable (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
+                VALUES (NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
+            END
         END
         ELSE
         BEGIN
-            DELETE FROM @Supprimes;
+            SET @Qte = @NombreDroitVoteExercable;
             SET @PrixReporte = NULL;
+            IF @VendeurRenseigne = 1
+                EXEC #ConsommerLotsDroitsVoteExercable @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, @PrixReporte OUTPUT;
 
-            IF @NombreDroitVoteExercable < 0
-            BEGIN
-                SET @Qte = CONVERT(INT, -@NombreDroitVoteExercable);
-                DELETE FROM dbo.DroitsVoteExercable
-                OUTPUT deleted.PrixInitial INTO @Supprimes
-                WHERE Id IN (
-                    SELECT TOP (@Qte) Id FROM dbo.DroitsVoteExercable
-                    WHERE SocieteEmettriceId = @CibleId
-                      AND ((@AcheteurId IS NOT NULL AND SocieteDetentriceId = @AcheteurId) OR (@AcheteurId IS NULL AND DetenteurNomExterne = @AcheteurNomExterne))
-                      AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
-                    ORDER BY DateAcquisition ASC, Id ASC
-                );
-                SELECT @PrixReporte = AVG(PrixInitial) FROM @Supprimes;
-
-                IF @VendeurRenseigne = 1
-                BEGIN
-                    INSERT INTO dbo.DroitsVoteExercable (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
-                    SELECT NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId
-                    FROM (SELECT TOP (@Qte) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres;
-                END
-            END
-            ELSE
-            BEGIN
-                SET @Qte = CONVERT(INT, @NombreDroitVoteExercable);
-                IF @VendeurRenseigne = 1
-                BEGIN
-                    DELETE FROM dbo.DroitsVoteExercable
-                    OUTPUT deleted.PrixInitial INTO @Supprimes
-                    WHERE Id IN (
-                        SELECT TOP (@Qte) Id FROM dbo.DroitsVoteExercable
-                        WHERE SocieteEmettriceId = @CibleId
-                          AND ((@VendeurId IS NOT NULL AND SocieteDetentriceId = @VendeurId) OR (@VendeurId IS NULL AND DetenteurNomExterne = @VendeurNomExterne))
-                          AND ((@Categorie IS NULL AND Categorie IS NULL) OR Categorie = @Categorie)
-                        ORDER BY DateAcquisition ASC, Id ASC
-                    );
-                    SELECT @PrixReporte = AVG(PrixInitial) FROM @Supprimes;
-                END
-
-                INSERT INTO dbo.DroitsVoteExercable (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
-                SELECT NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId
-                FROM (SELECT TOP (@Qte) 1 AS n FROM sys.all_objects a CROSS JOIN sys.all_objects b) AS Nombres;
-            END
+            INSERT INTO dbo.DroitsVoteExercable (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
+            VALUES (NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
         END
     END
 
@@ -277,10 +313,15 @@ CLOSE curseurTransactions;
 DEALLOCATE curseurTransactions;
 GO
 
+DROP PROCEDURE #ConsommerLotsActions;
+DROP PROCEDURE #ConsommerLotsDroitsVoteTheorique;
+DROP PROCEDURE #ConsommerLotsDroitsVoteExercable;
+GO
+
 -- Résumé du résultat.
-SELECT 'Actions' AS Table_, COUNT(*) AS NombreLignes FROM dbo.Actions
+SELECT 'Actions' AS Table_, COUNT(*) AS NombreLots, SUM(Quantite) AS QuantiteTotale FROM dbo.Actions
 UNION ALL
-SELECT 'DroitsVoteTheorique', COUNT(*) FROM dbo.DroitsVoteTheorique
+SELECT 'DroitsVoteTheorique', COUNT(*), SUM(Quantite) FROM dbo.DroitsVoteTheorique
 UNION ALL
-SELECT 'DroitsVoteExercable', COUNT(*) FROM dbo.DroitsVoteExercable;
+SELECT 'DroitsVoteExercable', COUNT(*), SUM(Quantite) FROM dbo.DroitsVoteExercable;
 GO

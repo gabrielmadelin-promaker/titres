@@ -70,14 +70,16 @@ export interface Transaction {
 
 /**
  * Une ligne des tables Actions / DroitsVoteTheorique / DroitsVoteExercable :
- * le suivi unitaire du cycle de vie d'un titre précis (qui le détient, à
- * quel prix il a été acquis), généré et mis à jour automatiquement par
- * l'API à chaque création/modification/suppression de transaction — jamais
- * saisi à la main.
+ * un LOT de titres (même société émettrice, catégorie, détenteur, prix et
+ * date d'acquisition), avec un nombre de titres (quantite) — pas une ligne
+ * par titre unitaire : un lot de plusieurs millions de titres tient sur une
+ * seule ligne. Générée et mise à jour automatiquement par l'API à chaque
+ * création/modification/suppression de transaction — jamais saisie à la
+ * main.
  */
 export interface Titre {
   id: string;
-  /** Société cible qui a émis ce titre. */
+  /** Société cible qui a émis ces titres. */
   societeEmettriceId: string;
   /** Lettre de catégorie (classe d'action A/B/C...), facultative. */
   categorie: string | null;
@@ -85,11 +87,13 @@ export interface Titre {
   societeDetentriceId: string | null;
   /** Nom libre du détenteur actuel quand il est hors groupe (societeDetentriceId alors null). */
   detenteurNomExterne: string | null;
-  /** Prix à l'émission d'origine : ne change jamais après la création de la ligne. */
+  /** Nombre de titres de ce lot. */
+  quantite: number;
+  /** Prix à l'émission d'origine : ne change jamais après la création du lot. */
   prixInitial: number | null;
   /** Prix payé par le détenteur actuel (= prixInitial à l'émission, sinon prix de la dernière cession). */
   prixAcquisition: number | null;
   dateAcquisition: string | null;
-  /** Transaction à l'origine de l'état actuel de cette ligne. */
+  /** Transaction à l'origine de l'état actuel de ce lot. */
   transactionOrigineId: string | null;
 }
