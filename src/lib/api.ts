@@ -1,4 +1,4 @@
-import type { Societe, Titre, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Societe, Titre, Transaction } from "../types";
 import { lireToken, SessionExpireeError } from "./auth";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8091/api`;
@@ -82,6 +82,22 @@ export function supprimerSociete(id: string): Promise<void> {
 
 export function modifierSociete(id: string, champs: Omit<Societe, "id">): Promise<void> {
   return request(`/societes/${id}`, { method: "PUT", body: JSON.stringify(champs) });
+}
+
+export function fetchHistoriqueTotaux(): Promise<HistoriqueTotalSociete[]> {
+  return request("/historique-totaux-societe");
+}
+
+export function creerHistoriqueTotal(ligne: Omit<HistoriqueTotalSociete, "id">): Promise<HistoriqueTotalSociete> {
+  return request("/historique-totaux-societe", { method: "POST", body: JSON.stringify(ligne) });
+}
+
+export function modifierHistoriqueTotal(id: string, ligne: Omit<HistoriqueTotalSociete, "id">): Promise<void> {
+  return request(`/historique-totaux-societe/${id}`, { method: "PUT", body: JSON.stringify(ligne) });
+}
+
+export function supprimerHistoriqueTotal(id: string): Promise<void> {
+  return request(`/historique-totaux-societe/${id}`, { method: "DELETE" });
 }
 
 export function fetchTransactions(): Promise<Transaction[]> {

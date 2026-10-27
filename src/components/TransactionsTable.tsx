@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { Societe, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
 import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../lib/format";
 import { extraireValeurTransaction } from "../lib/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
@@ -10,6 +10,7 @@ import { exporterXlsx } from "../lib/xlsxExport";
 interface Props {
   transactions: Transaction[];
   societes: Societe[];
+  historiqueTotaux: HistoriqueTotalSociete[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Transaction, "id">) => void;
 }
@@ -79,7 +80,7 @@ function formatOuTiret(valeur: number | null | undefined, formateur: (v: number)
   return valeur == null ? "—" : formateur(valeur);
 }
 
-export function TransactionsTable({ transactions, societes, onDelete, onUpdate }: Props) {
+export function TransactionsTable({ transactions, societes, historiqueTotaux, onDelete, onUpdate }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "date", sens: "desc" });
   const [filtreAcheteurId, setFiltreAcheteurId] = useState("");
   const [filtreCibleId, setFiltreCibleId] = useState("");
@@ -141,11 +142,11 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
         case "categorie":
           return t.categorie ?? "";
         case "capital":
-          return extraireValeurTransaction(t, "capital", societes) ?? -Infinity;
+          return extraireValeurTransaction(t, "capital", historiqueTotaux) ?? -Infinity;
         case "dvTheorique":
-          return extraireValeurTransaction(t, "droitVoteTheorique", societes) ?? -Infinity;
+          return extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? -Infinity;
         case "dvExercable":
-          return extraireValeurTransaction(t, "droitVoteExercable", societes) ?? -Infinity;
+          return extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? -Infinity;
         case "prixAction":
           return t.prixAction ?? -Infinity;
         case "qualification":
@@ -155,7 +156,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
       }
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
-  }, [filtrees, tri, nomParId, societes]);
+  }, [filtrees, tri, nomParId, historiqueTotaux]);
 
   function exporter() {
     return exporterXlsx(
@@ -174,9 +175,9 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
         "Nombre de droits de vote théorique": t.nombreDroitVoteTheorique ?? "",
         "Nombre de droits de vote exerçable": t.nombreDroitVoteExercable ?? "",
         Catégorie: t.categorie ?? "",
-        "Capital (%)": extraireValeurTransaction(t, "capital", societes) ?? "",
-        "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", societes) ?? "",
-        "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", societes) ?? "",
+        "Capital (%)": extraireValeurTransaction(t, "capital", historiqueTotaux) ?? "",
+        "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? "",
+        "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? "",
         "Prix de l'action (€)": t.prixAction ?? "",
         Qualification: t.qualification,
         "Plus-value (€)": t.plusValue ?? "",
@@ -256,7 +257,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "capital"))}
-                  title="Calculé automatiquement (nombre d'actions ÷ total émis par la société cible). Vide si le nombre d'actions ou le total de la société cible n'est pas renseigné."
+                  title="Calculé automatiquement (nombre d'actions ÷ total émis par la société cible, en vigueur à la date de cette transaction). Vide si le nombre d'actions ou ce total n'est pas renseigné."
                 >
                   Capital %{flecheTri(tri, "capital")}
                 </th>
@@ -294,12 +295,14 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                     <td className="num">{formatOuTiret(t.nombreDroitVoteTheorique, formatDecimal)}</td>
                     <td className="num">{formatOuTiret(t.nombreDroitVoteExercable, formatDecimal)}</td>
                     <td>{t.categorie ?? "—"}</td>
-                    <td className="num">{formatOuTiret(extraireValeurTransaction(t, "capital", societes), formatPourcentage)}</td>
                     <td className="num">
-                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteTheorique", societes), formatPourcentage)}
+                      {formatOuTiret(extraireValeurTransaction(t, "capital", historiqueTotaux), formatPourcentage)}
                     </td>
                     <td className="num">
-                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", societes), formatPourcentage)}
+                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux), formatPourcentage)}
+                    </td>
+                    <td className="num">
+                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux), formatPourcentage)}
                     </td>
                     <td className="num">{formatOuTiret(t.prixAction, formatMontant)}</td>
                     <td>{t.qualification}</td>

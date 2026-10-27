@@ -17,9 +17,6 @@ export function SocieteForm({ onAdd }: Props) {
   const [siegeSocial, setSiegeSocial] = useState(champVide());
   const [siren, setSiren] = useState(champVide());
   const [lei, setLei] = useState(champVide());
-  const [nombreTotalActions, setNombreTotalActions] = useState(champVide());
-  const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
-  const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(champVide());
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,9 +32,6 @@ export function SocieteForm({ onAdd }: Props) {
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
       lei: lei.trim() || null,
-      nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
-      nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
-      nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
     if (!reussi) return;
 
@@ -47,9 +41,6 @@ export function SocieteForm({ onAdd }: Props) {
     setSiegeSocial(champVide());
     setSiren(champVide());
     setLei(champVide());
-    setNombreTotalActions(champVide());
-    setNombreTotalDroitVoteTheorique(champVide());
-    setNombreTotalDroitVoteExercable(champVide());
   }
 
   return (
@@ -109,42 +100,6 @@ export function SocieteForm({ onAdd }: Props) {
       <div className="form-field">
         <label htmlFor="societe-lei">LEI</label>
         <input id="societe-lei" type="text" value={lei} onChange={(e) => setLei(e.target.value)} />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="societe-total-actions">Nombre total d'actions émises</label>
-        <input
-          id="societe-total-actions"
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalActions}
-          onChange={(e) => setNombreTotalActions(e.target.value)}
-        />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="societe-total-dv-theorique">Nombre total de droits de vote théorique émis</label>
-        <input
-          id="societe-total-dv-theorique"
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalDroitVoteTheorique}
-          onChange={(e) => setNombreTotalDroitVoteTheorique(e.target.value)}
-        />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor="societe-total-dv-exercable">Nombre total de droits de vote exerçable émis</label>
-        <input
-          id="societe-total-dv-exercable"
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalDroitVoteExercable}
-          onChange={(e) => setNombreTotalDroitVoteExercable(e.target.value)}
-        />
       </div>
 
       <button type="submit" className="btn btn-primary">

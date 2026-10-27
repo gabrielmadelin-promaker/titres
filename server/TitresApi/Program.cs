@@ -100,9 +100,7 @@ app.MapGet("/api/health", async () =>
     }
 });
 
-const string ColonnesSociete =
-    "Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei, " +
-    "NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable";
+const string ColonnesSociete = "Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei";
 
 app.MapGet("/api/societes", async () =>
 {
@@ -117,15 +115,11 @@ app.MapPost("/api/societes", async (SocieteInput input) =>
     if (string.IsNullOrEmpty(nom))
         return Results.BadRequest("Le nom est requis.");
 
-    var societe = new Societe(
-        Guid.NewGuid(), nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei,
-        input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable);
+    var societe = new Societe(Guid.NewGuid(), nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei);
     await using var conn = new SqlConnection(ConnectionString());
     await conn.ExecuteAsync(
-        "INSERT INTO dbo.Societes (Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei, " +
-        "NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable) " +
-        "VALUES (@Id, @Nom, @ValeurNominale, @Pays, @SiegeSocial, @Siren, @Lei, " +
-        "@NombreTotalActions, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable)",
+        "INSERT INTO dbo.Societes (Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei) " +
+        "VALUES (@Id, @Nom, @ValeurNominale, @Pays, @SiegeSocial, @Siren, @Lei)",
         societe);
     return Results.Created($"/api/societes/{societe.Id}", societe);
 });
@@ -139,14 +133,8 @@ app.MapPut("/api/societes/{id:guid}", async (Guid id, SocieteUpdate input) =>
     await using var conn = new SqlConnection(ConnectionString());
     var lignes = await conn.ExecuteAsync(
         "UPDATE dbo.Societes SET Nom = @Nom, ValeurNominale = @ValeurNominale, " +
-        "Pays = @Pays, SiegeSocial = @SiegeSocial, Siren = @Siren, Lei = @Lei, " +
-        "NombreTotalActions = @NombreTotalActions, NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, " +
-        "NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable WHERE Id = @id",
-        new
-        {
-            id, Nom = nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei,
-            input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable,
-        });
+        "Pays = @Pays, SiegeSocial = @SiegeSocial, Siren = @Siren, Lei = @Lei WHERE Id = @id",
+        new { id, Nom = nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei });
     return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
 
@@ -157,10 +145,79 @@ app.MapDelete("/api/societes/{id:guid}", async (Guid id) =>
     return Results.NoContent();
 });
 
+const string ColonnesHistoriqueTotaux =
+    "Id, SocieteId, CONVERT(varchar(10), DateEffet, 23) AS DateEffet, " +
+    "NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable";
+
+app.MapGet("/api/historique-totaux-societe", async () =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var historique = await conn.QueryAsync<HistoriqueTotalSociete>(
+        $"SELECT {ColonnesHistoriqueTotaux} FROM dbo.HistoriqueTotauxSociete ORDER BY DateEffet");
+    return Results.Ok(historique);
+});
+
+app.MapPost("/api/historique-totaux-societe", async (HistoriqueTotalSocieteInput input) =>
+{
+    var dateEffet = input.DateEffet;
+    if (string.IsNullOrWhiteSpace(dateEffet))
+        return Results.BadRequest("La date d'effet est requise.");
+
+    var ligne = new HistoriqueTotalSociete(
+        Guid.NewGuid(), input.SocieteId, dateEffet,
+        input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable);
+    await using var conn = new SqlConnection(ConnectionString());
+    try
+    {
+        await conn.ExecuteAsync(
+            "INSERT INTO dbo.HistoriqueTotauxSociete (Id, SocieteId, DateEffet, NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable) " +
+            "VALUES (@Id, @SocieteId, @DateEffet, @NombreTotalActions, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable)",
+            ligne);
+    }
+    catch (SqlException e) when (e.Number == 2627)
+    {
+        return Results.BadRequest("Cette société a déjà une ligne d'historique à cette date d'effet.");
+    }
+    return Results.Created($"/api/historique-totaux-societe/{ligne.Id}", ligne);
+});
+
+app.MapPut("/api/historique-totaux-societe/{id:guid}", async (Guid id, HistoriqueTotalSocieteInput input) =>
+{
+    var dateEffet = input.DateEffet;
+    if (string.IsNullOrWhiteSpace(dateEffet))
+        return Results.BadRequest("La date d'effet est requise.");
+
+    await using var conn = new SqlConnection(ConnectionString());
+    try
+    {
+        var lignes = await conn.ExecuteAsync(
+            "UPDATE dbo.HistoriqueTotauxSociete SET SocieteId = @SocieteId, DateEffet = @DateEffet, " +
+            "NombreTotalActions = @NombreTotalActions, NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, " +
+            "NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable WHERE Id = @id",
+            new
+            {
+                id, input.SocieteId, DateEffet = dateEffet,
+                input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable,
+            });
+        return lignes > 0 ? Results.NoContent() : Results.NotFound();
+    }
+    catch (SqlException e) when (e.Number == 2627)
+    {
+        return Results.BadRequest("Cette société a déjà une ligne d'historique à cette date d'effet.");
+    }
+});
+
+app.MapDelete("/api/historique-totaux-societe/{id:guid}", async (Guid id) =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    await conn.ExecuteAsync("DELETE FROM dbo.HistoriqueTotauxSociete WHERE Id = @id", new { id });
+    return Results.NoContent();
+});
+
 const string ColonnesTransaction =
     "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, " +
-    "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, Capital, " +
-    "DroitVoteTheorique, DroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue";
+    "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, " +
+    "VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue";
 
 app.MapGet("/api/transactions", async () =>
 {
@@ -328,13 +385,16 @@ async Task<Dictionary<Guid, decimal?>> CalculerPlusValues(SqlConnection conn)
 // côté frontend). Avant d'accepter une création ou modification, on
 // recalcule ces totaux directs en y ajoutant la transaction candidate.
 // En dessous de 0, c'est toujours refusé (vendre plus qu'on ne détient),
-// que la société cible ait ou non un total de référence renseigné. Le
-// dépassement du total émis (NombreTotalX sur la société cible) n'est
-// contrôlé que si ce total est renseigné — sans lui, aucune borne connue.
+// que la société cible ait ou non un total de référence connu à cette
+// date. Le dépassement du total émis n'est contrôlé que si un total est
+// connu à la date de la transaction (voir dbo.HistoriqueTotauxSociete) —
+// sans lui, aucune borne connue.
 async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionInput input, Guid? idAExclure)
 {
-    var cible = await conn.QuerySingleOrDefaultAsync<Societe>(
-        $"SELECT {ColonnesSociete} FROM dbo.Societes WHERE Id = @cibleId", new { cibleId = input.CibleId });
+    var totaux = await conn.QuerySingleOrDefaultAsync<TotauxSociete>(
+        "SELECT TOP 1 NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable " +
+        "FROM dbo.HistoriqueTotauxSociete WHERE SocieteId = @cibleId AND DateEffet <= @date ORDER BY DateEffet DESC",
+        new { cibleId = input.CibleId, date = input.Date });
 
     var lignes = (await conn.QueryAsync<LigneParticipation>(
         "SELECT AcheteurId, VendeurId, NombreActions, NombreDroitVoteTheorique, NombreDroitVoteExercable " +
@@ -378,26 +438,23 @@ async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionIn
         if (n < 0)
             return $"Cette opération ferait passer le nombre de droits de vote exerçable détenu par une société dans la cible à {n:0.##}, ce qui est négatif.";
 
-    if (cible is null)
-        return null;
-
-    if (cible.NombreTotalActions is decimal totalActions)
+    if (totaux?.NombreTotalActions is decimal totalActions)
     {
         var somme = actionsParId.Values.Sum();
         if (somme > totalActions)
-            return $"Cette opération ferait dépasser le nombre total d'actions émises par la société cible ({somme:0.##} pour un total de {totalActions:0.##}).";
+            return $"Cette opération ferait dépasser le nombre total d'actions émises par la société cible à cette date ({somme:0.##} pour un total de {totalActions:0.##}).";
     }
-    if (cible.NombreTotalDroitVoteTheorique is decimal totalDvTheorique)
+    if (totaux?.NombreTotalDroitVoteTheorique is decimal totalDvTheorique)
     {
         var somme = dvTheoriqueParId.Values.Sum();
         if (somme > totalDvTheorique)
-            return $"Cette opération ferait dépasser le nombre total de droits de vote théorique émis par la société cible ({somme:0.##} pour un total de {totalDvTheorique:0.##}).";
+            return $"Cette opération ferait dépasser le nombre total de droits de vote théorique émis par la société cible à cette date ({somme:0.##} pour un total de {totalDvTheorique:0.##}).";
     }
-    if (cible.NombreTotalDroitVoteExercable is decimal totalDvExercable)
+    if (totaux?.NombreTotalDroitVoteExercable is decimal totalDvExercable)
     {
         var somme = dvExercableParId.Values.Sum();
         if (somme > totalDvExercable)
-            return $"Cette opération ferait dépasser le nombre total de droits de vote exerçable émis par la société cible ({somme:0.##} pour un total de {totalDvExercable:0.##}).";
+            return $"Cette opération ferait dépasser le nombre total de droits de vote exerçable émis par la société cible à cette date ({somme:0.##} pour un total de {totalDvExercable:0.##}).";
     }
 
     return null;
@@ -823,9 +880,7 @@ app.MapDelete("/api/utilisateurs/{id:guid}", async (HttpContext ctx, Guid id) =>
 
 app.Run();
 
-record Societe(
-    Guid Id, string Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei,
-    decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+record Societe(Guid Id, string Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
 record SocieteInput(
     string? Nom,
@@ -833,21 +888,25 @@ record SocieteInput(
     string? Pays = null,
     string? SiegeSocial = null,
     string? Siren = null,
-    string? Lei = null,
-    decimal? NombreTotalActions = null,
-    decimal? NombreTotalDroitVoteTheorique = null,
-    decimal? NombreTotalDroitVoteExercable = null);
+    string? Lei = null);
 
-record SocieteUpdate(
-    string? Nom,
-    decimal? ValeurNominale,
-    string? Pays,
-    string? SiegeSocial,
-    string? Siren,
-    string? Lei,
-    decimal? NombreTotalActions,
-    decimal? NombreTotalDroitVoteTheorique,
-    decimal? NombreTotalDroitVoteExercable);
+record SocieteUpdate(string? Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
+
+// Le total émis (actions / DV théorique / DV exerçable) par une société, à
+// une date d'effet donnée — voir dbo.HistoriqueTotauxSociete. Utilisé à la
+// fois comme ligne de l'historique (avec Id/SocieteId/DateEffet) et,
+// projection partielle (TotauxSociete, plus bas), comme simple résultat de
+// recherche "le total en vigueur à telle date".
+record HistoriqueTotalSociete(
+    Guid Id, Guid SocieteId, string DateEffet,
+    decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+
+record HistoriqueTotalSocieteInput(
+    Guid SocieteId, string? DateEffet,
+    decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+
+// Projection du total en vigueur à une date donnée (voir ValiderBornesParticipation).
+record TotauxSociete(decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
 
 record Transaction(
     Guid Id,
@@ -859,14 +918,6 @@ record Transaction(
     decimal? NombreDroitVoteTheorique,
     decimal? NombreDroitVoteExercable,
     string? Categorie,
-    // Pourcentages de repli, hérités des transactions saisies avant
-    // l'introduction des quantités ci-dessus : jamais écrits par l'API pour
-    // une transaction créée ou modifiée désormais (toujours NULL dans ce
-    // cas), uniquement lus pour l'affichage d'anciennes lignes qui n'ont pas
-    // de quantité correspondante.
-    decimal? Capital,
-    decimal? DroitVoteTheorique,
-    decimal? DroitVoteExercable,
     Guid? VendeurId,
     string? VendeurNomExterne,
     decimal? PrixAction,

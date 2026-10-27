@@ -1,4 +1,4 @@
-import type { Societe, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Transaction } from "../types";
 
 export type Metrique =
   | "capital"
@@ -11,26 +11,53 @@ export type Metrique =
 type ChampTotalSociete = "nombreTotalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
 
 /**
+ * Le total (actions, DV théorique ou DV exerçable) en vigueur pour une
+ * société à une date donnée : la ligne de l'historique la plus récente
+ * dont dateEffet est antérieure ou égale à cette date — jamais une ligne
+ * postérieure, pour qu'une augmentation ou réduction de capital future ne
+ * change jamais le total applicable à une transaction passée. Null si
+ * aucune ligne ne couvre encore cette date, ou que le champ demandé y est
+ * null.
+ */
+function totalADate(
+  historique: HistoriqueTotalSociete[],
+  societeId: string,
+  champ: ChampTotalSociete,
+  date: string,
+): number | null {
+  let trouvee: HistoriqueTotalSociete | null = null;
+  for (const h of historique) {
+    if (h.societeId !== societeId || h.dateEffet > date) continue;
+    if (!trouvee || h.dateEffet > trouvee.dateEffet) trouvee = h;
+  }
+  return trouvee?.[champ] ?? null;
+}
+
+/**
  * Un pourcentage (capital, droit de vote théorique/exerçable) n'est jamais
  * saisi ni stocké : il se dérive uniquement de la quantité correspondante
  * de la transaction (nombre d'actions / de DV théorique / de DV
- * exerçable), rapportée au total émis par la société cible (NombreTotalX,
- * saisi une fois sur la société). Null si l'un des deux manque — pas de
- * quantité sur la transaction, ou pas de total configuré sur la société :
- * aucun repli sur l'ancien pourcentage historique (Capital/
- * DroitVoteTheorique/DroitVoteExercable), qui n'est plus jamais lu (voir
- * le backfill one-shot 2026-10-27-backfill-quantites-depuis-pourcentages.sql,
- * qui convertit ces anciennes transactions en quantité équivalente dès que
- * leur société cible a un total renseigné).
+ * exerçable), rapportée au total émis par la société cible EN VIGUEUR À LA
+ * DATE DE LA TRANSACTION (voir totalADate ci-dessus) — pas au total
+ * d'aujourd'hui, qui peut avoir changé depuis (augmentation ou réduction de
+ * capital). Null si l'un des deux manque — pas de quantité sur la
+ * transaction, ou pas de total connu à cette date : aucun repli sur
+ * l'ancien pourcentage historique (Capital/DroitVoteTheorique/
+ * DroitVoteExercable), qui n'existe plus (voir le backfill one-shot
+ * 2026-10-27-backfill-quantites-depuis-pourcentages.sql, qui a converti ces
+ * anciennes transactions en quantité équivalente avant que les colonnes ne
+ * soient retirées).
  */
 function extrairePourcentage(
   nombre: number | null,
   cibleId: string,
-  societes: Societe[],
+  date: string,
+  historique: HistoriqueTotalSociete[],
   champTotal: ChampTotalSociete,
 ): number | null {
-  const total = societes.find((s) => s.id === cibleId)?.[champTotal] ?? null;
-  if (nombre === null || !total) return null;
+  if (nombre === null) return null;
+  const total = totalADate(historique, cibleId, champTotal, date);
+  if (!total) return null;
   return (nombre / total) * 100;
 }
 
@@ -43,19 +70,22 @@ function extrairePourcentage(
  * en compte ici (c'est précisément le rôle de la dérivation en %). Pour ces
  * indicateurs "nombre", le "total" se limite donc au direct.
  */
-const METRIQUES: Record<Metrique, { extraire: (t: Transaction, societes: Societe[]) => number | null; chainable: boolean }> = {
+const METRIQUES: Record<
+  Metrique,
+  { extraire: (t: Transaction, historique: HistoriqueTotalSociete[]) => number | null; chainable: boolean }
+> = {
   capital: {
-    extraire: (t, societes) => extrairePourcentage(t.nombreActions, t.cibleId, societes, "nombreTotalActions"),
+    extraire: (t, historique) => extrairePourcentage(t.nombreActions, t.cibleId, t.date, historique, "nombreTotalActions"),
     chainable: true,
   },
   droitVoteTheorique: {
-    extraire: (t, societes) =>
-      extrairePourcentage(t.nombreDroitVoteTheorique, t.cibleId, societes, "nombreTotalDroitVoteTheorique"),
+    extraire: (t, historique) =>
+      extrairePourcentage(t.nombreDroitVoteTheorique, t.cibleId, t.date, historique, "nombreTotalDroitVoteTheorique"),
     chainable: true,
   },
   droitVoteExercable: {
-    extraire: (t, societes) =>
-      extrairePourcentage(t.nombreDroitVoteExercable, t.cibleId, societes, "nombreTotalDroitVoteExercable"),
+    extraire: (t, historique) =>
+      extrairePourcentage(t.nombreDroitVoteExercable, t.cibleId, t.date, historique, "nombreTotalDroitVoteExercable"),
     chainable: true,
   },
   nombreActions: { extraire: (t) => t.nombreActions, chainable: false },
@@ -66,11 +96,12 @@ const METRIQUES: Record<Metrique, { extraire: (t: Transaction, societes: Societe
 /**
  * Valeur d'une métrique pour une transaction précise — même dérivation que
  * dans les agrégats ci-dessous (nombre rapporté au total de la société
- * cible). Utilisé pour l'affichage brut d'une transaction (tableau des
- * transactions), indépendamment de tout agrégat par actionnaire.
+ * cible en vigueur à la date de cette transaction). Utilisé pour
+ * l'affichage brut d'une transaction (tableau des transactions),
+ * indépendamment de tout agrégat par actionnaire.
  */
-export function extraireValeurTransaction(t: Transaction, metrique: Metrique, societes: Societe[]): number | null {
-  return METRIQUES[metrique].extraire(t, societes);
+export function extraireValeurTransaction(t: Transaction, metrique: Metrique, historique: HistoriqueTotalSociete[]): number | null {
+  return METRIQUES[metrique].extraire(t, historique);
 }
 
 export interface Participation {
@@ -99,7 +130,7 @@ export interface Participation {
 export function calculerParticipations(
   transactions: Transaction[],
   metrique: Metrique,
-  societes: Societe[],
+  historique: HistoriqueTotalSociete[],
   dateLimite?: string,
 ): Participation[] {
   const extraire = METRIQUES[metrique].extraire;
@@ -119,7 +150,7 @@ export function calculerParticipations(
   }
 
   for (const t of transactionsPertinentes) {
-    const valeur = extraire(t, societes);
+    const valeur = extraire(t, historique);
     if (valeur === null || valeur === undefined) continue;
     // Un acheteur hors groupe (acheteurId null, nom libre) n'est pas une
     // société suivie : impossible de le faire figurer comme actionnaire
@@ -148,10 +179,10 @@ const SEUIL_PARTICIPATION = 0.001;
 function construireDirect(
   transactions: Transaction[],
   metrique: Metrique,
-  societes: Societe[],
+  historique: HistoriqueTotalSociete[],
   dateLimite?: string,
 ): Map<string, Map<string, number>> {
-  const directs = calculerParticipations(transactions, metrique, societes, dateLimite);
+  const directs = calculerParticipations(transactions, metrique, historique, dateLimite);
   const direct = new Map<string, Map<string, number>>();
   directs.forEach((p) => {
     if (!direct.has(p.acheteurId)) direct.set(p.acheteurId, new Map());
@@ -180,10 +211,10 @@ function construireDirect(
 export function calculerParticipationsDetaillees(
   transactions: Transaction[],
   metrique: Metrique,
-  societes: Societe[],
+  historique: HistoriqueTotalSociete[],
   dateLimite?: string,
 ): ParticipationDetaillee[] {
-  const direct = construireDirect(transactions, metrique, societes, dateLimite);
+  const direct = construireDirect(transactions, metrique, historique, dateLimite);
 
   if (!METRIQUES[metrique].chainable) {
     const resultat: ParticipationDetaillee[] = [];
@@ -262,10 +293,10 @@ export function calculerCheminsParticipation(
   acheteurId: string,
   cibleId: string,
   metrique: Metrique,
-  societes: Societe[],
+  historique: HistoriqueTotalSociete[],
   dateLimite?: string,
 ): CheminParticipation[] {
-  const direct = construireDirect(transactions, metrique, societes, dateLimite);
+  const direct = construireDirect(transactions, metrique, historique, dateLimite);
 
   if (!METRIQUES[metrique].chainable) {
     const valeur = direct.get(acheteurId)?.get(cibleId);
@@ -325,7 +356,7 @@ export function valeurGlobale(
   societeId: string,
   transactions: Transaction[],
   metrique: Metrique,
-  societes: Societe[],
+  historique: HistoriqueTotalSociete[],
   dateLimite?: string,
 ): number | null {
   const extraire = METRIQUES[metrique].extraire;
@@ -335,7 +366,7 @@ export function valeurGlobale(
   let somme = 0;
   let trouve = false;
   for (const t of pertinentes) {
-    const valeur = extraire(t, societes);
+    const valeur = extraire(t, historique);
     if (valeur === null || valeur === undefined) continue;
     trouve = true;
     if (t.acheteurId !== null) somme += valeur;

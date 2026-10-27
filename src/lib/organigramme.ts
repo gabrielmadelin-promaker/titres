@@ -1,4 +1,4 @@
-import type { Societe, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
 import { calculerParticipations } from "./participations";
 
 export interface NoeudOrganigramme {
@@ -77,11 +77,12 @@ const MARGE_RETOUR = 70;
  */
 export function calculerOrganigramme(
   societes: Societe[],
+  historiqueTotaux: HistoriqueTotalSociete[],
   transactions: Transaction[],
   dateLimite?: string,
 ): Organigramme {
   const societeParId = new Map(societes.map((s) => [s.id, s]));
-  const participations = calculerParticipations(transactions, "capital", societes, dateLimite);
+  const participations = calculerParticipations(transactions, "capital", historiqueTotaux, dateLimite);
   const tousLiens = participations
     .filter((p) => p.valeurTotale > 0.001)
     .map((p) => ({ acheteurId: p.acheteurId, cibleId: p.cibleId, pourcentage: p.valeurTotale }));

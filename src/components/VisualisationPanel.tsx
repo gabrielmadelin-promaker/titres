@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Societe, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
 import { formatDate, formatNombre } from "../lib/format";
 import { BOX_H, BOX_W, GAP_GROUPE, LIGNE_GROUPE_H, calculerOrganigramme } from "../lib/organigramme";
 import { calculerAretes } from "../lib/aretes";
 
 interface Props {
   societes: Societe[];
+  historiqueTotaux: HistoriqueTotalSociete[];
   transactions: Transaction[];
 }
 
@@ -13,7 +14,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function VisualisationPanel({ societes, transactions }: Props) {
+export function VisualisationPanel({ societes, historiqueTotaux, transactions }: Props) {
   const [date, setDate] = useState(today());
   const [echelle, setEchelle] = useState(1);
   const [echelleImpression, setEchelleImpression] = useState<number | null>(null);
@@ -21,8 +22,8 @@ export function VisualisationPanel({ societes, transactions }: Props) {
   const conteneurRef = useRef<HTMLDivElement>(null);
 
   const organigramme = useMemo(
-    () => calculerOrganigramme(societes, transactions, date),
-    [societes, transactions, date],
+    () => calculerOrganigramme(societes, historiqueTotaux, transactions, date),
+    [societes, historiqueTotaux, transactions, date],
   );
 
   const aretes = useMemo(() => calculerAretes(organigramme), [organigramme]);

@@ -7,14 +7,27 @@ export interface Societe {
   siegeSocial: string | null;
   siren: string | null;
   lei: string | null;
-  /**
-   * Nombre total d'actions / de droits de vote théorique / de droits de
-   * vote exerçable émis par cette société : dénominateur servant à calculer
-   * automatiquement les % affichés dans l'application (capital, droit de
-   * vote théorique/exerçable). Tant que le total correspondant n'est pas
-   * renseigné, le % ne peut pas être calculé pour les transactions qui
-   * portent une quantité (voir participations.ts).
-   */
+}
+
+/**
+ * Nombre total d'actions / de droits de vote théorique / de droits de vote
+ * exerçable émis par une société, à partir d'une date d'effet — dénominateur
+ * servant à calculer automatiquement les % affichés dans l'application
+ * (capital, droit de vote théorique/exerçable). Historisé par date plutôt
+ * que stocké comme une valeur unique sur la société : une augmentation ou
+ * réduction de capital ultérieure ne doit jamais changer le % calculé pour
+ * une transaction passée, qui reste rapportée au total en vigueur à SA
+ * date (voir extraireValeurTransaction dans participations.ts). Le total
+ * applicable à une transaction est celui de la ligne la plus récente dont
+ * dateEffet est antérieure ou égale à la date de la transaction ; tant
+ * qu'aucune ligne ne couvre cette date (ou que le champ correspondant y est
+ * null), le % correspondant ne peut pas être calculé.
+ */
+export interface HistoriqueTotalSociete {
+  id: string;
+  societeId: string;
+  /** Date (ISO yyyy-mm-dd) à partir de laquelle ces totaux s'appliquent. */
+  dateEffet: string;
   nombreTotalActions: number | null;
   nombreTotalDroitVoteTheorique: number | null;
   nombreTotalDroitVoteExercable: number | null;
@@ -41,20 +54,6 @@ export interface Transaction {
   nombreDroitVoteExercable: number | null;
   /** Catégorie du titre (lettre de classe d'action A/B/C...), facultative. */
   categorie: string | null;
-  /**
-   * Pourcentages historiques, saisis directement avant l'introduction des
-   * quantités ci-dessus : plus jamais écrits ni lus par l'application
-   * (toujours null pour une transaction créée ou modifiée désormais). Le %
-   * affiché est désormais systématiquement dérivé de la quantité
-   * correspondante ci-dessus, rapportée au total de la société cible — voir
-   * participations.ts — y compris pour les transactions anciennes, dont la
-   * quantité a été reconstituée une fois pour toutes à partir de ce même
-   * pourcentage par 2026-10-27-backfill-quantites-depuis-pourcentages.sql.
-   * Conservés en base uniquement comme archive de la saisie d'origine.
-   */
-  capital: number | null;
-  droitVoteTheorique: number | null;
-  droitVoteExercable: number | null;
   /** Société ayant cédé les actions, si connue et membre du groupe (sinon null, voir vendeurNomExterne). */
   vendeurId: string | null;
   /** Nom libre du vendeur quand il est connu mais hors groupe (vendeurId alors null). */

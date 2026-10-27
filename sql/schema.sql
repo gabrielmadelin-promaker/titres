@@ -20,15 +20,30 @@ CREATE TABLE dbo.Societes (
     Pays          NVARCHAR(100)    NULL,
     SiegeSocial   NVARCHAR(300)    NULL,
     Siren         NVARCHAR(20)     NULL,
-    Lei           NVARCHAR(20)     NULL,
-    -- Total émis par la société : dénominateur des pourcentages (Capital,
-    -- DV théorique, DV exerçable) calculés automatiquement à partir des
-    -- quantités des transactions. Tant qu'un total est NULL, le pourcentage
-    -- correspondant ne peut pas être calculé.
-    NombreTotalActions            DECIMAL(18,4) NULL,
-    NombreTotalDroitVoteTheorique DECIMAL(18,4) NULL,
-    NombreTotalDroitVoteExercable DECIMAL(18,4) NULL
+    Lei           NVARCHAR(20)     NULL
 );
+GO
+
+-- Total émis par une société, dénominateur des pourcentages (Capital, DV
+-- théorique, DV exerçable) calculés automatiquement à partir des quantités
+-- des transactions — historisé par date d'effet, pour qu'une augmentation
+-- ou réduction de capital ultérieure ne change jamais le % calculé pour une
+-- transaction passée (qui doit rester rapporté au total en vigueur à SA
+-- date, pas au total actuel). Le total applicable à une transaction est
+-- celui de la ligne la plus récente dont DateEffet <= date de la
+-- transaction ; tant qu'aucune ligne ne couvre cette date (ou que le champ
+-- correspondant y est NULL), le pourcentage ne peut pas être calculé.
+CREATE TABLE dbo.HistoriqueTotauxSociete (
+    Id                             UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_HistoriqueTotauxSociete PRIMARY KEY DEFAULT NEWID(),
+    SocieteId                      UNIQUEIDENTIFIER NOT NULL,
+    DateEffet                      DATE             NOT NULL,
+    NombreTotalActions             DECIMAL(18,4)    NULL,
+    NombreTotalDroitVoteTheorique  DECIMAL(18,4)    NULL,
+    NombreTotalDroitVoteExercable  DECIMAL(18,4)    NULL,
+    CONSTRAINT UQ_HistoriqueTotauxSociete_SocieteDate UNIQUE (SocieteId, DateEffet)
+);
+GO
+CREATE INDEX IX_HistoriqueTotauxSociete_SocieteId ON dbo.HistoriqueTotauxSociete (SocieteId);
 GO
 
 -- Pas de clé étrangère sur AcheteurId/CibleId/VendeurId : comme dans
@@ -52,15 +67,6 @@ CREATE TABLE dbo.Transactions (
     -- l'alimentation automatique des tables Actions/DroitsVoteTheorique/
     -- DroitsVoteExercable (voir plus bas).
     Categorie         NVARCHAR(10)     NULL,
-    -- Pourcentages de repli, conservés pour l'historique antérieur à
-    -- l'introduction des quantités ci-dessus : plus jamais saisis ni écrits
-    -- par l'application, qui calcule désormais le pourcentage à partir des
-    -- quantités et du total de la société cible (Societes.NombreTotalX).
-    -- N'affiché que si la quantité correspondante est absente sur une
-    -- transaction (donnée ancienne).
-    Capital           DECIMAL(6,2)     NULL,
-    DroitVoteTheorique DECIMAL(6,2)    NULL CONSTRAINT CK_Transactions_DVTheorique CHECK (DroitVoteTheorique BETWEEN -100 AND 100),
-    DroitVoteExercable DECIMAL(6,2)    NULL CONSTRAINT CK_Transactions_DVExercable CHECK (DroitVoteExercable BETWEEN -100 AND 100),
     VendeurId         UNIQUEIDENTIFIER NULL,
     VendeurNomExterne NVARCHAR(300)    NULL,
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),

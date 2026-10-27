@@ -106,12 +106,6 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     nombreDroitVoteTheorique: c.nombreDroitVoteTheorique ? Number(c.nombreDroitVoteTheorique) : null,
     nombreDroitVoteExercable: c.nombreDroitVoteExercable ? Number(c.nombreDroitVoteExercable) : null,
     categorie: c.categorie.trim() || null,
-    // Pourcentages historiques : plus jamais saisis ni envoyés par le
-    // formulaire — toujours null pour une transaction créée ou modifiée
-    // désormais (voir Transaction dans types.ts).
-    capital: null,
-    droitVoteTheorique: null,
-    droitVoteExercable: null,
     vendeurId: c.vendeurExterne ? null : c.vendeurId || null,
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,

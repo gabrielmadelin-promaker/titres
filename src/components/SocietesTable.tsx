@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { Societe, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
 import { formatDecimal, formatPourcentage } from "../lib/format";
 import { valeurGlobale } from "../lib/participations";
 import { PAYS } from "../lib/pays";
@@ -8,6 +8,7 @@ import { exporterXlsx } from "../lib/xlsxExport";
 
 interface Props {
   societes: Societe[];
+  historiqueTotaux: HistoriqueTotalSociete[];
   transactions: Transaction[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Societe, "id">) => void;
@@ -38,13 +39,6 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   const [siegeSocial, setSiegeSocial] = useState(societe.siegeSocial ?? "");
   const [siren, setSiren] = useState(societe.siren ?? "");
   const [lei, setLei] = useState(societe.lei ?? "");
-  const [nombreTotalActions, setNombreTotalActions] = useState(societe.nombreTotalActions?.toString() ?? "");
-  const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(
-    societe.nombreTotalDroitVoteTheorique?.toString() ?? "",
-  );
-  const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(
-    societe.nombreTotalDroitVoteExercable?.toString() ?? "",
-  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,9 +51,6 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
       lei: lei.trim() || null,
-      nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
-      nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
-      nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
   }
 
@@ -102,36 +93,6 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
         <label>LEI</label>
         <input type="text" value={lei} onChange={(e) => setLei(e.target.value)} />
       </div>
-      <div className="form-field">
-        <label>Nombre total d'actions émises</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalActions}
-          onChange={(e) => setNombreTotalActions(e.target.value)}
-        />
-      </div>
-      <div className="form-field">
-        <label>Nombre total de droits de vote théorique émis</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalDroitVoteTheorique}
-          onChange={(e) => setNombreTotalDroitVoteTheorique(e.target.value)}
-        />
-      </div>
-      <div className="form-field">
-        <label>Nombre total de droits de vote exerçable émis</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalDroitVoteExercable}
-          onChange={(e) => setNombreTotalDroitVoteExercable(e.target.value)}
-        />
-      </div>
       <div className="edit-row-actions">
         <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
           Annuler
@@ -144,7 +105,7 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   );
 }
 
-export function SocietesTable({ societes, transactions, onDelete, onUpdate }: Props) {
+export function SocietesTable({ societes, historiqueTotaux, transactions, onDelete, onUpdate }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "nom", sens: "asc" });
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
 
@@ -152,12 +113,12 @@ export function SocietesTable({ societes, transactions, onDelete, onUpdate }: Pr
     () =>
       societes.map((s) => ({
         societe: s,
-        totalActions: valeurGlobale(s.id, transactions, "nombreActions", societes),
-        capital: valeurGlobale(s.id, transactions, "capital", societes),
-        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", societes),
-        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", societes),
+        totalActions: valeurGlobale(s.id, transactions, "nombreActions", historiqueTotaux),
+        capital: valeurGlobale(s.id, transactions, "capital", historiqueTotaux),
+        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", historiqueTotaux),
+        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", historiqueTotaux),
       })),
-    [societes, transactions],
+    [societes, transactions, historiqueTotaux],
   );
 
   const triees = useMemo(() => {

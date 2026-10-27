@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { HistoriqueTotauxPanel } from "./components/HistoriqueTotauxPanel";
 import { ImportSocietes } from "./components/ImportSocietes";
 import { ImportTransactions } from "./components/ImportTransactions";
 import { LoginForm } from "./components/LoginForm";
@@ -13,10 +14,11 @@ import { VisualisationPanel } from "./components/VisualisationPanel";
 import * as api from "./lib/api";
 import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
 import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
-import type { Societe, Titre, Transaction } from "./types";
+import type { HistoriqueTotalSociete, Societe, Titre, Transaction } from "./types";
 
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
+  { id: "totaux", label: "Totaux" },
   { id: "transactions", label: "Transactions" },
   { id: "participations", label: "Participations" },
   { id: "titres", label: "Titres" },
@@ -38,6 +40,7 @@ function App() {
   const [verificationSession, setVerificationSession] = useState(true);
 
   const [societes, setSocietes] = useState<Societe[]>([]);
+  const [historiqueTotaux, setHistoriqueTotaux] = useState<HistoriqueTotalSociete[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [actions, setActions] = useState<Titre[]>([]);
   const [droitsVoteTheorique, setDroitsVoteTheorique] = useState<Titre[]>([]);
@@ -87,14 +90,16 @@ function App() {
     const estDsi = utilisateurConnecte.role === "DSI";
     Promise.all([
       api.fetchSocietes(),
+      api.fetchHistoriqueTotaux(),
       api.fetchTransactions(),
       api.fetchActions(),
       api.fetchDroitsVoteTheorique(),
       api.fetchDroitsVoteExercable(),
       estDsi ? api.fetchUtilisateurs() : Promise.resolve([]),
     ])
-      .then(([s, t, a, dvt, dve, u]) => {
+      .then(([s, ht, t, a, dvt, dve, u]) => {
         setSocietes(s);
+        setHistoriqueTotaux(ht);
         setTransactions(t);
         setActions(a);
         setDroitsVoteTheorique(dvt);
@@ -156,6 +161,41 @@ function App() {
     } catch (e) {
       setSocietes(avant);
       gererErreur(e, "Impossible de modifier la société");
+    }
+  }
+
+  async function ajouterHistoriqueTotal(ligne: Omit<HistoriqueTotalSociete, "id">) {
+    try {
+      const creee = await api.creerHistoriqueTotal(ligne);
+      setHistoriqueTotaux((prev) => [...prev, creee]);
+      setErreur(null);
+      return true;
+    } catch (e) {
+      gererErreur(e, "Impossible d'ajouter cette ligne d'historique");
+      return false;
+    }
+  }
+
+  async function modifierHistoriqueTotal(id: string, champs: Omit<HistoriqueTotalSociete, "id">) {
+    const avant = historiqueTotaux;
+    setHistoriqueTotaux((prev) => prev.map((h) => (h.id === id ? { ...h, ...champs } : h)));
+    try {
+      await api.modifierHistoriqueTotal(id, champs);
+      setErreur(null);
+    } catch (e) {
+      setHistoriqueTotaux(avant);
+      gererErreur(e, "Impossible de modifier cette ligne d'historique");
+    }
+  }
+
+  async function supprimerHistoriqueTotal(id: string) {
+    if (!window.confirm("Supprimer cette ligne d'historique ?")) return;
+    try {
+      await api.supprimerHistoriqueTotal(id);
+      setHistoriqueTotaux((prev) => prev.filter((h) => h.id !== id));
+      setErreur(null);
+    } catch (e) {
+      gererErreur(e, "Impossible de supprimer cette ligne d'historique");
     }
   }
 
@@ -326,9 +366,28 @@ function App() {
               <h3>Liste des sociétés</h3>
               <SocietesTable
                 societes={societes}
+                historiqueTotaux={historiqueTotaux}
                 transactions={transactions}
                 onDelete={supprimerSociete}
                 onUpdate={modifierSociete}
+              />
+            </section>
+          )}
+
+          {onglet === "totaux" && (
+            <section className="panel">
+              <h2>Totaux</h2>
+              <p className="subtitle-panel">
+                Nombre total d'actions et de droits de vote émis par chaque société, par date d'effet — une
+                augmentation ou réduction de capital ultérieure n'y change jamais le % calculé pour une transaction
+                passée.
+              </p>
+              <HistoriqueTotauxPanel
+                societes={societes}
+                historique={historiqueTotaux}
+                onAdd={ajouterHistoriqueTotal}
+                onUpdate={modifierHistoriqueTotal}
+                onDelete={supprimerHistoriqueTotal}
               />
             </section>
           )}
@@ -343,6 +402,7 @@ function App() {
               <TransactionsTable
                 transactions={transactions}
                 societes={societes}
+                historiqueTotaux={historiqueTotaux}
                 onDelete={supprimerTransaction}
                 onUpdate={modifierTransaction}
               />
@@ -353,7 +413,7 @@ function App() {
             <section className="panel">
               <h2>Participations</h2>
               <p className="subtitle-panel">Qui détient combien du capital de qui.</p>
-              <ParticipationsTable societes={societes} transactions={transactions} />
+              <ParticipationsTable societes={societes} historiqueTotaux={historiqueTotaux} transactions={transactions} />
             </section>
           )}
 
@@ -382,7 +442,7 @@ function App() {
           )}
 
           {onglet === "visualisation" && (
-            <VisualisationPanel societes={societes} transactions={transactions} />
+            <VisualisationPanel societes={societes} historiqueTotaux={historiqueTotaux} transactions={transactions} />
           )}
         </main>
       )}

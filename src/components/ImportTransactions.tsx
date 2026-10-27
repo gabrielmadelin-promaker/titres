@@ -113,12 +113,6 @@ export function ImportTransactions({ societes, onImport }: Props) {
             "nombre dv exercable",
           ),
           categorie: texteColonne(ligne, "catégorie", "categorie") || null,
-          // Pourcentages historiques : plus jamais importés directement
-          // (voir le rejet explicite ci-dessus si une colonne « Capital »
-          // est détectée).
-          capital: null,
-          droitVoteTheorique: null,
-          droitVoteExercable: null,
           vendeurId: vendeur?.id ?? null,
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
