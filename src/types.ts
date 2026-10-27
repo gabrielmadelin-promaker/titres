@@ -43,10 +43,14 @@ export interface Transaction {
   categorie: string | null;
   /**
    * Pourcentages historiques, saisis directement avant l'introduction des
-   * quantités ci-dessus : plus jamais écrits par l'application pour une
-   * transaction créée ou modifiée désormais (toujours null dans ce cas).
-   * Ils ne servent plus qu'en repli d'affichage pour une transaction
-   * ancienne qui n'a pas de quantité correspondante — voir participations.ts.
+   * quantités ci-dessus : plus jamais écrits ni lus par l'application
+   * (toujours null pour une transaction créée ou modifiée désormais). Le %
+   * affiché est désormais systématiquement dérivé de la quantité
+   * correspondante ci-dessus, rapportée au total de la société cible — voir
+   * participations.ts — y compris pour les transactions anciennes, dont la
+   * quantité a été reconstituée une fois pour toutes à partir de ce même
+   * pourcentage par 2026-10-27-backfill-quantites-depuis-pourcentages.sql.
+   * Conservés en base uniquement comme archive de la saisie d'origine.
    */
   capital: number | null;
   droitVoteTheorique: number | null;

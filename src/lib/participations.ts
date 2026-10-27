@@ -11,30 +11,27 @@ export type Metrique =
 type ChampTotalSociete = "nombreTotalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
 
 /**
- * Un pourcentage (capital, droit de vote théorique/exerçable) n'est plus
- * saisi directement : il se dérive de la quantité correspondante saisie sur
- * la transaction (nombre d'actions / de DV théorique / de DV exerçable),
- * rapportée au total émis par la société cible (NombreTotalX, saisi une
- * fois sur la société). Dès que ce calcul n'est pas possible — société
- * cible sans total renseigné, qu'il y ait ou non une quantité sur la
- * transaction — on retombe sur le pourcentage historique de la
- * transaction plutôt que d'afficher un vide : en pratique, le nombre
- * d'actions était déjà un champ facultatif avant cette évolution, beaucoup
- * de transactions existantes en ont donc une sans qu'aucune société n'ait
- * encore de total configuré, et laisser le % vide dans ce cas serait une
- * régression par rapport à l'affichage d'avant (décision actée : ne rien
- * casser sur les données existantes).
+ * Un pourcentage (capital, droit de vote théorique/exerçable) n'est jamais
+ * saisi ni stocké : il se dérive uniquement de la quantité correspondante
+ * de la transaction (nombre d'actions / de DV théorique / de DV
+ * exerçable), rapportée au total émis par la société cible (NombreTotalX,
+ * saisi une fois sur la société). Null si l'un des deux manque — pas de
+ * quantité sur la transaction, ou pas de total configuré sur la société :
+ * aucun repli sur l'ancien pourcentage historique (Capital/
+ * DroitVoteTheorique/DroitVoteExercable), qui n'est plus jamais lu (voir
+ * le backfill one-shot 2026-10-27-backfill-quantites-depuis-pourcentages.sql,
+ * qui convertit ces anciennes transactions en quantité équivalente dès que
+ * leur société cible a un total renseigné).
  */
 function extrairePourcentage(
   nombre: number | null,
-  legacy: number | null,
   cibleId: string,
   societes: Societe[],
   champTotal: ChampTotalSociete,
 ): number | null {
   const total = societes.find((s) => s.id === cibleId)?.[champTotal] ?? null;
-  if (nombre !== null && total) return (nombre / total) * 100;
-  return legacy;
+  if (nombre === null || !total) return null;
+  return (nombre / total) * 100;
 }
 
 /**
@@ -48,17 +45,17 @@ function extrairePourcentage(
  */
 const METRIQUES: Record<Metrique, { extraire: (t: Transaction, societes: Societe[]) => number | null; chainable: boolean }> = {
   capital: {
-    extraire: (t, societes) => extrairePourcentage(t.nombreActions, t.capital, t.cibleId, societes, "nombreTotalActions"),
+    extraire: (t, societes) => extrairePourcentage(t.nombreActions, t.cibleId, societes, "nombreTotalActions"),
     chainable: true,
   },
   droitVoteTheorique: {
     extraire: (t, societes) =>
-      extrairePourcentage(t.nombreDroitVoteTheorique, t.droitVoteTheorique, t.cibleId, societes, "nombreTotalDroitVoteTheorique"),
+      extrairePourcentage(t.nombreDroitVoteTheorique, t.cibleId, societes, "nombreTotalDroitVoteTheorique"),
     chainable: true,
   },
   droitVoteExercable: {
     extraire: (t, societes) =>
-      extrairePourcentage(t.nombreDroitVoteExercable, t.droitVoteExercable, t.cibleId, societes, "nombreTotalDroitVoteExercable"),
+      extrairePourcentage(t.nombreDroitVoteExercable, t.cibleId, societes, "nombreTotalDroitVoteExercable"),
     chainable: true,
   },
   nombreActions: { extraire: (t) => t.nombreActions, chainable: false },
@@ -69,8 +66,7 @@ const METRIQUES: Record<Metrique, { extraire: (t: Transaction, societes: Societe
 /**
  * Valeur d'une métrique pour une transaction précise — même dérivation que
  * dans les agrégats ci-dessous (nombre rapporté au total de la société
- * cible, avec repli sur l'ancien pourcentage si aucune quantité n'est
- * renseignée). Utilisé pour l'affichage brut d'une transaction (tableau des
+ * cible). Utilisé pour l'affichage brut d'une transaction (tableau des
  * transactions), indépendamment de tout agrégat par actionnaire.
  */
 export function extraireValeurTransaction(t: Transaction, metrique: Metrique, societes: Societe[]): number | null {

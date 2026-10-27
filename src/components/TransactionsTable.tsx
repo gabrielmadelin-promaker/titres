@@ -256,7 +256,7 @@ export function TransactionsTable({ transactions, societes, onDelete, onUpdate }
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "capital"))}
-                  title="Calculé automatiquement (nombre d'actions ÷ total émis par la société cible). Pour une ancienne transaction sans nombre d'actions, affiche l'ancien pourcentage saisi."
+                  title="Calculé automatiquement (nombre d'actions ÷ total émis par la société cible). Vide si le nombre d'actions ou le total de la société cible n'est pas renseigné."
                 >
                   Capital %{flecheTri(tri, "capital")}
                 </th>
