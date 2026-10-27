@@ -33,9 +33,6 @@ export interface HistoriqueTotalSociete {
   nombreTotalDroitVoteExercable: number | null;
 }
 
-export const QUALIFICATIONS = ["Simple", "Fusion", "TUPE"] as const;
-export type Qualification = (typeof QUALIFICATIONS)[number];
-
 export interface Transaction {
   id: string;
   /** Société qui achète des actions, si elle fait partie du groupe (sinon null, voir acheteurNomExterne). */
@@ -60,7 +57,6 @@ export interface Transaction {
   vendeurNomExterne: string | null;
   /** Prix unitaire de l'action lors de la transaction, en euros. */
   prixAction: number | null;
-  qualification: Qualification;
   /**
    * Calculée par l'API, en euros — jamais saisie, jamais stockée en base :
    * recalculée à chaque lecture. Basée sur le FIFO réel des lots d'Actions

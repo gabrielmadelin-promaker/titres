@@ -70,8 +70,6 @@ CREATE TABLE dbo.Transactions (
     VendeurId         UNIQUEIDENTIFIER NULL,
     VendeurNomExterne NVARCHAR(300)    NULL,
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
-    Qualification     NVARCHAR(20)     NOT NULL CONSTRAINT DF_Transactions_Qualification DEFAULT 'Simple'
-                        CONSTRAINT CK_Transactions_Qualification CHECK (Qualification IN ('Simple', 'Fusion', 'TUPE')),
     -- Calculée et enregistrée par l'API à chaque création/modification (pas
     -- de colonne calculée SQL : le calcul a besoin du prix de la transaction
     -- la plus ancienne pour la même société, une requête sur d'autres

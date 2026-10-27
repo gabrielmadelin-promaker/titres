@@ -1,4 +1,4 @@
-import type { Qualification, Transaction } from "../types";
+import type { Transaction } from "../types";
 
 /** Représentation "brute" (chaînes de formulaire) des champs d'une transaction, partagée entre l'ajout et la modification. */
 export interface TransactionChamps {
@@ -17,7 +17,6 @@ export interface TransactionChamps {
   nombreDroitVoteExercable: string;
   categorie: string;
   prixAction: string;
-  qualification: Qualification;
 }
 
 function today(): string {
@@ -39,7 +38,6 @@ export function champsVides(): TransactionChamps {
     nombreDroitVoteExercable: "",
     categorie: "",
     prixAction: "",
-    qualification: "Simple",
   };
 }
 
@@ -58,7 +56,6 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
     nombreDroitVoteExercable: t.nombreDroitVoteExercable?.toString() ?? "",
     categorie: t.categorie ?? "",
     prixAction: t.prixAction?.toString() ?? "",
-    qualification: t.qualification,
   };
 }
 
@@ -109,7 +106,6 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     vendeurId: c.vendeurExterne ? null : c.vendeurId || null,
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,
-    qualification: c.qualification,
     // Calculée côté API, jamais saisie : valeur ignorée par le serveur à
     // l'écriture, remplacée par la vraie valeur renvoyée dans sa réponse.
     plusValue: null,

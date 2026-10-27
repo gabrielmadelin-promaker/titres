@@ -70,7 +70,6 @@ type Colonne =
   | "dvTheorique"
   | "dvExercable"
   | "prixAction"
-  | "qualification"
   | "plusValue";
 
 function formatOuTiret(valeur: number | null | undefined, formateur: (v: number) => string): string {
@@ -149,8 +148,6 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
           return extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? -Infinity;
         case "prixAction":
           return t.prixAction ?? -Infinity;
-        case "qualification":
-          return t.qualification;
         case "plusValue":
           return t.plusValue ?? -Infinity;
       }
@@ -179,7 +176,6 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
         "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? "",
         "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? "",
         "Prix de l'action (€)": t.prixAction ?? "",
-        Qualification: t.qualification,
         "Plus-value (€)": t.plusValue ?? "",
       })),
     );
@@ -270,9 +266,6 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "prixAction"))}>
                   Prix action{flecheTri(tri, "prixAction")}
                 </th>
-                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "qualification"))}>
-                  Qualification{flecheTri(tri, "qualification")}
-                </th>
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "plusValue"))}
@@ -305,7 +298,6 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
                       {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux), formatPourcentage)}
                     </td>
                     <td className="num">{formatOuTiret(t.prixAction, formatMontant)}</td>
-                    <td>{t.qualification}</td>
                     <td className="num">{formatOuTiret(t.plusValue, formatMontant)}</td>
                     <td className="actions">
                       <div className="actions-groupe">
@@ -324,7 +316,7 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
                   </tr>
                   {ligneEditee === t.id && (
                     <tr>
-                      <td colSpan={15}>
+                      <td colSpan={14}>
                         <TransactionEditRow
                           transaction={t}
                           societes={societes}

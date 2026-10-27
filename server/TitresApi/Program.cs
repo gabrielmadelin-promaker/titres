@@ -83,7 +83,6 @@ app.Use(async (context, next) =>
     await next();
 });
 
-var qualificationsValides = new[] { "Simple", "Fusion", "TUPE" };
 var rolesValides = new[] { "DSI", "Direction des titres" };
 
 app.MapGet("/api/health", async () =>
@@ -217,7 +216,7 @@ app.MapDelete("/api/historique-totaux-societe/{id:guid}", async (Guid id) =>
 const string ColonnesTransaction =
     "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, " +
     "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, " +
-    "VendeurId, VendeurNomExterne, PrixAction, Qualification, PlusValue";
+    "VendeurId, VendeurNomExterne, PrixAction, PlusValue";
 
 app.MapGet("/api/transactions", async () =>
 {
@@ -231,7 +230,7 @@ app.MapGet("/api/transactions", async () =>
     return Results.Ok(transactions.Select(t => t with { PlusValue = plusValues.GetValueOrDefault(t.Id) }));
 });
 
-(string? Erreur, string Qualification, string? AcheteurNomExterne, string? VendeurNomExterne) ValiderTransaction(TransactionInput input)
+(string? Erreur, string? AcheteurNomExterne, string? VendeurNomExterne) ValiderTransaction(TransactionInput input)
 {
     var acheteurNomExterne = string.IsNullOrWhiteSpace(input.AcheteurNomExterne) ? null : input.AcheteurNomExterne.Trim();
     var vendeurNomExterne = string.IsNullOrWhiteSpace(input.VendeurNomExterne) ? null : input.VendeurNomExterne.Trim();
@@ -239,24 +238,20 @@ app.MapGet("/api/transactions", async () =>
     // Acheteur : soit une société suivie (AcheteurId), soit un nom libre
     // (AcheteurNomExterne) pour un tiers hors groupe — jamais les deux, ni aucun des deux.
     if ((input.AcheteurId is null) == (acheteurNomExterne is null))
-        return ("Renseignez la société acheteuse (dans la liste, ou son nom si elle est hors groupe).", "", null, null);
+        return ("Renseignez la société acheteuse (dans la liste, ou son nom si elle est hors groupe).", null, null);
     // Vendeur : facultatif, mais pas les deux à la fois si renseigné.
     if (input.VendeurId is not null && vendeurNomExterne is not null)
-        return ("La société vendeuse ne peut pas être à la fois suivie et hors groupe.", "", null, null);
+        return ("La société vendeuse ne peut pas être à la fois suivie et hors groupe.", null, null);
     if (input.AcheteurId is not null && input.AcheteurId == input.CibleId)
-        return ("La société acheteuse doit être différente de la société cible.", "", null, null);
+        return ("La société acheteuse doit être différente de la société cible.", null, null);
     if (input.NombreActions is null or 0)
-        return ("Le nombre d'actions est requis, et ne peut pas être nul (négatif pour une vente).", "", null, null);
+        return ("Le nombre d'actions est requis, et ne peut pas être nul (négatif pour une vente).", null, null);
     if (input.PrixAction is < 0)
-        return ("Le prix de l'action ne peut pas être négatif.", "", null, null);
+        return ("Le prix de l'action ne peut pas être négatif.", null, null);
     if (string.IsNullOrWhiteSpace(input.Date))
-        return ("La date est requise.", "", null, null);
+        return ("La date est requise.", null, null);
 
-    var qualification = string.IsNullOrWhiteSpace(input.Qualification) ? "Simple" : input.Qualification;
-    if (!qualificationsValides.Contains(qualification))
-        return ("La qualification doit être Simple, Fusion ou TUPE.", "", null, null);
-
-    return (null, qualification, acheteurNomExterne, vendeurNomExterne);
+    return (null, acheteurNomExterne, vendeurNomExterne);
 }
 
 // PlusValue n'est jamais saisie, ni stockée en base : recalculée à chaque
@@ -613,7 +608,7 @@ async Task RetirerTitresDeTransaction(SqlConnection conn, IDbTransaction tx, Gui
 
 app.MapPost("/api/transactions", async (TransactionInput input) =>
 {
-    var (erreur, qualification, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
+    var (erreur, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
     if (erreur is not null)
         return Results.BadRequest(erreur);
 
@@ -633,14 +628,14 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
         // juste avant de répondre).
         await conn.ExecuteAsync(
             "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, " +
-            "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, PrixAction, Qualification) " +
+            "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, PrixAction) " +
             "VALUES (@Id, @AcheteurId, @AcheteurNomExterne, @CibleId, @Date, @NombreActions, " +
-            "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @Categorie, @VendeurId, @VendeurNomExterne, @PrixAction, @Qualification)",
+            "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @Categorie, @VendeurId, @VendeurNomExterne, @PrixAction)",
             new
             {
                 Id = transactionId, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
                 input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
-                vendeurNomExterne, input.PrixAction, Qualification = qualification,
+                vendeurNomExterne, input.PrixAction,
             },
             sqlTx);
 
@@ -665,7 +660,7 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
 
 app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input) =>
 {
-    var (erreur, qualification, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
+    var (erreur, acheteurNomExterne, vendeurNomExterne) = ValiderTransaction(input);
     if (erreur is not null)
         return Results.BadRequest(erreur);
 
@@ -688,13 +683,13 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
             "CibleId = @CibleId, [Date] = @Date, NombreActions = @NombreActions, " +
             "NombreDroitVoteTheorique = @NombreDroitVoteTheorique, NombreDroitVoteExercable = @NombreDroitVoteExercable, " +
             "Categorie = @Categorie, VendeurId = @VendeurId, " +
-            "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Qualification = @Qualification " +
+            "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction " +
             "WHERE Id = @id",
             new
             {
                 id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
                 input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
-                vendeurNomExterne, input.PrixAction, Qualification = qualification,
+                vendeurNomExterne, input.PrixAction,
             },
             sqlTx);
 
@@ -921,7 +916,6 @@ record Transaction(
     Guid? VendeurId,
     string? VendeurNomExterne,
     decimal? PrixAction,
-    string Qualification,
     decimal? PlusValue);
 
 record TransactionInput(
@@ -935,8 +929,7 @@ record TransactionInput(
     string? Categorie,
     Guid? VendeurId,
     string? VendeurNomExterne,
-    decimal? PrixAction,
-    string? Qualification);
+    decimal? PrixAction);
 
 // Projection minimale d'une transaction pour ValiderBornesParticipation :
 // seules les colonnes qui contribuent aux totaux par actionnaire.

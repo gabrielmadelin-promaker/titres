@@ -1,5 +1,4 @@
 import type { Societe } from "../types";
-import { QUALIFICATIONS, type Qualification } from "../types";
 import type { TransactionChamps } from "../lib/transactionChamps";
 
 interface Props {
@@ -175,21 +174,6 @@ export function TransactionChampsFields({ champs, onChange, societes, idPrefix }
           value={champs.prixAction}
           onChange={(e) => set("prixAction", e.target.value)}
         />
-      </div>
-
-      <div className="form-field">
-        <label htmlFor={`${idPrefix}-qualification`}>Qualification</label>
-        <select
-          id={`${idPrefix}-qualification`}
-          value={champs.qualification}
-          onChange={(e) => set("qualification", e.target.value as Qualification)}
-        >
-          {QUALIFICATIONS.map((q) => (
-            <option key={q} value={q}>
-              {q}
-            </option>
-          ))}
-        </select>
       </div>
     </>
   );

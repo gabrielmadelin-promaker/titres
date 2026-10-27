@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { QUALIFICATIONS, type Qualification, type Societe, type Transaction } from "../types";
+import type { Societe, Transaction } from "../types";
 import { dateExcelVersIso, lireFeuilleXlsx, nombreColonne, texteColonne, valeurColonne } from "../lib/xlsxImport";
 
 interface Props {
@@ -7,10 +7,6 @@ interface Props {
   onImport: (
     transactions: Omit<Transaction, "id">[],
   ) => Promise<{ ajoutees: number; erreurs: string[] }>;
-}
-
-function estQualificationValide(valeur: string): valeur is Qualification {
-  return (QUALIFICATIONS as readonly string[]).includes(valeur);
 }
 
 export function ImportTransactions({ societes, onImport }: Props) {
@@ -89,9 +85,6 @@ export function ImportTransactions({ societes, onImport }: Props) {
         const nomVendeur = texteColonne(ligne, "vendeur", "société vendeuse", "societe vendeuse");
         const vendeur = nomVendeur ? trouverSociete(nomVendeur) : undefined;
 
-        const qualificationBrute = texteColonne(ligne, "qualification") || "Simple";
-        const qualification = estQualificationValide(qualificationBrute) ? qualificationBrute : "Simple";
-
         valides.push({
           acheteurId: acheteur?.id ?? null,
           acheteurNomExterne: acheteur ? null : nomAcheteur,
@@ -116,7 +109,6 @@ export function ImportTransactions({ societes, onImport }: Props) {
           vendeurId: vendeur?.id ?? null,
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
-          qualification,
           // Calculée côté API, jamais importée.
           plusValue: null,
         });
@@ -146,7 +138,7 @@ export function ImportTransactions({ societes, onImport }: Props) {
       <p className="import-hint">
         Colonnes : « Acheteur », « Cible », « Nombre d'actions » (non nul, négatif pour une vente), « Date »
         (requises) ; « Nombre de droits de vote théorique », « Nombre de droits de vote exerçable », « Catégorie »,
-        « Vendeur », « Prix de l'action », « Qualification » (Simple/Fusion/TUPE — facultatives). « Cible » doit être
+        « Vendeur », « Prix de l'action » (facultatives). « Cible » doit être
         une société déjà importée ; « Acheteur »/« Vendeur » non reconnus sont importés tels quels comme sociétés
         hors groupe. Les pourcentages (anciens fichiers) ne sont plus acceptés à l'import : ils sont désormais
         calculés automatiquement à partir du nombre d'actions et du total émis par la société cible.
