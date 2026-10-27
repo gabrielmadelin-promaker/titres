@@ -16,11 +16,11 @@
 -- SynchroniserTitresMetrique/ConsommerLots/CreerLot dans
 -- server/TitresApi/Program.cs), rejouée ici une transaction à la fois.
 --
--- Recalcule aussi, pour CHAQUE transaction existante (pas seulement celles
--- créées/modifiées après ce script), sa colonne PlusValue — avec la même
--- règle FIFO que l'API (CalculerPlusValue) : nécessaire parce que
--- redéployer l'API ne recalcule jamais rétroactivement les transactions
--- déjà en base, seulement celles créées ou modifiées ensuite.
+-- Ne touche jamais à la colonne Transactions.PlusValue : elle n'est plus
+-- jamais lue ni écrite par l'API, qui recalcule la plus-value à la volée à
+-- chaque lecture (voir CalculerPlusValues dans server/TitresApi/Program.cs),
+-- en rejouant exactement cette même logique FIFO directement depuis les
+-- transactions — aucun rattrapage de colonne n'est donc nécessaire ici.
 --
 -- Par lot plutôt que par titre unitaire : une transaction (même avec une
 -- quantité très élevée, y compris une valeur aberrante par erreur de
@@ -216,7 +216,7 @@ DECLARE @TransactionId UNIQUEIDENTIFIER, @AcheteurId UNIQUEIDENTIFIER, @Acheteur
         @VendeurNomExterne NVARCHAR(300), @PrixAction DECIMAL(18,4);
 
 DECLARE @VendeurRenseigne BIT, @AcheteurEgalVendeur BIT;
-DECLARE @Qte DECIMAL(18,4), @PrixReporte DECIMAL(18,4), @PlusValue DECIMAL(18,4);
+DECLARE @Qte DECIMAL(18,4), @PrixReporte DECIMAL(18,4);
 
 DECLARE curseurTransactions CURSOR LOCAL FAST_FORWARD FOR
     SELECT Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, NombreDroitVoteTheorique,
@@ -233,12 +233,6 @@ BEGIN
     SET @VendeurRenseigne = CASE WHEN @VendeurId IS NOT NULL OR @VendeurNomExterne IS NOT NULL THEN 1 ELSE 0 END;
     -- Acheteur == vendeur : rien à faire pour cette transaction (cas déjà écarté à la saisie, par précaution).
     SET @AcheteurEgalVendeur = CASE WHEN @VendeurId IS NOT NULL AND @AcheteurId IS NOT NULL AND @VendeurId = @AcheteurId THEN 1 ELSE 0 END;
-    -- PlusValue : recalculée pour TOUTE transaction existante (pas seulement
-    -- celles créées/modifiées après ce script), avec la même règle FIFO que
-    -- l'API : |NombreActions| x (PrixAction - prix d'origine moyen des
-    -- titres Actions consommés par cette transaction) ; NULL si aucun titre
-    -- n'a été consommé (achat externe pur, pas de prix d'origine connu).
-    SET @PlusValue = NULL;
 
     -- ========================= Actions =========================
     IF @AcheteurEgalVendeur = 0 AND @NombreActions IS NOT NULL AND @NombreActions <> 0
@@ -253,8 +247,6 @@ BEGIN
                 INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
                 VALUES (NEWID(), @CibleId, @Categorie, @VendeurId, @VendeurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
             END
-            IF @PrixReporte IS NOT NULL AND @PrixAction IS NOT NULL
-                SET @PlusValue = @Qte * (@PrixAction - @PrixReporte);
         END
         ELSE
         BEGIN
@@ -266,13 +258,8 @@ BEGIN
 
             INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId)
             VALUES (NEWID(), @CibleId, @Categorie, @AcheteurId, @AcheteurNomExterne, @Qte, ISNULL(@PrixReporte, @PrixAction), @PrixAction, @Date, @TransactionId);
-
-            IF @PrixReporte IS NOT NULL AND @PrixAction IS NOT NULL
-                SET @PlusValue = @Qte * (@PrixAction - @PrixReporte);
         END
     END
-
-    UPDATE dbo.Transactions SET PlusValue = @PlusValue WHERE Id = @TransactionId;
 
     -- ==================== DroitsVoteTheorique ====================
     IF @AcheteurEgalVendeur = 0 AND @NombreDroitVoteTheorique IS NOT NULL AND @NombreDroitVoteTheorique <> 0

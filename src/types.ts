@@ -59,12 +59,13 @@ export interface Transaction {
   prixAction: number | null;
   qualification: Qualification;
   /**
-   * Calculée et enregistrée par l'API, en euros — jamais saisie. Basée sur
-   * le FIFO réel des lots d'Actions consommés par cette transaction :
-   * |NombreActions| × (PrixAction − prix d'origine moyen des titres
-   * effectivement vendus). Nulle si cette transaction n'a fait perdre aucun
-   * titre à personne (ex. achat externe pur, sans consommation d'un lot
-   * existant) : il n'y a alors pas de prix d'origine auquel se comparer.
+   * Calculée par l'API, en euros — jamais saisie, jamais stockée en base :
+   * recalculée à chaque lecture. Basée sur le FIFO réel des lots d'Actions
+   * consommés par cette transaction : |NombreActions| × (PrixAction − prix
+   * d'origine moyen des titres effectivement vendus). Nulle si cette
+   * transaction n'a fait perdre aucun titre à personne (ex. achat externe
+   * pur, sans consommation d'un lot existant) : il n'y a alors pas de prix
+   * d'origine auquel se comparer.
    */
   plusValue: number | null;
 }
