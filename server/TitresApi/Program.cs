@@ -579,58 +579,6 @@ app.MapGet("/api/titres/droits-vote-exercable", async () =>
     return Results.Ok(titres);
 });
 
-// Vide puis régénère entièrement les trois tables de titres à partir de
-// l'historique des transactions : rejoue SynchroniserTitres pour chaque
-// transaction existante, dans l'ordre chronologique (comme si elles
-// venaient d'être saisies une par une dans cet ordre) — exactement la même
-// logique qu'une création normale, voir le commentaire sur
-// SynchroniserTitres pour ses limites. Opération ponctuelle, déclenchée à
-// la main (bouton dans l'onglet Titres) : à utiliser pour initialiser les
-// tables après ce déploiement, ou pour les reconstruire depuis zéro en cas
-// d'incohérence constatée. Sans effet sur les transactions elles-mêmes.
-app.MapPost("/api/titres/initialiser", async () =>
-{
-    await using var conn = new SqlConnection(ConnectionString());
-    await conn.OpenAsync();
-    await using var sqlTx = await conn.BeginTransactionAsync();
-    try
-    {
-        foreach (var table in TablesTitres)
-            await conn.ExecuteAsync($"DELETE FROM dbo.{table}", transaction: sqlTx);
-
-        var transactions = (await conn.QueryAsync<TransactionPourInitialisation>(
-            "SELECT Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, " +
-            "NombreActions, NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, PrixAction " +
-            "FROM dbo.Transactions ORDER BY [Date] ASC, Id ASC",
-            transaction: sqlTx)).ToList();
-
-        foreach (var t in transactions)
-        {
-            await SynchroniserTitres(
-                conn, sqlTx, t.CibleId, t.Categorie, t.AcheteurId, t.AcheteurNomExterne, t.VendeurId, t.VendeurNomExterne,
-                t.NombreActions, t.NombreDroitVoteTheorique, t.NombreDroitVoteExercable, t.PrixAction, t.Date, t.Id);
-        }
-
-        var compte = new Dictionary<string, int>();
-        foreach (var table in TablesTitres)
-            compte[table] = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM dbo.{table}", transaction: sqlTx);
-
-        await sqlTx.CommitAsync();
-        return Results.Ok(new
-        {
-            transactionsTraitees = transactions.Count,
-            actions = compte["Actions"],
-            droitsVoteTheorique = compte["DroitsVoteTheorique"],
-            droitsVoteExercable = compte["DroitsVoteExercable"],
-        });
-    }
-    catch
-    {
-        await sqlTx.RollbackAsync();
-        throw;
-    }
-});
-
 // Génère un mot de passe temporaire de 10 caractères, sans les caractères
 // ambigus à recopier (0/O, 1/l/I). Pas de niveau cryptographique requis vu
 // l'usage (solution provisoire en attendant le SSO), mais RandomNumberGenerator
@@ -823,13 +771,6 @@ record Titre(
     decimal? PrixAcquisition,
     string? DateAcquisition,
     Guid? TransactionOrigineId);
-
-// Projection minimale d'une transaction déjà en base, pour rejouer
-// SynchroniserTitres sur tout l'historique (voir /api/titres/initialiser).
-record TransactionPourInitialisation(
-    Guid Id, Guid? AcheteurId, string? AcheteurNomExterne, Guid CibleId, string Date,
-    decimal? NombreActions, decimal? NombreDroitVoteTheorique, decimal? NombreDroitVoteExercable,
-    string? Categorie, Guid? VendeurId, string? VendeurNomExterne, decimal? PrixAction);
 
 record SessionInfo(string Email, string Role);
 

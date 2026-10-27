@@ -15,15 +15,15 @@ type ChampTotalSociete = "nombreTotalActions" | "nombreTotalDroitVoteTheorique" 
  * saisi directement : il se dérive de la quantité correspondante saisie sur
  * la transaction (nombre d'actions / de DV théorique / de DV exerçable),
  * rapportée au total émis par la société cible (NombreTotalX, saisi une
- * fois sur la société). Si la transaction porte une quantité mais que la
- * cible n'a pas de total renseigné, le % n'est pas calculable (pas de
- * dénominateur connu) : on renvoie null plutôt que de réutiliser un vieux
- * pourcentage, qui serait incohérent avec la quantité désormais saisie.
- *
- * Si la transaction n'a PAS de quantité renseignée (données saisies avant
- * l'introduction des quantités), elle garde son pourcentage historique
- * affiché en repli — décision actée pour ne rien casser sur les données
- * existantes, sans script de correction forcé.
+ * fois sur la société). Dès que ce calcul n'est pas possible — société
+ * cible sans total renseigné, qu'il y ait ou non une quantité sur la
+ * transaction — on retombe sur le pourcentage historique de la
+ * transaction plutôt que d'afficher un vide : en pratique, le nombre
+ * d'actions était déjà un champ facultatif avant cette évolution, beaucoup
+ * de transactions existantes en ont donc une sans qu'aucune société n'ait
+ * encore de total configuré, et laisser le % vide dans ce cas serait une
+ * régression par rapport à l'affichage d'avant (décision actée : ne rien
+ * casser sur les données existantes).
  */
 function extrairePourcentage(
   nombre: number | null,
@@ -32,9 +32,9 @@ function extrairePourcentage(
   societes: Societe[],
   champTotal: ChampTotalSociete,
 ): number | null {
-  if (nombre === null) return legacy;
   const total = societes.find((s) => s.id === cibleId)?.[champTotal] ?? null;
-  return total ? (nombre / total) * 100 : null;
+  if (nombre !== null && total) return (nombre / total) * 100;
+  return legacy;
 }
 
 /**

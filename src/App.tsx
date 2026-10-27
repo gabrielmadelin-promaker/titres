@@ -11,7 +11,7 @@ import { TitresPanel } from "./components/TitresPanel";
 import { UtilisateursPanel } from "./components/UtilisateursPanel";
 import { VisualisationPanel } from "./components/VisualisationPanel";
 import * as api from "./lib/api";
-import type { ResultatInitialisationTitres, Utilisateur, UtilisateurConnecte } from "./lib/api";
+import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
 import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
 import type { Societe, Titre, Transaction } from "./types";
 
@@ -121,23 +121,6 @@ function App() {
       setDroitsVoteExercable(dve);
     } catch (e) {
       gererErreur(e, "Impossible de recharger les titres");
-    }
-  }
-
-  // Opération ponctuelle (bouton de l'onglet Titres) : régénère les 3
-  // tables de titres à partir de l'historique des transactions. Renvoie
-  // null en cas d'échec (déjà signalé via le bandeau d'erreur global) —
-  // TitresPanel n'a donc qu'à distinguer succès/échec pour son propre
-  // message local.
-  async function initialiserTitres(): Promise<ResultatInitialisationTitres | null> {
-    try {
-      const resultat = await api.initialiserTitres();
-      await rechargerTitres();
-      setErreur(null);
-      return resultat;
-    } catch (e) {
-      gererErreur(e, "Impossible d'initialiser les titres");
-      return null;
     }
   }
 
@@ -386,7 +369,6 @@ function App() {
                 actions={actions}
                 droitsVoteTheorique={droitsVoteTheorique}
                 droitsVoteExercable={droitsVoteExercable}
-                onInitialiser={initialiserTitres}
               />
             </section>
           )}
