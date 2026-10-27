@@ -1,22 +1,33 @@
 import { useState } from "react";
-import type { Societe } from "../types";
+import type { HistoriqueTotalSociete, Societe } from "../types";
 import { PAYS } from "../lib/pays";
 
 interface Props {
-  onAdd: (societe: Omit<Societe, "id">) => Promise<boolean>;
+  /** Renvoie l'id de la société créée (ou null en cas d'échec). */
+  onAdd: (societe: Omit<Societe, "id">) => Promise<string | null>;
+  /** Appelé après une création réussie, uniquement si au moins un total a été renseigné. */
+  onAddHistoriqueTotal: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
 }
 
 function champVide(): string {
   return "";
 }
 
-export function SocieteForm({ onAdd }: Props) {
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function SocieteForm({ onAdd, onAddHistoriqueTotal }: Props) {
   const [nom, setNom] = useState("");
   const [valeurNominale, setValeurNominale] = useState(champVide());
   const [pays, setPays] = useState(champVide());
   const [siegeSocial, setSiegeSocial] = useState(champVide());
   const [siren, setSiren] = useState(champVide());
   const [lei, setLei] = useState(champVide());
+  const [dateEffetTotaux, setDateEffetTotaux] = useState(today());
+  const [nombreTotalActions, setNombreTotalActions] = useState(champVide());
+  const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
+  const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(champVide());
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +36,7 @@ export function SocieteForm({ onAdd }: Props) {
 
     // En cas d'échec, les champs ne sont pas vidés : l'utilisateur doit
     // pouvoir ajuster sa saisie plutôt que de tout ressaisir depuis zéro.
-    const reussi = await onAdd({
+    const societeId = await onAdd({
       nom: nomPropre,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
       pays: pays || null,
@@ -33,7 +44,21 @@ export function SocieteForm({ onAdd }: Props) {
       siren: siren.trim() || null,
       lei: lei.trim() || null,
     });
-    if (!reussi) return;
+    if (!societeId) return;
+
+    // Les totaux ne sont qu'une commodité à la création (éviter d'avoir à
+    // rouvrir la société pour les saisir juste après) : aucun n'est requis,
+    // et une ligne d'historique n'est créée que si au moins un des trois
+    // est renseigné.
+    if (nombreTotalActions || nombreTotalDroitVoteTheorique || nombreTotalDroitVoteExercable) {
+      await onAddHistoriqueTotal({
+        societeId,
+        dateEffet: dateEffetTotaux || today(),
+        nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
+        nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
+        nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
+      });
+    }
 
     setNom("");
     setValeurNominale(champVide());
@@ -41,6 +66,10 @@ export function SocieteForm({ onAdd }: Props) {
     setSiegeSocial(champVide());
     setSiren(champVide());
     setLei(champVide());
+    setDateEffetTotaux(today());
+    setNombreTotalActions(champVide());
+    setNombreTotalDroitVoteTheorique(champVide());
+    setNombreTotalDroitVoteExercable(champVide());
   }
 
   return (
@@ -100,6 +129,52 @@ export function SocieteForm({ onAdd }: Props) {
       <div className="form-field">
         <label htmlFor="societe-lei">LEI</label>
         <input id="societe-lei" type="text" value={lei} onChange={(e) => setLei(e.target.value)} />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="societe-totaux-date">Totaux en vigueur depuis le</label>
+        <input
+          id="societe-totaux-date"
+          type="date"
+          value={dateEffetTotaux}
+          onChange={(e) => setDateEffetTotaux(e.target.value)}
+        />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="societe-total-actions">Nombre total d'actions émises</label>
+        <input
+          id="societe-total-actions"
+          type="number"
+          step="0.01"
+          min="0"
+          value={nombreTotalActions}
+          onChange={(e) => setNombreTotalActions(e.target.value)}
+        />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="societe-total-dv-theorique">Nombre total de droits de vote théorique émis</label>
+        <input
+          id="societe-total-dv-theorique"
+          type="number"
+          step="0.01"
+          min="0"
+          value={nombreTotalDroitVoteTheorique}
+          onChange={(e) => setNombreTotalDroitVoteTheorique(e.target.value)}
+        />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="societe-total-dv-exercable">Nombre total de droits de vote exerçable émis</label>
+        <input
+          id="societe-total-dv-exercable"
+          type="number"
+          step="0.01"
+          min="0"
+          value={nombreTotalDroitVoteExercable}
+          onChange={(e) => setNombreTotalDroitVoteExercable(e.target.value)}
+        />
       </div>
 
       <button type="submit" className="btn btn-primary">

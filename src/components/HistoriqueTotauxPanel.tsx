@@ -10,6 +10,14 @@ interface Props {
   onAdd: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
   onUpdate: (id: string, ligne: Omit<HistoriqueTotalSociete, "id">) => void;
   onDelete: (id: string) => void;
+  /**
+   * Quand renseigné, verrouille le panneau sur une seule société (usage
+   * depuis l'onglet Sociétés, où l'historique d'une société s'affiche sous
+   * sa propre ligne) : masque le sélecteur de société du formulaire, le
+   * filtre et la colonne « Société », et ne liste que les lignes de cette
+   * société.
+   */
+  societeIdVerrouille?: string;
 }
 
 type Colonne = "societe" | "dateEffet" | "nombreTotalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
@@ -30,6 +38,8 @@ interface ChampsFormulaireProps {
   nombreTotalDroitVoteExercable: string;
   setNombreTotalDroitVoteExercable: (v: string) => void;
   societesTriees: Societe[];
+  /** Société déjà connue (verrouillée) : le champ de sélection n'est pas affiché. */
+  societeIdVerrouille?: string;
 }
 
 /** Champs communs au formulaire d'ajout et à la ligne d'édition (même structure que TransactionChampsFields). */
@@ -45,20 +55,23 @@ function ChampsFormulaire({
   nombreTotalDroitVoteExercable,
   setNombreTotalDroitVoteExercable,
   societesTriees,
+  societeIdVerrouille,
 }: ChampsFormulaireProps) {
   return (
     <>
-      <div className="form-field">
-        <label>Société</label>
-        <select value={societeId} onChange={(e) => setSocieteId(e.target.value)} required>
-          <option value="">Choisir...</option>
-          {societesTriees.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nom}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!societeIdVerrouille && (
+        <div className="form-field">
+          <label>Société</label>
+          <select value={societeId} onChange={(e) => setSocieteId(e.target.value)} required>
+            <option value="">Choisir...</option>
+            {societesTriees.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nom}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="form-field">
         <label>Date d'effet</label>
         <input type="date" value={dateEffet} onChange={(e) => setDateEffet(e.target.value)} required />
@@ -100,10 +113,11 @@ function ChampsFormulaire({
 interface FormAjoutProps {
   societesTriees: Societe[];
   onAdd: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
+  societeIdVerrouille?: string;
 }
 
-function FormAjout({ societesTriees, onAdd }: FormAjoutProps) {
-  const [societeId, setSocieteId] = useState(champVide());
+function FormAjout({ societesTriees, onAdd, societeIdVerrouille }: FormAjoutProps) {
+  const [societeId, setSocieteId] = useState(societeIdVerrouille ?? champVide());
   const [dateEffet, setDateEffet] = useState(champVide());
   const [nombreTotalActions, setNombreTotalActions] = useState(champVide());
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
@@ -120,7 +134,7 @@ function FormAjout({ societesTriees, onAdd }: FormAjoutProps) {
       nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
     if (!reussi) return;
-    setSocieteId(champVide());
+    setSocieteId(societeIdVerrouille ?? champVide());
     setDateEffet(champVide());
     setNombreTotalActions(champVide());
     setNombreTotalDroitVoteTheorique(champVide());
@@ -141,6 +155,7 @@ function FormAjout({ societesTriees, onAdd }: FormAjoutProps) {
         nombreTotalDroitVoteExercable={nombreTotalDroitVoteExercable}
         setNombreTotalDroitVoteExercable={setNombreTotalDroitVoteExercable}
         societesTriees={societesTriees}
+        societeIdVerrouille={societeIdVerrouille}
       />
       <button type="submit" className="btn btn-primary">
         Ajouter
@@ -154,9 +169,10 @@ interface LigneEditionProps {
   societesTriees: Societe[];
   onSave: (champs: Omit<HistoriqueTotalSociete, "id">) => void;
   onCancel: () => void;
+  societeIdVerrouille?: string;
 }
 
-function LigneEdition({ ligne, societesTriees, onSave, onCancel }: LigneEditionProps) {
+function LigneEdition({ ligne, societesTriees, onSave, onCancel, societeIdVerrouille }: LigneEditionProps) {
   const [societeId, setSocieteId] = useState(ligne.societeId);
   const [dateEffet, setDateEffet] = useState(ligne.dateEffet);
   const [nombreTotalActions, setNombreTotalActions] = useState(ligne.nombreTotalActions?.toString() ?? "");
@@ -193,6 +209,7 @@ function LigneEdition({ ligne, societesTriees, onSave, onCancel }: LigneEditionP
         nombreTotalDroitVoteExercable={nombreTotalDroitVoteExercable}
         setNombreTotalDroitVoteExercable={setNombreTotalDroitVoteExercable}
         societesTriees={societesTriees}
+        societeIdVerrouille={societeIdVerrouille}
       />
       <div className="edit-row-actions">
         <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
@@ -206,7 +223,7 @@ function LigneEdition({ ligne, societesTriees, onSave, onCancel }: LigneEditionP
   );
 }
 
-export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, onDelete }: Props) {
+export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, onDelete, societeIdVerrouille }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "societe", sens: "asc" });
   const [filtreSocieteId, setFiltreSocieteId] = useState("");
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
@@ -215,9 +232,10 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
 
+  const filtreEffectif = societeIdVerrouille ?? filtreSocieteId;
   const filtrees = useMemo(
-    () => historique.filter((h) => !filtreSocieteId || h.societeId === filtreSocieteId),
-    [historique, filtreSocieteId],
+    () => historique.filter((h) => !filtreEffectif || h.societeId === filtreEffectif),
+    [historique, filtreEffectif],
   );
 
   const triees = useMemo(() => {
@@ -244,7 +262,7 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
       "totaux-societes.xlsx",
       "Totaux",
       triees.map((h) => ({
-        Société: nomDe(h.societeId),
+        ...(societeIdVerrouille ? {} : { Société: nomDe(h.societeId) }),
         "Date d'effet": h.dateEffet,
         "Nombre total d'actions": h.nombreTotalActions ?? "",
         "Nombre total de droits de vote théorique": h.nombreTotalDroitVoteTheorique ?? "",
@@ -256,22 +274,24 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
   return (
     <div>
       <h3>Ajouter une ligne</h3>
-      <FormAjout societesTriees={societesTriees} onAdd={onAdd} />
+      <FormAjout societesTriees={societesTriees} onAdd={onAdd} societeIdVerrouille={societeIdVerrouille} />
 
       <h3>Historique</h3>
       <div className="table-toolbar">
         <div className="table-filters">
-          <div className="form-field">
-            <label htmlFor="totaux-filtre-societe">Société</label>
-            <select id="totaux-filtre-societe" value={filtreSocieteId} onChange={(e) => setFiltreSocieteId(e.target.value)}>
-              <option value="">Toutes</option>
-              {societesTriees.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nom}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!societeIdVerrouille && (
+            <div className="form-field">
+              <label htmlFor="totaux-filtre-societe">Société</label>
+              <select id="totaux-filtre-societe" value={filtreSocieteId} onChange={(e) => setFiltreSocieteId(e.target.value)}>
+                <option value="">Toutes</option>
+                {societesTriees.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="viz-actions">
           <button type="button" className="btn btn-secondary btn-small" onClick={exporter}>
@@ -287,9 +307,11 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
           <table className="table">
             <thead>
               <tr>
-                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "societe"))}>
-                  Société{flecheTri(tri, "societe")}
-                </th>
+                {!societeIdVerrouille && (
+                  <th className="th-tri" onClick={() => setTri(basculerTri(tri, "societe"))}>
+                    Société{flecheTri(tri, "societe")}
+                  </th>
+                )}
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "dateEffet"))}>
                   Date d'effet{flecheTri(tri, "dateEffet")}
                 </th>
@@ -309,7 +331,7 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
               {triees.map((h) => (
                 <Fragment key={h.id}>
                   <tr>
-                    <td>{nomDe(h.societeId)}</td>
+                    {!societeIdVerrouille && <td>{nomDe(h.societeId)}</td>}
                     <td>{formatDate(h.dateEffet)}</td>
                     <td className="num">{h.nombreTotalActions === null ? "—" : formatDecimal(h.nombreTotalActions)}</td>
                     <td className="num">
@@ -335,10 +357,11 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
                   </tr>
                   {ligneEditee === h.id && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={societeIdVerrouille ? 5 : 6}>
                         <LigneEdition
                           ligne={h}
                           societesTriees={societesTriees}
+                          societeIdVerrouille={societeIdVerrouille}
                           onCancel={() => setLigneEditee(null)}
                           onSave={(champs) => {
                             onUpdate(h.id, champs);

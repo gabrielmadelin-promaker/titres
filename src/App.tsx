@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { HistoriqueTotauxPanel } from "./components/HistoriqueTotauxPanel";
 import { ImportSocietes } from "./components/ImportSocietes";
 import { ImportTransactions } from "./components/ImportTransactions";
 import { LoginForm } from "./components/LoginForm";
@@ -18,7 +17,6 @@ import type { HistoriqueTotalSociete, Societe, Titre, Transaction } from "./type
 
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
-  { id: "totaux", label: "Totaux" },
   { id: "transactions", label: "Transactions" },
   { id: "participations", label: "Participations" },
   { id: "titres", label: "Titres" },
@@ -139,15 +137,19 @@ function App() {
     seDeconnecterLocal();
   }
 
+  // Renvoie l'id créé (ou null en cas d'échec) plutôt qu'un simple booléen :
+  // nécessaire au formulaire d'ajout pour pouvoir, dans le même geste,
+  // créer une première ligne de totaux (HistoriqueTotalSociete) rattachée
+  // à cette société si l'utilisateur en a renseigné.
   async function ajouterSociete(societe: Omit<Societe, "id">) {
     try {
       const creee = await api.creerSociete(societe);
       setSocietes((prev) => [...prev, creee]);
       setErreur(null);
-      return true;
+      return creee.id;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter la société");
-      return false;
+      return null;
     }
   }
 
@@ -361,7 +363,7 @@ function App() {
             <section className="panel">
               <h2>Sociétés</h2>
               <h3>Ajouter une société</h3>
-              <SocieteForm onAdd={ajouterSociete} />
+              <SocieteForm onAdd={ajouterSociete} onAddHistoriqueTotal={ajouterHistoriqueTotal} />
               <ImportSocietes societes={societes} onImport={importerSocietes} />
               <h3>Liste des sociétés</h3>
               <SocietesTable
@@ -370,24 +372,9 @@ function App() {
                 transactions={transactions}
                 onDelete={supprimerSociete}
                 onUpdate={modifierSociete}
-              />
-            </section>
-          )}
-
-          {onglet === "totaux" && (
-            <section className="panel">
-              <h2>Totaux</h2>
-              <p className="subtitle-panel">
-                Nombre total d'actions et de droits de vote émis par chaque société, par date d'effet — une
-                augmentation ou réduction de capital ultérieure n'y change jamais le % calculé pour une transaction
-                passée.
-              </p>
-              <HistoriqueTotauxPanel
-                societes={societes}
-                historique={historiqueTotaux}
-                onAdd={ajouterHistoriqueTotal}
-                onUpdate={modifierHistoriqueTotal}
-                onDelete={supprimerHistoriqueTotal}
+                onAddHistoriqueTotal={ajouterHistoriqueTotal}
+                onUpdateHistoriqueTotal={modifierHistoriqueTotal}
+                onDeleteHistoriqueTotal={supprimerHistoriqueTotal}
               />
             </section>
           )}

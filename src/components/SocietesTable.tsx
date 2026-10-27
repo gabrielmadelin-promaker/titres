@@ -5,6 +5,7 @@ import { valeurGlobale } from "../lib/participations";
 import { PAYS } from "../lib/pays";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
+import { HistoriqueTotauxPanel } from "./HistoriqueTotauxPanel";
 
 interface Props {
   societes: Societe[];
@@ -12,6 +13,9 @@ interface Props {
   transactions: Transaction[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Societe, "id">) => void;
+  onAddHistoriqueTotal: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
+  onUpdateHistoriqueTotal: (id: string, ligne: Omit<HistoriqueTotalSociete, "id">) => void;
+  onDeleteHistoriqueTotal: (id: string) => void;
 }
 
 type Colonne =
@@ -105,9 +109,19 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   );
 }
 
-export function SocietesTable({ societes, historiqueTotaux, transactions, onDelete, onUpdate }: Props) {
+export function SocietesTable({
+  societes,
+  historiqueTotaux,
+  transactions,
+  onDelete,
+  onUpdate,
+  onAddHistoriqueTotal,
+  onUpdateHistoriqueTotal,
+  onDeleteHistoriqueTotal,
+}: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "nom", sens: "asc" });
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
+  const [totauxOuverts, setTotauxOuverts] = useState<string | null>(null);
 
   const lignes = useMemo(
     () =>
@@ -241,6 +255,13 @@ export function SocietesTable({ societes, historiqueTotaux, transactions, onDele
                       <button
                         type="button"
                         className="btn btn-secondary btn-small"
+                        onClick={() => setTotauxOuverts(totauxOuverts === societe.id ? null : societe.id)}
+                      >
+                        Totaux
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-small"
                         onClick={() => setLigneEditee(ligneEditee === societe.id ? null : societe.id)}
                       >
                         Modifier
@@ -261,6 +282,20 @@ export function SocietesTable({ societes, historiqueTotaux, transactions, onDele
                           onUpdate(societe.id, champs);
                           setLigneEditee(null);
                         }}
+                      />
+                    </td>
+                  </tr>
+                )}
+                {totauxOuverts === societe.id && (
+                  <tr>
+                    <td colSpan={11}>
+                      <HistoriqueTotauxPanel
+                        societes={societes}
+                        historique={historiqueTotaux}
+                        societeIdVerrouille={societe.id}
+                        onAdd={onAddHistoriqueTotal}
+                        onUpdate={onUpdateHistoriqueTotal}
+                        onDelete={onDeleteHistoriqueTotal}
                       />
                     </td>
                   </tr>
