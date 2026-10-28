@@ -253,13 +253,13 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-categorie`}>Type (catégorie)</label>
+        <label htmlFor={`${idPrefix}-categorie`}>Catégorie</label>
         <input
           id={`${idPrefix}-categorie`}
           type="text"
-          maxLength={10}
+          maxLength={50}
           list={`${idPrefix}-types-suggestions`}
-          placeholder="Ex : A, B, C..."
+          placeholder="Ex : Action ordinaire"
           value={champs.categorie}
           onChange={(e) => set("categorie", e.target.value)}
         />

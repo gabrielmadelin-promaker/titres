@@ -3,6 +3,7 @@ import { ComptesPanel } from "./components/ComptesPanel";
 import { ImportSocietes } from "./components/ImportSocietes";
 import { ImportTransactions } from "./components/ImportTransactions";
 import { LoginForm } from "./components/LoginForm";
+import { Modal } from "./components/Modal";
 import { ParticipationsTable } from "./components/ParticipationsTable";
 import { SocieteForm } from "./components/SocieteForm";
 import { SocietesTable } from "./components/SocietesTable";
@@ -19,6 +20,8 @@ import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeT
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
   { id: "transactions", label: "Transactions" },
+  { id: "categories", label: "Catégories" },
+  { id: "comptes", label: "Comptes" },
   { id: "participations", label: "Participations" },
   { id: "titres", label: "Titres" },
   { id: "utilisateurs", label: "Utilisateurs" },
@@ -44,6 +47,8 @@ function App() {
   const [onglet, setOnglet] = useState<OngletId>("societes");
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [modaleSocieteOuverte, setModaleSocieteOuverte] = useState(false);
+  const [modaleTransactionOuverte, setModaleTransactionOuverte] = useState(false);
 
   function seDeconnecterLocal() {
     effacerToken();
@@ -410,9 +415,20 @@ function App() {
           {onglet === "societes" && (
             <section className="panel">
               <h2>Sociétés</h2>
-              <h3>Ajouter une société</h3>
-              <SocieteForm onAdd={ajouterSociete} onAddHistoriqueTotal={ajouterHistoriqueTotal} types={types} />
-              <ImportSocietes societes={societes} onImport={importerSocietes} />
+              <div className="table-toolbar">
+                <button type="button" className="btn btn-primary" onClick={() => setModaleSocieteOuverte(true)}>
+                  + Ajouter une société
+                </button>
+                <ImportSocietes societes={societes} onImport={importerSocietes} />
+              </div>
+              <Modal title="Ajouter une société" open={modaleSocieteOuverte} onClose={() => setModaleSocieteOuverte(false)}>
+                <SocieteForm
+                  onAdd={ajouterSociete}
+                  onAddHistoriqueTotal={ajouterHistoriqueTotal}
+                  types={types}
+                  onSuccess={() => setModaleSocieteOuverte(false)}
+                />
+              </Modal>
               <h3>Liste des sociétés</h3>
               <SocietesTable
                 societes={societes}
@@ -431,15 +447,26 @@ function App() {
           {onglet === "transactions" && (
             <section className="panel">
               <h2>Transactions</h2>
-              <h3>Ajouter une transaction</h3>
-              <TransactionForm
-                societes={societes}
-                types={types}
-                comptes={comptes}
-                onAdd={ajouterTransaction}
-                onAddCompte={ajouterCompte}
-              />
-              <ImportTransactions societes={societes} onImport={importerTransactions} />
+              <div className="table-toolbar">
+                <button type="button" className="btn btn-primary" onClick={() => setModaleTransactionOuverte(true)}>
+                  + Ajouter une transaction
+                </button>
+                <ImportTransactions societes={societes} onImport={importerTransactions} />
+              </div>
+              <Modal
+                title="Ajouter une transaction"
+                open={modaleTransactionOuverte}
+                onClose={() => setModaleTransactionOuverte(false)}
+              >
+                <TransactionForm
+                  societes={societes}
+                  types={types}
+                  comptes={comptes}
+                  onAdd={ajouterTransaction}
+                  onAddCompte={ajouterCompte}
+                  onSuccess={() => setModaleTransactionOuverte(false)}
+                />
+              </Modal>
               <h3>Liste des transactions</h3>
               <TransactionsTable
                 transactions={transactions}
@@ -451,9 +478,27 @@ function App() {
                 onUpdate={modifierTransaction}
                 onAddCompte={ajouterCompte}
               />
-              <h3>Types</h3>
+            </section>
+          )}
+
+          {onglet === "categories" && (
+            <section className="panel">
+              <h2>Catégories</h2>
+              <p className="subtitle-panel">
+                Catégories de titres (ex. Action ordinaire, Action de préférence...), utilisées en suggestions sur les
+                champs Catégorie des transactions et des totaux de société.
+              </p>
               <TypesPanel types={types} onAdd={ajouterType} onDelete={supprimerType} />
-              <h3>Comptes</h3>
+            </section>
+          )}
+
+          {onglet === "comptes" && (
+            <section className="panel">
+              <h2>Comptes</h2>
+              <p className="subtitle-panel">
+                Regroupement nommé des titres détenus par un actionnaire, dédié à une seule Catégorie. Choisi sur
+                chaque transaction : les lots générés automatiquement dans l'onglet Titres portent ensuite ce Compte.
+              </p>
               <ComptesPanel
                 societes={societes}
                 comptes={comptes}

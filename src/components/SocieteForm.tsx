@@ -9,6 +9,8 @@ interface Props {
   /** Appelé après une création réussie, uniquement si au moins un total a été renseigné. */
   onAddHistoriqueTotal: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
   types: TypeTitre[];
+  /** Appelé après une création réussie (ex. pour fermer la fenêtre temporaire qui contient ce formulaire). */
+  onSuccess?: () => void;
 }
 
 function champVide(): string {
@@ -19,7 +21,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function SocieteForm({ onAdd, onAddHistoriqueTotal, types }: Props) {
+export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: Props) {
   const [nom, setNom] = useState("");
   const [valeurNominale, setValeurNominale] = useState(champVide());
   const [pays, setPays] = useState(champVide());
@@ -73,6 +75,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types }: Props) {
     setActionsParType([]);
     setNombreTotalDroitVoteTheorique(champVide());
     setNombreTotalDroitVoteExercable(champVide());
+    onSuccess?.();
   }
 
   return (

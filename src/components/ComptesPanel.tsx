@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import type { Compte, Societe, TypeTitre } from "../types";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
+import { Modal } from "./Modal";
 
 interface Props {
   societes: Societe[];
@@ -77,15 +78,15 @@ function ChampsCompte({
         )}
       </div>
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-type`}>Type</label>
+        <label htmlFor={`${idPrefix}-type`}>Catégorie</label>
         <input
           id={`${idPrefix}-type`}
           type="text"
-          maxLength={10}
+          maxLength={50}
           list={`${idPrefix}-types-suggestions`}
           value={type}
           onChange={(e) => setType(e.target.value)}
-          placeholder="Ex : A"
+          placeholder="Ex : Action ordinaire"
         />
         <datalist id={`${idPrefix}-types-suggestions`}>
           {types.map((t) => (
@@ -105,9 +106,10 @@ interface FormAjoutProps {
   societesTriees: Societe[];
   types: TypeTitre[];
   onAdd: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
+  onSuccess: () => void;
 }
 
-function FormAjout({ societesTriees, types, onAdd }: FormAjoutProps) {
+function FormAjout({ societesTriees, types, onAdd, onSuccess }: FormAjoutProps) {
   const [detenteurExterne, setDetenteurExterne] = useState(false);
   const [detenteurId, setDetenteurId] = useState("");
   const [detenteurNomExterne, setDetenteurNomExterne] = useState("");
@@ -130,6 +132,7 @@ function FormAjout({ societesTriees, types, onAdd }: FormAjoutProps) {
     setDetenteurNomExterne("");
     setType("");
     setNom("");
+    onSuccess();
   }
 
   return (
@@ -215,6 +218,7 @@ function LigneEdition({ compte, societesTriees, types, onSave, onCancel }: Ligne
 export function ComptesPanel({ societes, comptes, types, onAdd, onUpdate, onDelete }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "detenteur", sens: "asc" });
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
+  const [modaleOuverte, setModaleOuverte] = useState(false);
 
   const societesTriees = useMemo(() => [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr")), [societes]);
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
@@ -242,7 +246,14 @@ export function ComptesPanel({ societes, comptes, types, onAdd, onUpdate, onDele
 
   return (
     <div>
-      <FormAjout societesTriees={societesTriees} types={types} onAdd={onAdd} />
+      <div className="table-toolbar">
+        <button type="button" className="btn btn-primary" onClick={() => setModaleOuverte(true)}>
+          + Ajouter un compte
+        </button>
+      </div>
+      <Modal title="Ajouter un compte" open={modaleOuverte} onClose={() => setModaleOuverte(false)}>
+        <FormAjout societesTriees={societesTriees} types={types} onAdd={onAdd} onSuccess={() => setModaleOuverte(false)} />
+      </Modal>
 
       {triees.length === 0 ? (
         <p className="empty">Aucun compte pour le moment.</p>
@@ -255,7 +266,7 @@ export function ComptesPanel({ societes, comptes, types, onAdd, onUpdate, onDele
                   Détenteur{flecheTri(tri, "detenteur")}
                 </th>
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "type"))}>
-                  Type{flecheTri(tri, "type")}
+                  Catégorie{flecheTri(tri, "type")}
                 </th>
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "nom"))}>
                   Nom du compte{flecheTri(tri, "nom")}

@@ -31,17 +31,17 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
 
   return (
     <div className="form-field actions-par-type">
-      <label>Nombre d'actions, par Type</label>
+      <label>Nombre d'actions, par Catégorie</label>
       {lignes.map((ligne, i) => (
         <div className="actions-par-type-ligne" key={i}>
           <input
             type="text"
-            maxLength={10}
+            maxLength={50}
             list={`${idPrefix}-types-suggestions`}
             value={ligne.type ?? ""}
             onChange={(e) => modifierLigne(i, { type: e.target.value || null })}
-            placeholder="Type (ex : A)"
-            aria-label={`Type de la ligne ${i + 1}`}
+            placeholder="Catégorie (ex : Action ordinaire)"
+            aria-label={`Catégorie de la ligne ${i + 1}`}
           />
           <input
             type="number"

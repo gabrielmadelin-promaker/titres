@@ -116,14 +116,25 @@ interface FormAjoutProps {
   types: TypeTitre[];
   onAdd: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
   societeIdVerrouille?: string;
+  /**
+   * Dernière ligne connue de la société verrouillée (la plus récente par
+   * date d'effet), si elle existe : sert à préremplir ce formulaire — les
+   * totaux changent rarement d'une date d'effet à l'autre, autant repartir
+   * des dernières valeurs plutôt que d'un formulaire vide.
+   */
+  derniereLigne?: HistoriqueTotalSociete | null;
 }
 
-function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille }: FormAjoutProps) {
+function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille, derniereLigne }: FormAjoutProps) {
   const [societeId, setSocieteId] = useState(societeIdVerrouille ?? champVide());
   const [dateEffet, setDateEffet] = useState(champVide());
-  const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>([]);
-  const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
-  const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(champVide());
+  const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>(derniereLigne?.actionsParType ?? []);
+  const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(
+    derniereLigne?.nombreTotalDroitVoteTheorique?.toString() ?? champVide(),
+  );
+  const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(
+    derniereLigne?.nombreTotalDroitVoteExercable?.toString() ?? champVide(),
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -136,11 +147,10 @@ function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille }: FormAj
       nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
     if (!reussi) return;
-    setSocieteId(societeIdVerrouille ?? champVide());
+    // Seule la date est vidée : les valeurs viennent d'être confirmées comme
+    // les dernières en vigueur, inutile de les faire ressaisir pour la ligne
+    // suivante (cas fréquent : plusieurs dates d'effet à la suite, mêmes totaux).
     setDateEffet(champVide());
-    setActionsParType([]);
-    setNombreTotalDroitVoteTheorique(champVide());
-    setNombreTotalDroitVoteExercable(champVide());
   }
 
   return (
@@ -239,6 +249,13 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string) => nomParId.get(id) ?? "(supprimée)";
 
+  const derniereLigne = useMemo(() => {
+    if (!societeIdVerrouille) return null;
+    const lignes = historique.filter((h) => h.societeId === societeIdVerrouille);
+    if (lignes.length === 0) return null;
+    return lignes.reduce((plusRecente, h) => (h.dateEffet > plusRecente.dateEffet ? h : plusRecente));
+  }, [historique, societeIdVerrouille]);
+
   const filtreEffectif = societeIdVerrouille ?? filtreSocieteId;
   const filtrees = useMemo(
     () => historique.filter((h) => !filtreEffectif || h.societeId === filtreEffectif),
@@ -272,7 +289,7 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
         ...(societeIdVerrouille ? {} : { Société: nomDe(h.societeId) }),
         "Date d'effet": h.dateEffet,
         "Nombre total d'actions": totalActions(h.actionsParType) || "",
-        "Détail par Type": h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${l.quantite}`).join(", "),
+        "Détail par Catégorie": h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${l.quantite}`).join(", "),
         "Nombre total de droits de vote théorique": h.nombreTotalDroitVoteTheorique ?? "",
         "Nombre total de droits de vote exerçable": h.nombreTotalDroitVoteExercable ?? "",
       })),
@@ -282,7 +299,13 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
   return (
     <div>
       <h3>Ajouter une ligne</h3>
-      <FormAjout societesTriees={societesTriees} types={types} onAdd={onAdd} societeIdVerrouille={societeIdVerrouille} />
+      <FormAjout
+        societesTriees={societesTriees}
+        types={types}
+        onAdd={onAdd}
+        societeIdVerrouille={societeIdVerrouille}
+        derniereLigne={derniereLigne}
+      />
 
       <h3>Historique</h3>
       <div className="table-toolbar">
@@ -326,11 +349,11 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "totalActions"))}
-                  title="Somme des quantités par Type."
+                  title="Somme des quantités par Catégorie."
                 >
                   Total actions{flecheTri(tri, "totalActions")}
                 </th>
-                <th>Détail par Type</th>
+                <th>Détail par Catégorie</th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreTotalDroitVoteTheorique"))}>
                   Total DV théorique{flecheTri(tri, "nombreTotalDroitVoteTheorique")}
                 </th>

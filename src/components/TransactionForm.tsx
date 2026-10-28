@@ -9,9 +9,11 @@ interface Props {
   comptes: Compte[];
   onAdd: (transaction: Omit<Transaction, "id">) => Promise<boolean>;
   onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
+  /** Appelé après un ajout réussi (ex. pour fermer la fenêtre temporaire qui contient ce formulaire). */
+  onSuccess?: () => void;
 }
 
-export function TransactionForm({ societes, types, comptes, onAdd, onAddCompte }: Props) {
+export function TransactionForm({ societes, types, comptes, onAdd, onAddCompte, onSuccess }: Props) {
   const [champs, setChamps] = useState(champsVides());
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -35,7 +37,10 @@ export function TransactionForm({ societes, types, comptes, onAdd, onAddCompte }
     // ne sont pas vidés : l'utilisateur doit pouvoir ajuster sa saisie
     // plutôt que de tout ressaisir depuis zéro.
     const reussi = await onAdd(champsVersTransaction(champs));
-    if (reussi) setChamps(champsVides());
+    if (reussi) {
+      setChamps(champsVides());
+      onSuccess?.();
+    }
   }
 
   return (

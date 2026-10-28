@@ -54,7 +54,7 @@ GO
 -- une liste fermée) — ajout possible depuis l'application.
 CREATE TABLE dbo.Types (
     Id  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Types PRIMARY KEY DEFAULT NEWID(),
-    Nom NVARCHAR(10)     NOT NULL,
+    Nom NVARCHAR(50)     NOT NULL,
     CONSTRAINT UQ_Types_Nom UNIQUE (Nom)
 );
 GO
@@ -71,7 +71,7 @@ CREATE TABLE dbo.Comptes (
     Id                  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Comptes PRIMARY KEY DEFAULT NEWID(),
     DetenteurId         UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne NVARCHAR(300)    NULL,
-    Type                NVARCHAR(10)     NULL,
+    Type                NVARCHAR(50)     NULL,
     Nom                 NVARCHAR(200)    NOT NULL,
     CONSTRAINT CK_Comptes_Detenteur CHECK (
         (DetenteurId IS NULL AND DetenteurNomExterne IS NOT NULL)
@@ -92,7 +92,7 @@ CREATE TABLE dbo.HistoriqueTotalActionsType (
     Id                       UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_HistoriqueTotalActionsType PRIMARY KEY DEFAULT NEWID(),
     HistoriqueTotalSocieteId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_HistoriqueTotalActionsType_Historique
                                  REFERENCES dbo.HistoriqueTotauxSociete (Id) ON DELETE CASCADE,
-    Type                     NVARCHAR(10)     NULL,
+    Type                     NVARCHAR(50)     NULL,
     Quantite                 DECIMAL(18,4)    NOT NULL,
     CONSTRAINT UQ_HistoriqueTotalActionsType UNIQUE (HistoriqueTotalSocieteId, Type)
 );
@@ -117,10 +117,9 @@ CREATE TABLE dbo.Transactions (
     NombreActions     DECIMAL(18,4)    NULL,
     NombreDroitVoteTheorique DECIMAL(18,4) NULL,
     NombreDroitVoteExercable DECIMAL(18,4) NULL,
-    -- Catégorie du titre (lettre : A, B, C...), facultative — sert à
-    -- l'alimentation automatique des tables Actions/DroitsVoteTheorique/
-    -- DroitsVoteExercable (voir plus bas).
-    Categorie         NVARCHAR(10)     NULL,
+    -- Catégorie du titre (ex. "Action ordinaire"), facultative — sert à
+    -- l'alimentation automatique de la table Actions (voir plus bas).
+    Categorie         NVARCHAR(50)     NULL,
     VendeurId         UNIQUEIDENTIFIER NULL,
     VendeurNomExterne NVARCHAR(300)    NULL,
     -- Compte (dbo.Comptes) de l'acheteur / du vendeur concerné par cette
@@ -167,7 +166,7 @@ GO
 CREATE TABLE dbo.Actions (
     Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Actions PRIMARY KEY DEFAULT NEWID(),
     SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
-    Categorie            NVARCHAR(10)     NULL,
+    Categorie            NVARCHAR(50)     NULL,
     SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne  NVARCHAR(300)    NULL,
     CompteId             UNIQUEIDENTIFIER NULL,
