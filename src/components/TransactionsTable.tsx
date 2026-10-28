@@ -74,9 +74,7 @@ type Colonne =
   | "nombreActions"
   | "nombreDvTheorique"
   | "nombreDvExercable"
-  | "categorie"
-  | "compteAcheteur"
-  | "compteVendeur"
+  | "detail"
   | "capital"
   | "dvTheorique"
   | "dvExercable"
@@ -90,6 +88,17 @@ function formatOuTiret(valeur: number | null | undefined, formateur: (v: number)
   return valeur == null ? "—" : formateur(valeur);
 }
 
+/** Nombre d'actions total d'une transaction : somme de ses lignes (une transaction peut porter sur plusieurs Catégories). */
+function nombreActionsTotal(t: Transaction): number {
+  return t.lignes.reduce((s, l) => s + l.nombreActions, 0);
+}
+
+/** Plus-value totale d'une transaction : somme des plus-values de ses lignes (null si aucune ligne n'en a). */
+function plusValueTotal(t: Transaction): number | null {
+  const valeurs = t.lignes.map((l) => l.plusValue).filter((v): v is number => v !== null);
+  return valeurs.length > 0 ? valeurs.reduce((s, v) => s + v, 0) : null;
+}
+
 export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, onDelete, onUpdate, onAddCompte }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "date", sens: "desc" });
   const [filtreAcheteurId, setFiltreAcheteurId] = useState("");
@@ -100,7 +109,20 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
   const nomDe = (id: string | null) => (id ? (nomParId.get(id) ?? "(supprimée)") : "—");
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   const nomCompteParId = useMemo(() => new Map(comptes.map((c) => [c.id, c.nom])), [comptes]);
-  const nomCompteDe = (id: string | null) => (id ? (nomCompteParId.get(id) ?? "(supprimé)") : "—");
+  const nomCompteDe = (id: string | null) => (id ? (nomCompteParId.get(id) ?? "(supprimé)") : null);
+
+  function detailLignes(t: Transaction): string {
+    return t.lignes
+      .map((l) => {
+        const compteAcheteur = nomCompteDe(l.compteAcheteurId);
+        const compteVendeur = nomCompteDe(l.compteVendeurId);
+        const comptesTexte = [compteAcheteur && `ach. : ${compteAcheteur}`, compteVendeur && `vend. : ${compteVendeur}`]
+          .filter(Boolean)
+          .join(", ");
+        return `${l.categorie ?? "(non précisé)"} : ${formatDecimal(l.nombreActions)}${comptesTexte ? ` (${comptesTexte})` : ""}`;
+      })
+      .join(" ; ");
+  }
 
   function celluleAcheteur(t: Transaction) {
     if (t.acheteurId) return nomDe(t.acheteurId);
@@ -146,17 +168,13 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
         case "vendeur":
           return t.vendeurId ? (nomParId.get(t.vendeurId) ?? "(supprimée)") : (t.vendeurNomExterne ?? "");
         case "nombreActions":
-          return t.nombreActions ?? -Infinity;
+          return nombreActionsTotal(t);
         case "nombreDvTheorique":
           return t.nombreDroitVoteTheorique ?? -Infinity;
         case "nombreDvExercable":
           return t.nombreDroitVoteExercable ?? -Infinity;
-        case "categorie":
-          return t.categorie ?? "";
-        case "compteAcheteur":
-          return nomCompteDe(t.compteAcheteurId);
-        case "compteVendeur":
-          return nomCompteDe(t.compteVendeurId);
+        case "detail":
+          return detailLignes(t);
         case "capital":
           return extraireValeurTransaction(t, "capital", historiqueTotaux) ?? -Infinity;
         case "dvTheorique":
@@ -166,7 +184,7 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
         case "prixAction":
           return t.prixAction ?? -Infinity;
         case "plusValue":
-          return t.plusValue ?? -Infinity;
+          return plusValueTotal(t) ?? -Infinity;
       }
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
@@ -186,17 +204,15 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
           : t.vendeurNomExterne
             ? `${t.vendeurNomExterne} (hors groupe)`
             : "",
-        "Nombre d'actions": t.nombreActions ?? "",
+        "Nombre d'actions": nombreActionsTotal(t),
         "Nombre de droits de vote théorique": t.nombreDroitVoteTheorique ?? "",
         "Nombre de droits de vote exerçable": t.nombreDroitVoteExercable ?? "",
-        Catégorie: t.categorie ?? "",
-        "Compte acheteur": nomCompteDe(t.compteAcheteurId),
-        "Compte vendeur": nomCompteDe(t.compteVendeurId),
+        "Détail par Catégorie": detailLignes(t),
         "Capital (%)": extraireValeurTransaction(t, "capital", historiqueTotaux) ?? "",
         "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? "",
         "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? "",
         "Prix de l'action (€)": t.prixAction ?? "",
-        "Plus-value (€)": t.plusValue ?? "",
+        "Plus-value (€)": plusValueTotal(t) ?? "",
       })),
     );
   }
@@ -258,7 +274,11 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "vendeur"))}>
                   Vendeur{flecheTri(tri, "vendeur")}
                 </th>
-                <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreActions"))}>
+                <th
+                  className="th-tri num"
+                  onClick={() => setTri(basculerTri(tri, "nombreActions"))}
+                  title="Somme des lignes de cette transaction (une transaction peut porter sur plusieurs Catégories à la fois)."
+                >
                   Nombre d'actions{flecheTri(tri, "nombreActions")}
                 </th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreDvTheorique"))}>
@@ -267,14 +287,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreDvExercable"))}>
                   Nombre DV exerçable{flecheTri(tri, "nombreDvExercable")}
                 </th>
-                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "categorie"))}>
-                  Catégorie{flecheTri(tri, "categorie")}
-                </th>
-                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "compteAcheteur"))}>
-                  Compte acheteur{flecheTri(tri, "compteAcheteur")}
-                </th>
-                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "compteVendeur"))}>
-                  Compte vendeur{flecheTri(tri, "compteVendeur")}
+                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "detail"))}>
+                  Détail par Catégorie{flecheTri(tri, "detail")}
                 </th>
                 <th
                   className="th-tri num"
@@ -295,7 +309,7 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "plusValue"))}
-                  title="Calculée automatiquement, en FIFO sur les lots d'Actions consommés par cette transaction : |nombre d'actions| × (prix de cette transaction − prix d'origine moyen des titres vendus). Vide si aucun titre n'a été consommé (ex. achat externe pur)."
+                  title="Calculée automatiquement, en FIFO sur les lots d'Actions consommés par chaque ligne de cette transaction, puis sommée. Vide si aucune ligne n'a consommé de titre (ex. achat externe pur)."
                 >
                   Plus-value{flecheTri(tri, "plusValue")}
                 </th>
@@ -310,12 +324,10 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                     <td>{celluleAcheteur(t)}</td>
                     <td>{nomDe(t.cibleId)}</td>
                     <td>{celluleVendeur(t)}</td>
-                    <td className="num">{formatOuTiret(t.nombreActions, formatDecimal)}</td>
+                    <td className="num">{formatDecimal(nombreActionsTotal(t))}</td>
                     <td className="num">{formatOuTiret(t.nombreDroitVoteTheorique, formatDecimal)}</td>
                     <td className="num">{formatOuTiret(t.nombreDroitVoteExercable, formatDecimal)}</td>
-                    <td>{t.categorie ?? "—"}</td>
-                    <td>{nomCompteDe(t.compteAcheteurId)}</td>
-                    <td>{nomCompteDe(t.compteVendeurId)}</td>
+                    <td>{detailLignes(t)}</td>
                     <td className="num">
                       {formatOuTiret(extraireValeurTransaction(t, "capital", historiqueTotaux), formatPourcentage)}
                     </td>
@@ -326,7 +338,7 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                       {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux), formatPourcentage)}
                     </td>
                     <td className="num">{formatOuTiret(t.prixAction, formatMontant)}</td>
-                    <td className="num">{formatOuTiret(t.plusValue, formatMontant)}</td>
+                    <td className="num">{formatOuTiret(plusValueTotal(t), formatMontant)}</td>
                     <td className="actions">
                       <div className="actions-groupe">
                         <button
@@ -344,7 +356,7 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                   </tr>
                   {ligneEditee === t.id && (
                     <tr>
-                      <td colSpan={16}>
+                      <td colSpan={14}>
                         <TransactionEditRow
                           transaction={t}
                           societes={societes}

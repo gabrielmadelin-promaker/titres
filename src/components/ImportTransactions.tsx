@@ -90,7 +90,6 @@ export function ImportTransactions({ societes, onImport }: Props) {
           acheteurNomExterne: acheteur ? null : nomAcheteur,
           cibleId: cible.id,
           date,
-          nombreActions,
           nombreDroitVoteTheorique: nombreColonne(
             ligne,
             "nombre de droits de vote théorique",
@@ -105,16 +104,24 @@ export function ImportTransactions({ societes, onImport }: Props) {
             "nombre dv exerçable",
             "nombre dv exercable",
           ),
-          categorie: texteColonne(ligne, "catégorie", "categorie") || null,
           vendeurId: vendeur?.id ?? null,
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
-          // Compte : pas de colonne dédiée à l'import — se complète ensuite
-          // au besoin depuis le tableau des transactions.
-          compteAcheteurId: null,
-          compteVendeurId: null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
-          // Calculée côté API, jamais importée.
-          plusValue: null,
+          // Une seule ligne par transaction importée (pas de colonnes "par
+          // Catégorie" dans le fichier) ; Compte : pas de colonne dédiée à
+          // l'import — se complète ensuite au besoin depuis le tableau des
+          // transactions, ou généré automatiquement à l'enregistrement.
+          lignes: [
+            {
+              id: "",
+              categorie: texteColonne(ligne, "catégorie", "categorie") || null,
+              nombreActions,
+              compteAcheteurId: null,
+              compteVendeurId: null,
+              // Calculée côté API, jamais importée.
+              plusValue: null,
+            },
+          ],
         });
       });
 

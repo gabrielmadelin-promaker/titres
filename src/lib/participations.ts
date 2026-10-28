@@ -75,6 +75,15 @@ function extrairePourcentageDroitVote(
 }
 
 /**
+ * Le nombre d'actions d'une transaction n'est pas un champ direct : une
+ * transaction peut porter sur plusieurs Catégories à la fois (voir
+ * Transaction.lignes dans types.ts) — c'est la somme de ses lignes.
+ */
+function nombreActionsTotal(t: Transaction): number {
+  return t.lignes.reduce((s, l) => s + l.nombreActions, 0);
+}
+
+/**
  * Seul le capital et les droits de vote se composent en chaîne (50% de 40%
  * = 20% indirect) : ce sont des parts d'un tout ramené à 100. Un nombre
  * d'actions (ou de droits de vote) est une quantité absolue — multiplier
@@ -88,7 +97,7 @@ const METRIQUES: Record<
   { extraire: (t: Transaction, historique: HistoriqueTotalSociete[]) => number | null; chainable: boolean }
 > = {
   capital: {
-    extraire: (t, historique) => extrairePourcentageCapital(t.nombreActions, t.cibleId, t.date, historique),
+    extraire: (t, historique) => extrairePourcentageCapital(nombreActionsTotal(t), t.cibleId, t.date, historique),
     chainable: true,
   },
   droitVoteTheorique: {
@@ -101,7 +110,7 @@ const METRIQUES: Record<
       extrairePourcentageDroitVote(t.nombreDroitVoteExercable, t.cibleId, t.date, historique, "nombreTotalDroitVoteExercable"),
     chainable: true,
   },
-  nombreActions: { extraire: (t) => t.nombreActions, chainable: false },
+  nombreActions: { extraire: (t) => nombreActionsTotal(t), chainable: false },
   nombreDroitVoteTheorique: { extraire: (t) => t.nombreDroitVoteTheorique, chainable: false },
   nombreDroitVoteExercable: { extraire: (t) => t.nombreDroitVoteExercable, chainable: false },
 };

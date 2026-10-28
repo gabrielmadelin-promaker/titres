@@ -516,6 +516,22 @@ h3 {
   font-size: 13px;
 }
 
+.transaction-lignes {
+  grid-column: 1 / -1;
+}
+
+.transaction-ligne {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 0 0 10px;
+  min-width: 0;
+}
+
+.transaction-ligne .form {
+  margin-bottom: 8px;
+}
+
 .compte-creation {
   display: flex;
   gap: 6px;

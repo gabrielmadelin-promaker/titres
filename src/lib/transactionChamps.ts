@@ -1,4 +1,14 @@
-import type { Transaction } from "../types";
+import type { LigneTransaction, Transaction } from "../types";
+
+/** Représentation "brute" (chaînes de formulaire) d'une ligne (Catégorie, nombre d'actions, Comptes). */
+export interface LigneChamps {
+  categorie: string;
+  nombreActions: string;
+  /** Compte de l'acheteur concerné, facultatif ("" = non renseigné, généré automatiquement). */
+  compteAcheteurId: string;
+  /** Compte du vendeur concerné, facultatif ("" = non renseigné, généré automatiquement). */
+  compteVendeurId: string;
+}
 
 /** Représentation "brute" (chaînes de formulaire) des champs d'une transaction, partagée entre l'ajout et la modification. */
 export interface TransactionChamps {
@@ -12,19 +22,19 @@ export interface TransactionChamps {
   vendeurId: string;
   vendeurNomExterne: string;
   date: string;
-  nombreActions: string;
+  /** Mouvements d'actions, par Catégorie (au moins une ligne). */
+  lignes: LigneChamps[];
   nombreDroitVoteTheorique: string;
   nombreDroitVoteExercable: string;
-  categorie: string;
-  /** Compte de l'acheteur concerné, facultatif ("" = non renseigné). */
-  compteAcheteurId: string;
-  /** Compte du vendeur concerné, facultatif ("" = non renseigné). */
-  compteVendeurId: string;
   prixAction: string;
 }
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function ligneVide(): LigneChamps {
+  return { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "" };
 }
 
 export function champsVides(): TransactionChamps {
@@ -37,12 +47,9 @@ export function champsVides(): TransactionChamps {
     vendeurId: "",
     vendeurNomExterne: "",
     date: today(),
-    nombreActions: "",
+    lignes: [ligneVide()],
     nombreDroitVoteTheorique: "",
     nombreDroitVoteExercable: "",
-    categorie: "",
-    compteAcheteurId: "",
-    compteVendeurId: "",
     prixAction: "",
   };
 }
@@ -57,12 +64,17 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
     vendeurId: t.vendeurId ?? "",
     vendeurNomExterne: t.vendeurNomExterne ?? "",
     date: t.date,
-    nombreActions: t.nombreActions?.toString() ?? "",
+    lignes:
+      t.lignes.length > 0
+        ? t.lignes.map((l) => ({
+            categorie: l.categorie ?? "",
+            nombreActions: l.nombreActions.toString(),
+            compteAcheteurId: l.compteAcheteurId ?? "",
+            compteVendeurId: l.compteVendeurId ?? "",
+          }))
+        : [ligneVide()],
     nombreDroitVoteTheorique: t.nombreDroitVoteTheorique?.toString() ?? "",
     nombreDroitVoteExercable: t.nombreDroitVoteExercable?.toString() ?? "",
-    categorie: t.categorie ?? "",
-    compteAcheteurId: t.compteAcheteurId ?? "",
-    compteVendeurId: t.compteVendeurId ?? "",
     prixAction: t.prixAction?.toString() ?? "",
   };
 }
@@ -85,9 +97,12 @@ export function validerChamps(c: TransactionChamps): string | null {
   if (c.vendeurExterne && !c.vendeurNomExterne.trim()) {
     return "Renseignez le nom de la société vendeuse, ou décochez « Hors groupe » si elle n'est pas connue.";
   }
-  const nombreActions = Number(c.nombreActions);
-  if (!c.nombreActions || Number.isNaN(nombreActions) || nombreActions === 0) {
-    return "Le nombre d'actions est requis, et ne peut pas être nul (négatif pour une vente).";
+  if (c.lignes.length === 0) return "Au moins une ligne (Catégorie, nombre d'actions) est requise.";
+  for (const ligne of c.lignes) {
+    const nombreActions = Number(ligne.nombreActions);
+    if (!ligne.nombreActions || Number.isNaN(nombreActions) || nombreActions === 0) {
+      return "Le nombre d'actions de chaque ligne est requis, et ne peut pas être nul (négatif pour une vente).";
+    }
   }
   if (!nombreOptionnelValide(c.nombreDroitVoteTheorique)) {
     return "Le nombre de droits de vote théorique doit être un nombre non nul.";
@@ -107,17 +122,22 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     acheteurNomExterne: c.acheteurExterne ? c.acheteurNomExterne.trim() : null,
     cibleId: c.cibleId,
     date: c.date,
-    nombreActions: Number(c.nombreActions),
     nombreDroitVoteTheorique: c.nombreDroitVoteTheorique ? Number(c.nombreDroitVoteTheorique) : null,
     nombreDroitVoteExercable: c.nombreDroitVoteExercable ? Number(c.nombreDroitVoteExercable) : null,
-    categorie: c.categorie.trim() || null,
     vendeurId: c.vendeurExterne ? null : c.vendeurId || null,
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
-    compteAcheteurId: c.compteAcheteurId || null,
-    compteVendeurId: c.compteVendeurId || null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,
-    // Calculée côté API, jamais saisie : valeur ignorée par le serveur à
-    // l'écriture, remplacée par la vraie valeur renvoyée dans sa réponse.
-    plusValue: null,
+    lignes: c.lignes.map(
+      (l): LigneTransaction => ({
+        // Id/plusValue : calculés côté API, jamais saisis — valeurs ignorées
+        // par le serveur à l'écriture, remplacées par la vraie réponse.
+        id: "",
+        categorie: l.categorie.trim() || null,
+        nombreActions: Number(l.nombreActions),
+        compteAcheteurId: l.compteAcheteurId || null,
+        compteVendeurId: l.compteVendeurId || null,
+        plusValue: null,
+      }),
+    ),
   };
 }

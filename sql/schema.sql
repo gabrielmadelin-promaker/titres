@@ -60,17 +60,21 @@ CREATE TABLE dbo.Types (
 GO
 
 -- Regroupement nommé des titres détenus par un actionnaire (société suivie
--- ou tiers externe), toujours dédié à un seul Type (ex. "Compte A1" pour
--- les titres de Type A d'un actionnaire donné). Choisi sur chaque
--- transaction (acheteur et/ou vendeur, voir Transactions plus bas) ; les
--- lots générés automatiquement dans Actions portent ensuite ce Compte. Pas
--- de clé étrangère vers Societes (DetenteurId) : un détenteur supprimé ne
--- doit pas bloquer la suppression ni faire disparaître ses comptes en
--- cascade — même convention que pour Transactions/Actions plus bas.
+-- ou tiers externe), toujours dédié à une seule Société émettrice ET une
+-- seule Catégorie (ex. "actions de catégorie A de la société X" est un
+-- compte différent de "catégorie A de la société Y"). Choisi sur chaque
+-- ligne de transaction (acheteur et/ou vendeur, voir TransactionLignes plus
+-- bas) — ou généré automatiquement si aucun n'est choisi (voir le backend,
+-- ValiderComptes/ResoudreComptes) ; les lots générés automatiquement dans
+-- Actions portent ensuite ce Compte. Pas de clé étrangère vers Societes
+-- (DetenteurId/SocieteEmettriceId) : une société supprimée ne doit pas
+-- bloquer la suppression ni faire disparaître ses comptes en cascade —
+-- même convention que pour Transactions/Actions plus bas.
 CREATE TABLE dbo.Comptes (
     Id                  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Comptes PRIMARY KEY DEFAULT NEWID(),
     DetenteurId         UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne NVARCHAR(300)    NULL,
+    SocieteEmettriceId  UNIQUEIDENTIFIER NULL,
     Type                NVARCHAR(50)     NULL,
     Nom                 NVARCHAR(200)    NOT NULL,
     CONSTRAINT CK_Comptes_Detenteur CHECK (
@@ -80,6 +84,7 @@ CREATE TABLE dbo.Comptes (
 );
 GO
 CREATE INDEX IX_Comptes_DetenteurId ON dbo.Comptes (DetenteurId);
+CREATE INDEX IX_Comptes_SocieteEmettriceId ON dbo.Comptes (SocieteEmettriceId);
 GO
 
 -- Ventilation par Type du nombre total d'actions d'une ligne de
@@ -104,6 +109,11 @@ GO
 -- l'application d'origine, une société supprimée peut laisser des
 -- transactions "orphelines" (affichées côté appli comme "(supprimée)")
 -- plutôt que de bloquer la suppression ou de la propager en cascade.
+-- NombreActions/Categorie/CompteAcheteurId/CompteVendeurId ne sont PAS des
+-- colonnes ici : une transaction peut porter sur plusieurs Catégories à la
+-- fois (voir TransactionLignes plus bas), chacune avec son propre Compte —
+-- seuls les droits de vote théorique/exerçable restent des nombres globaux,
+-- non ventilés par Catégorie (même principe que HistoriqueTotauxSociete).
 CREATE TABLE dbo.Transactions (
     Id                UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Transactions PRIMARY KEY DEFAULT NEWID(),
     -- Acheteur/vendeur : soit une société suivie (Id), soit un tiers hors
@@ -114,26 +124,11 @@ CREATE TABLE dbo.Transactions (
     CibleId           UNIQUEIDENTIFIER NOT NULL,
     [Date]            DATE             NOT NULL,
     -- Positif = achat, négatif = vente (cession d'une partie de la participation détenue).
-    NombreActions     DECIMAL(18,4)    NULL,
     NombreDroitVoteTheorique DECIMAL(18,4) NULL,
     NombreDroitVoteExercable DECIMAL(18,4) NULL,
-    -- Catégorie du titre (ex. "Action ordinaire"), facultative — sert à
-    -- l'alimentation automatique de la table Actions (voir plus bas).
-    Categorie         NVARCHAR(50)     NULL,
     VendeurId         UNIQUEIDENTIFIER NULL,
     VendeurNomExterne NVARCHAR(300)    NULL,
-    -- Compte (dbo.Comptes) de l'acheteur / du vendeur concerné par cette
-    -- transaction, facultatif — pas de clé étrangère, même raison que pour
-    -- Actions.CompteId plus bas.
-    CompteAcheteurId  UNIQUEIDENTIFIER NULL,
-    CompteVendeurId   UNIQUEIDENTIFIER NULL,
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
-    -- Calculée et enregistrée par l'API à chaque création/modification (pas
-    -- de colonne calculée SQL : le calcul a besoin du prix de la transaction
-    -- la plus ancienne pour la même société, une requête sur d'autres
-    -- lignes). Nulle si NombreActions >= 0 (pas une vente) ou si le prix de
-    -- l'action manque sur cette transaction ou sur la plus ancienne.
-    PlusValue         DECIMAL(18,4)    NULL,
     CONSTRAINT CK_Transactions_Acheteur CHECK (
         (AcheteurId IS NULL AND AcheteurNomExterne IS NOT NULL)
         OR (AcheteurId IS NOT NULL AND AcheteurNomExterne IS NULL)
@@ -144,6 +139,28 @@ GO
 
 CREATE INDEX IX_Transactions_AcheteurId ON dbo.Transactions (AcheteurId);
 CREATE INDEX IX_Transactions_CibleId ON dbo.Transactions (CibleId);
+GO
+
+-- Une ligne = un mouvement d'actions d'une Catégorie donnée au sein d'une
+-- transaction (positif = l'acheteur gagne, négatif = l'acheteur perd — même
+-- convention que l'ancien Transactions.NombreActions). PlusValue n'est pas
+-- une colonne : recalculée à la volée par ligne, comme pour les totaux par
+-- Catégorie des sociétés (même principe que PlusValue sur l'ancien
+-- Transactions — une valeur dérivable ne se stocke pas).
+CREATE TABLE dbo.TransactionLignes (
+    Id               UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_TransactionLignes PRIMARY KEY DEFAULT NEWID(),
+    TransactionId    UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_TransactionLignes_Transaction
+                         REFERENCES dbo.Transactions (Id) ON DELETE CASCADE,
+    Categorie        NVARCHAR(50)     NULL,
+    NombreActions    DECIMAL(18,4)    NOT NULL,
+    -- Compte (dbo.Comptes) de l'acheteur / du vendeur concerné par cette
+    -- ligne, facultatif — pas de clé étrangère, même raison que pour
+    -- Actions.CompteId plus bas.
+    CompteAcheteurId UNIQUEIDENTIFIER NULL,
+    CompteVendeurId  UNIQUEIDENTIFIER NULL
+);
+GO
+CREATE INDEX IX_TransactionLignes_TransactionId ON dbo.TransactionLignes (TransactionId);
 GO
 
 -- Suivi du cycle de vie des titres : une ligne par LOT (regroupement de
