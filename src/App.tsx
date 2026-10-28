@@ -9,7 +9,6 @@ import { TransactionForm } from "./components/TransactionForm";
 import { TransactionsTable } from "./components/TransactionsTable";
 import { TitresPanel } from "./components/TitresPanel";
 import { UtilisateursPanel } from "./components/UtilisateursPanel";
-import { VisualisationPanel } from "./components/VisualisationPanel";
 import * as api from "./lib/api";
 import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
 import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
@@ -21,10 +20,6 @@ const ONGLETS = [
   { id: "participations", label: "Participations" },
   { id: "titres", label: "Titres" },
   { id: "utilisateurs", label: "Utilisateurs" },
-  // Onglet retiré de la navigation (demande explicite) mais le code
-  // (VisualisationPanel, organigramme.ts, aretes.ts) reste en place pour le
-  // réactiver facilement plus tard : il suffit de retirer `masque: true`.
-  { id: "visualisation", label: "Visualisation", masque: true },
 ] as const;
 
 type OngletId = (typeof ONGLETS)[number]["id"];
@@ -341,7 +336,7 @@ function App() {
       )}
 
       <nav className="tabs">
-        {ONGLETS.filter((o) => !("masque" in o && o.masque) && (o.id !== "utilisateurs" || estDsi)).map((o) => (
+        {ONGLETS.filter((o) => o.id !== "utilisateurs" || estDsi).map((o) => (
           <button
             key={o.id}
             type="button"
@@ -426,10 +421,6 @@ function App() {
               onAjoute={(u) => setUtilisateurs((prev) => [...prev, u])}
               onSupprime={(id) => setUtilisateurs((prev) => prev.filter((u) => u.id !== id))}
             />
-          )}
-
-          {onglet === "visualisation" && (
-            <VisualisationPanel societes={societes} historiqueTotaux={historiqueTotaux} transactions={transactions} />
           )}
         </main>
       )}

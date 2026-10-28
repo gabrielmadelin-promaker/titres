@@ -22,11 +22,6 @@ export function formatPourcentage(value: number): string {
   return `${percentFormatter.format(value)} %`;
 }
 
-/** Comme formatPourcentage, sans le symbole % — pour l'organigramme, où il est redondant. */
-export function formatNombre(value: number): string {
-  return percentFormatter.format(value);
-}
-
 /** Nombre décimal quelconque (ex. nombre d'actions, valeur nominale), jusqu'à 4 décimales. */
 export function formatDecimal(value: number): string {
   return decimalFormatter.format(value);
