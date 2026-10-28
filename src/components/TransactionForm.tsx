@@ -1,14 +1,17 @@
 import { useState } from "react";
-import type { Societe, Transaction } from "../types";
+import type { Compte, Societe, Transaction, TypeTitre } from "../types";
 import { champsVersTransaction, champsVides, validerChamps } from "../lib/transactionChamps";
 import { TransactionChampsFields } from "./TransactionChamps";
 
 interface Props {
   societes: Societe[];
+  types: TypeTitre[];
+  comptes: Compte[];
   onAdd: (transaction: Omit<Transaction, "id">) => Promise<boolean>;
+  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
 }
 
-export function TransactionForm({ societes, onAdd }: Props) {
+export function TransactionForm({ societes, types, comptes, onAdd, onAddCompte }: Props) {
   const [champs, setChamps] = useState(champsVides());
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -37,7 +40,15 @@ export function TransactionForm({ societes, onAdd }: Props) {
 
   return (
     <form className="form" onSubmit={handleSubmit}>
-      <TransactionChampsFields champs={champs} onChange={setChamps} societes={societes} idPrefix="tx" />
+      <TransactionChampsFields
+        champs={champs}
+        onChange={setChamps}
+        societes={societes}
+        types={types}
+        comptes={comptes}
+        onAddCompte={onAddCompte}
+        idPrefix="tx"
+      />
 
       {erreur && <p className="form-error">{erreur}</p>}
 

@@ -1,12 +1,14 @@
 import { useState } from "react";
-import type { HistoriqueTotalSociete, Societe } from "../types";
+import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../types";
 import { PAYS } from "../lib/pays";
+import { ActionsParTypeEditor } from "./ActionsParTypeEditor";
 
 interface Props {
   /** Renvoie l'id de la société créée (ou null en cas d'échec). */
   onAdd: (societe: Omit<Societe, "id">) => Promise<string | null>;
   /** Appelé après une création réussie, uniquement si au moins un total a été renseigné. */
   onAddHistoriqueTotal: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
+  types: TypeTitre[];
 }
 
 function champVide(): string {
@@ -17,7 +19,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function SocieteForm({ onAdd, onAddHistoriqueTotal }: Props) {
+export function SocieteForm({ onAdd, onAddHistoriqueTotal, types }: Props) {
   const [nom, setNom] = useState("");
   const [valeurNominale, setValeurNominale] = useState(champVide());
   const [pays, setPays] = useState(champVide());
@@ -25,7 +27,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal }: Props) {
   const [siren, setSiren] = useState(champVide());
   const [lei, setLei] = useState(champVide());
   const [dateEffetTotaux, setDateEffetTotaux] = useState(today());
-  const [nombreTotalActions, setNombreTotalActions] = useState(champVide());
+  const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>([]);
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
   const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(champVide());
 
@@ -48,13 +50,14 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal }: Props) {
 
     // Les totaux ne sont qu'une commodité à la création (éviter d'avoir à
     // rouvrir la société pour les saisir juste après) : aucun n'est requis,
-    // et une ligne d'historique n'est créée que si au moins un des trois
-    // est renseigné.
-    if (nombreTotalActions || nombreTotalDroitVoteTheorique || nombreTotalDroitVoteExercable) {
+    // et une ligne d'historique n'est créée que si au moins une quantité ou
+    // un total de droits de vote est renseigné.
+    const lignesActions = actionsParType.filter((l) => l.quantite !== 0);
+    if (lignesActions.length > 0 || nombreTotalDroitVoteTheorique || nombreTotalDroitVoteExercable) {
       await onAddHistoriqueTotal({
         societeId,
         dateEffet: dateEffetTotaux || today(),
-        nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
+        actionsParType: lignesActions,
         nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
         nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
       });
@@ -67,7 +70,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal }: Props) {
     setSiren(champVide());
     setLei(champVide());
     setDateEffetTotaux(today());
-    setNombreTotalActions(champVide());
+    setActionsParType([]);
     setNombreTotalDroitVoteTheorique(champVide());
     setNombreTotalDroitVoteExercable(champVide());
   }
@@ -141,17 +144,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal }: Props) {
         />
       </div>
 
-      <div className="form-field">
-        <label htmlFor="societe-total-actions">Nombre total d'actions émises</label>
-        <input
-          id="societe-total-actions"
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalActions}
-          onChange={(e) => setNombreTotalActions(e.target.value)}
-        />
-      </div>
+      <ActionsParTypeEditor lignes={actionsParType} onChange={setActionsParType} types={types} idPrefix="societe-ajout" />
 
       <div className="form-field">
         <label htmlFor="societe-total-dv-theorique">Nombre total de droits de vote théorique émis</label>

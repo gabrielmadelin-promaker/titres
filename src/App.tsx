@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ComptesPanel } from "./components/ComptesPanel";
 import { ImportSocietes } from "./components/ImportSocietes";
 import { ImportTransactions } from "./components/ImportTransactions";
 import { LoginForm } from "./components/LoginForm";
@@ -8,11 +9,12 @@ import { SocietesTable } from "./components/SocietesTable";
 import { TransactionForm } from "./components/TransactionForm";
 import { TransactionsTable } from "./components/TransactionsTable";
 import { TitresPanel } from "./components/TitresPanel";
+import { TypesPanel } from "./components/TypesPanel";
 import { UtilisateursPanel } from "./components/UtilisateursPanel";
 import * as api from "./lib/api";
 import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
 import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
-import type { HistoriqueTotalSociete, Societe, Titre, Transaction } from "./types";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "./types";
 
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
@@ -36,8 +38,8 @@ function App() {
   const [historiqueTotaux, setHistoriqueTotaux] = useState<HistoriqueTotalSociete[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [actions, setActions] = useState<Titre[]>([]);
-  const [droitsVoteTheorique, setDroitsVoteTheorique] = useState<Titre[]>([]);
-  const [droitsVoteExercable, setDroitsVoteExercable] = useState<Titre[]>([]);
+  const [types, setTypes] = useState<TypeTitre[]>([]);
+  const [comptes, setComptes] = useState<Compte[]>([]);
   const [utilisateurs, setUtilisateurs] = useState<Utilisateur[]>([]);
   const [onglet, setOnglet] = useState<OngletId>("societes");
   const [chargement, setChargement] = useState(true);
@@ -86,37 +88,30 @@ function App() {
       api.fetchHistoriqueTotaux(),
       api.fetchTransactions(),
       api.fetchActions(),
-      api.fetchDroitsVoteTheorique(),
-      api.fetchDroitsVoteExercable(),
+      api.fetchTypes(),
+      api.fetchComptes(),
       estDsi ? api.fetchUtilisateurs() : Promise.resolve([]),
     ])
-      .then(([s, ht, t, a, dvt, dve, u]) => {
+      .then(([s, ht, t, a, ty, c, u]) => {
         setSocietes(s);
         setHistoriqueTotaux(ht);
         setTransactions(t);
         setActions(a);
-        setDroitsVoteTheorique(dvt);
-        setDroitsVoteExercable(dve);
+        setTypes(ty);
+        setComptes(c);
         setUtilisateurs(u);
       })
       .catch((e) => gererErreur(e, "Impossible de charger les données"))
       .finally(() => setChargement(false));
   }, [utilisateurConnecte]);
 
-  // Les 3 tables de titres sont régénérées côté serveur à chaque
-  // création/modification/suppression de transaction : impossible de les
+  // La table des lots d'Actions est régénérée côté serveur à chaque
+  // création/modification/suppression de transaction : impossible de la
   // mettre à jour de façon optimiste côté client (la logique de synchro
-  // n'est pas dupliquée ici), on les recharge donc après coup.
+  // n'est pas dupliquée ici), on la recharge donc après coup.
   async function rechargerTitres() {
     try {
-      const [a, dvt, dve] = await Promise.all([
-        api.fetchActions(),
-        api.fetchDroitsVoteTheorique(),
-        api.fetchDroitsVoteExercable(),
-      ]);
-      setActions(a);
-      setDroitsVoteTheorique(dvt);
-      setDroitsVoteExercable(dve);
+      setActions(await api.fetchActions());
     } catch (e) {
       gererErreur(e, "Impossible de recharger les titres");
     }
@@ -193,6 +188,64 @@ function App() {
       setErreur(null);
     } catch (e) {
       gererErreur(e, "Impossible de supprimer cette ligne d'historique");
+    }
+  }
+
+  async function ajouterType(nom: string) {
+    try {
+      const cree = await api.creerType(nom);
+      setTypes((prev) => [...prev, cree]);
+      setErreur(null);
+      return true;
+    } catch (e) {
+      gererErreur(e, "Impossible d'ajouter ce type");
+      return false;
+    }
+  }
+
+  async function supprimerType(id: string) {
+    if (!window.confirm("Supprimer ce type ?")) return;
+    try {
+      await api.supprimerType(id);
+      setTypes((prev) => prev.filter((t) => t.id !== id));
+      setErreur(null);
+    } catch (e) {
+      gererErreur(e, "Impossible de supprimer ce type");
+    }
+  }
+
+  async function ajouterCompte(compte: Omit<Compte, "id">) {
+    try {
+      const cree = await api.creerCompte(compte);
+      setComptes((prev) => [...prev, cree]);
+      setErreur(null);
+      return cree;
+    } catch (e) {
+      gererErreur(e, "Impossible d'ajouter ce compte");
+      return null;
+    }
+  }
+
+  async function modifierCompte(id: string, champs: Omit<Compte, "id">) {
+    const avant = comptes;
+    setComptes((prev) => prev.map((c) => (c.id === id ? { ...c, ...champs } : c)));
+    try {
+      await api.modifierCompte(id, champs);
+      setErreur(null);
+    } catch (e) {
+      setComptes(avant);
+      gererErreur(e, "Impossible de modifier ce compte");
+    }
+  }
+
+  async function supprimerCompte(id: string) {
+    if (!window.confirm("Supprimer ce compte ?")) return;
+    try {
+      await api.supprimerCompte(id);
+      setComptes((prev) => prev.filter((c) => c.id !== id));
+      setErreur(null);
+    } catch (e) {
+      gererErreur(e, "Impossible de supprimer ce compte");
     }
   }
 
@@ -358,13 +411,14 @@ function App() {
             <section className="panel">
               <h2>Sociétés</h2>
               <h3>Ajouter une société</h3>
-              <SocieteForm onAdd={ajouterSociete} onAddHistoriqueTotal={ajouterHistoriqueTotal} />
+              <SocieteForm onAdd={ajouterSociete} onAddHistoriqueTotal={ajouterHistoriqueTotal} types={types} />
               <ImportSocietes societes={societes} onImport={importerSocietes} />
               <h3>Liste des sociétés</h3>
               <SocietesTable
                 societes={societes}
                 historiqueTotaux={historiqueTotaux}
                 transactions={transactions}
+                types={types}
                 onDelete={supprimerSociete}
                 onUpdate={modifierSociete}
                 onAddHistoriqueTotal={ajouterHistoriqueTotal}
@@ -378,15 +432,35 @@ function App() {
             <section className="panel">
               <h2>Transactions</h2>
               <h3>Ajouter une transaction</h3>
-              <TransactionForm societes={societes} onAdd={ajouterTransaction} />
+              <TransactionForm
+                societes={societes}
+                types={types}
+                comptes={comptes}
+                onAdd={ajouterTransaction}
+                onAddCompte={ajouterCompte}
+              />
               <ImportTransactions societes={societes} onImport={importerTransactions} />
               <h3>Liste des transactions</h3>
               <TransactionsTable
                 transactions={transactions}
                 societes={societes}
                 historiqueTotaux={historiqueTotaux}
+                types={types}
+                comptes={comptes}
                 onDelete={supprimerTransaction}
                 onUpdate={modifierTransaction}
+                onAddCompte={ajouterCompte}
+              />
+              <h3>Types</h3>
+              <TypesPanel types={types} onAdd={ajouterType} onDelete={supprimerType} />
+              <h3>Comptes</h3>
+              <ComptesPanel
+                societes={societes}
+                comptes={comptes}
+                types={types}
+                onAdd={ajouterCompte}
+                onUpdate={modifierCompte}
+                onDelete={supprimerCompte}
               />
             </section>
           )}
@@ -406,12 +480,7 @@ function App() {
                 Lots de titres — qui détient combien, de quelle catégorie, à quel prix. Généré automatiquement à
                 partir des transactions : lecture seule.
               </p>
-              <TitresPanel
-                societes={societes}
-                actions={actions}
-                droitsVoteTheorique={droitsVoteTheorique}
-                droitsVoteExercable={droitsVoteExercable}
-              />
+              <TitresPanel societes={societes} actions={actions} comptes={comptes} />
             </section>
           )}
 

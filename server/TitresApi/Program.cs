@@ -144,16 +144,35 @@ app.MapDelete("/api/societes/{id:guid}", async (Guid id) =>
     return Results.NoContent();
 });
 
-const string ColonnesHistoriqueTotaux =
-    "Id, SocieteId, CONVERT(varchar(10), DateEffet, 23) AS DateEffet, " +
-    "NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable";
+// Le nombre total d'actions n'est pas une colonne de HistoriqueTotauxSociete :
+// c'est la somme de ses lignes de détail par Type (HistoriqueTotalActionsType,
+// jamais stockée directement — voir le record HistoriqueTotalSociete). Les
+// deux tables sont donc toujours lues/écrites ensemble, comme un seul objet
+// du point de vue de l'API (POST/PUT prennent la liste complète des lignes
+// de détail et la remplacent intégralement, en une transaction SQL).
+async Task<List<HistoriqueTotalSociete>> ChargerHistoriqueTotaux(SqlConnection conn)
+{
+    var parents = (await conn.QueryAsync<HistoriqueTotalSocieteSansDetail>(
+        "SELECT Id, SocieteId, CONVERT(varchar(10), DateEffet, 23) AS DateEffet, " +
+        "NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable " +
+        "FROM dbo.HistoriqueTotauxSociete ORDER BY DateEffet")).ToList();
+    var lignes = await conn.QueryAsync<LigneActionsParTypeAvecParent>(
+        "SELECT HistoriqueTotalSocieteId, Type, Quantite FROM dbo.HistoriqueTotalActionsType");
+    var lignesParParent = lignes
+        .GroupBy(l => l.HistoriqueTotalSocieteId)
+        .ToDictionary(g => g.Key, g => (IReadOnlyList<LigneActionsParType>)g.Select(l => new LigneActionsParType(l.Type, l.Quantite)).ToList());
+
+    return parents
+        .Select(p => new HistoriqueTotalSociete(
+            p.Id, p.SocieteId, p.DateEffet, p.NombreTotalDroitVoteTheorique, p.NombreTotalDroitVoteExercable,
+            lignesParParent.GetValueOrDefault(p.Id, Array.Empty<LigneActionsParType>())))
+        .ToList();
+}
 
 app.MapGet("/api/historique-totaux-societe", async () =>
 {
     await using var conn = new SqlConnection(ConnectionString());
-    var historique = await conn.QueryAsync<HistoriqueTotalSociete>(
-        $"SELECT {ColonnesHistoriqueTotaux} FROM dbo.HistoriqueTotauxSociete ORDER BY DateEffet");
-    return Results.Ok(historique);
+    return Results.Ok(await ChargerHistoriqueTotaux(conn));
 });
 
 app.MapPost("/api/historique-totaux-societe", async (HistoriqueTotalSocieteInput input) =>
@@ -162,22 +181,40 @@ app.MapPost("/api/historique-totaux-societe", async (HistoriqueTotalSocieteInput
     if (string.IsNullOrWhiteSpace(dateEffet))
         return Results.BadRequest("La date d'effet est requise.");
 
-    var ligne = new HistoriqueTotalSociete(
-        Guid.NewGuid(), input.SocieteId, dateEffet,
-        input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable);
+    var lignesActions = (input.ActionsParType ?? []).Where(l => l.Quantite != 0).ToList();
+    var id = Guid.NewGuid();
+
     await using var conn = new SqlConnection(ConnectionString());
+    await conn.OpenAsync();
+    await using var sqlTx = await conn.BeginTransactionAsync();
     try
     {
         await conn.ExecuteAsync(
-            "INSERT INTO dbo.HistoriqueTotauxSociete (Id, SocieteId, DateEffet, NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable) " +
-            "VALUES (@Id, @SocieteId, @DateEffet, @NombreTotalActions, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable)",
-            ligne);
+            "INSERT INTO dbo.HistoriqueTotauxSociete (Id, SocieteId, DateEffet, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable) " +
+            "VALUES (@Id, @SocieteId, @DateEffet, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable)",
+            new { Id = id, input.SocieteId, DateEffet = dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable },
+            sqlTx);
+
+        foreach (var ligne in lignesActions)
+            await conn.ExecuteAsync(
+                "INSERT INTO dbo.HistoriqueTotalActionsType (Id, HistoriqueTotalSocieteId, Type, Quantite) VALUES (NEWID(), @id, @Type, @Quantite)",
+                new { id, ligne.Type, ligne.Quantite }, sqlTx);
+
+        await sqlTx.CommitAsync();
     }
     catch (SqlException e) when (e.Number == 2627)
     {
-        return Results.BadRequest("Cette société a déjà une ligne d'historique à cette date d'effet.");
+        await sqlTx.RollbackAsync();
+        return Results.BadRequest("Cette société a déjà une ligne d'historique à cette date d'effet, ou un Type est en double.");
     }
-    return Results.Created($"/api/historique-totaux-societe/{ligne.Id}", ligne);
+    catch
+    {
+        await sqlTx.RollbackAsync();
+        throw;
+    }
+
+    var cree = new HistoriqueTotalSociete(id, input.SocieteId, dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable, lignesActions);
+    return Results.Created($"/api/historique-totaux-societe/{id}", cree);
 });
 
 app.MapPut("/api/historique-totaux-societe/{id:guid}", async (Guid id, HistoriqueTotalSocieteInput input) =>
@@ -186,24 +223,44 @@ app.MapPut("/api/historique-totaux-societe/{id:guid}", async (Guid id, Historiqu
     if (string.IsNullOrWhiteSpace(dateEffet))
         return Results.BadRequest("La date d'effet est requise.");
 
+    var lignesActions = (input.ActionsParType ?? []).Where(l => l.Quantite != 0).ToList();
+
     await using var conn = new SqlConnection(ConnectionString());
+    await conn.OpenAsync();
+    await using var sqlTx = await conn.BeginTransactionAsync();
+    int lignes;
     try
     {
-        var lignes = await conn.ExecuteAsync(
+        lignes = await conn.ExecuteAsync(
             "UPDATE dbo.HistoriqueTotauxSociete SET SocieteId = @SocieteId, DateEffet = @DateEffet, " +
-            "NombreTotalActions = @NombreTotalActions, NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, " +
-            "NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable WHERE Id = @id",
-            new
-            {
-                id, input.SocieteId, DateEffet = dateEffet,
-                input.NombreTotalActions, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable,
-            });
-        return lignes > 0 ? Results.NoContent() : Results.NotFound();
+            "NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable " +
+            "WHERE Id = @id",
+            new { id, input.SocieteId, DateEffet = dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable },
+            sqlTx);
+
+        if (lignes > 0)
+        {
+            await conn.ExecuteAsync("DELETE FROM dbo.HistoriqueTotalActionsType WHERE HistoriqueTotalSocieteId = @id", new { id }, sqlTx);
+            foreach (var ligne in lignesActions)
+                await conn.ExecuteAsync(
+                    "INSERT INTO dbo.HistoriqueTotalActionsType (Id, HistoriqueTotalSocieteId, Type, Quantite) VALUES (NEWID(), @id, @Type, @Quantite)",
+                    new { id, ligne.Type, ligne.Quantite }, sqlTx);
+        }
+
+        await sqlTx.CommitAsync();
     }
     catch (SqlException e) when (e.Number == 2627)
     {
-        return Results.BadRequest("Cette société a déjà une ligne d'historique à cette date d'effet.");
+        await sqlTx.RollbackAsync();
+        return Results.BadRequest("Un Type est en double pour cette ligne d'historique.");
     }
+    catch
+    {
+        await sqlTx.RollbackAsync();
+        throw;
+    }
+
+    return lignes > 0 ? Results.NoContent() : Results.NotFound();
 });
 
 app.MapDelete("/api/historique-totaux-societe/{id:guid}", async (Guid id) =>
@@ -213,10 +270,99 @@ app.MapDelete("/api/historique-totaux-societe/{id:guid}", async (Guid id) =>
     return Results.NoContent();
 });
 
+const string ColonnesType = "Id, Nom";
+
+app.MapGet("/api/types", async () =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var types = await conn.QueryAsync<TypeTitre>($"SELECT {ColonnesType} FROM dbo.Types ORDER BY Nom");
+    return Results.Ok(types);
+});
+
+app.MapPost("/api/types", async (TypeTitreInput input) =>
+{
+    var nom = input.Nom?.Trim();
+    if (string.IsNullOrEmpty(nom))
+        return Results.BadRequest("Le nom est requis.");
+
+    var type = new TypeTitre(Guid.NewGuid(), nom);
+    await using var conn = new SqlConnection(ConnectionString());
+    try
+    {
+        await conn.ExecuteAsync("INSERT INTO dbo.Types (Id, Nom) VALUES (@Id, @Nom)", type);
+    }
+    catch (SqlException e) when (e.Number == 2627)
+    {
+        return Results.BadRequest($"Le type « {nom} » existe déjà.");
+    }
+    return Results.Created($"/api/types/{type.Id}", type);
+});
+
+app.MapDelete("/api/types/{id:guid}", async (Guid id) =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    await conn.ExecuteAsync("DELETE FROM dbo.Types WHERE Id = @id", new { id });
+    return Results.NoContent();
+});
+
+const string ColonnesCompte = "Id, DetenteurId, DetenteurNomExterne, Type, Nom";
+
+app.MapGet("/api/comptes", async () =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    var comptes = await conn.QueryAsync<Compte>($"SELECT {ColonnesCompte} FROM dbo.Comptes ORDER BY Nom");
+    return Results.Ok(comptes);
+});
+
+(string? Erreur, string? Nom, string? DetenteurNomExterne) ValiderCompteInput(CompteInput input)
+{
+    var nom = input.Nom?.Trim();
+    if (string.IsNullOrEmpty(nom))
+        return ("Le nom du compte est requis.", null, null);
+    var detenteurNomExterne = string.IsNullOrWhiteSpace(input.DetenteurNomExterne) ? null : input.DetenteurNomExterne.Trim();
+    if ((input.DetenteurId is null) == (detenteurNomExterne is null))
+        return ("Renseignez le détenteur du compte (dans la liste, ou son nom si hors groupe).", null, null);
+    return (null, nom, detenteurNomExterne);
+}
+
+app.MapPost("/api/comptes", async (CompteInput input) =>
+{
+    var (erreur, nom, detenteurNomExterne) = ValiderCompteInput(input);
+    if (erreur is not null)
+        return Results.BadRequest(erreur);
+
+    var compte = new Compte(Guid.NewGuid(), input.DetenteurId, detenteurNomExterne, input.Type, nom!);
+    await using var conn = new SqlConnection(ConnectionString());
+    await conn.ExecuteAsync(
+        "INSERT INTO dbo.Comptes (Id, DetenteurId, DetenteurNomExterne, Type, Nom) VALUES (@Id, @DetenteurId, @DetenteurNomExterne, @Type, @Nom)",
+        compte);
+    return Results.Created($"/api/comptes/{compte.Id}", compte);
+});
+
+app.MapPut("/api/comptes/{id:guid}", async (Guid id, CompteInput input) =>
+{
+    var (erreur, nom, detenteurNomExterne) = ValiderCompteInput(input);
+    if (erreur is not null)
+        return Results.BadRequest(erreur);
+
+    await using var conn = new SqlConnection(ConnectionString());
+    var lignes = await conn.ExecuteAsync(
+        "UPDATE dbo.Comptes SET DetenteurId = @DetenteurId, DetenteurNomExterne = @DetenteurNomExterne, Type = @Type, Nom = @Nom WHERE Id = @id",
+        new { id, input.DetenteurId, detenteurNomExterne, input.Type, Nom = nom });
+    return lignes > 0 ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapDelete("/api/comptes/{id:guid}", async (Guid id) =>
+{
+    await using var conn = new SqlConnection(ConnectionString());
+    await conn.ExecuteAsync("DELETE FROM dbo.Comptes WHERE Id = @id", new { id });
+    return Results.NoContent();
+});
+
 const string ColonnesTransaction =
     "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, NombreActions, " +
     "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, " +
-    "VendeurId, VendeurNomExterne, PrixAction, PlusValue";
+    "VendeurId, VendeurNomExterne, CompteAcheteurId, CompteVendeurId, PrixAction, PlusValue";
 
 app.MapGet("/api/transactions", async () =>
 {
@@ -254,6 +400,33 @@ app.MapGet("/api/transactions", async () =>
     return (null, acheteurNomExterne, vendeurNomExterne);
 }
 
+// Un compte choisi sur une transaction doit appartenir au bon détenteur
+// (celui du camp pour lequel il est choisi) et, s'il est dédié à un Type,
+// correspondre au Type de cette transaction — aucune contrainte en base
+// (pas de clé étrangère, voir dbo.Comptes) : ce contrôle est la seule
+// garde-fou contre un compte mal assorti.
+async Task<string?> ValiderComptes(SqlConnection conn, TransactionInput input, string? acheteurNomExterne, string? vendeurNomExterne)
+{
+    async Task<string?> ValiderCompte(Guid? compteId, Guid? detenteurId, string? detenteurNomExterne, string role)
+    {
+        if (compteId is null)
+            return null;
+        var compte = await conn.QuerySingleOrDefaultAsync<Compte>(
+            $"SELECT {ColonnesCompte} FROM dbo.Comptes WHERE Id = @compteId", new { compteId });
+        if (compte is null)
+            return $"Le compte sélectionné pour le {role} est introuvable.";
+        var memeDetenteur = detenteurId is not null ? compte.DetenteurId == detenteurId : compte.DetenteurNomExterne == detenteurNomExterne;
+        if (!memeDetenteur)
+            return $"Le compte sélectionné pour le {role} n'appartient pas à cette société.";
+        if (compte.Type is not null && input.Categorie is not null && compte.Type != input.Categorie)
+            return $"Le compte sélectionné pour le {role} est dédié au Type « {compte.Type} », différent du Type de cette transaction.";
+        return null;
+    }
+
+    return await ValiderCompte(input.CompteAcheteurId, input.AcheteurId, acheteurNomExterne, "acheteur")
+        ?? await ValiderCompte(input.CompteVendeurId, input.VendeurId, vendeurNomExterne, "vendeur");
+}
+
 // PlusValue n'est jamais saisie, ni stockée en base : recalculée à chaque
 // lecture (voir CalculerPlusValues). Basée sur le FIFO réel des lots
 // d'Actions consommés par cette transaction (voir ConsommerLots) : prix de
@@ -277,12 +450,12 @@ decimal? CalculerPlusValue(decimal? nombreActions, decimal? prixAction, decimal?
 // ci-dessous), avec exactement la même logique FIFO (lots triés par ordre
 // d'acquisition, les plus anciens consommés en premier).
 decimal? ConsommerLotsMemoire(
-    Dictionary<(Guid, string?, Guid?, string?), List<LotMemoire>> lotsParDetenteur,
-    Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, decimal quantite)
+    Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotMemoire>> lotsParDetenteur,
+    Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, Guid? compteId, decimal quantite)
 {
     if (quantite <= 0)
         return null;
-    if (!lotsParDetenteur.TryGetValue((cibleId, categorie, detenteurId, detenteurNomExterne), out var lots))
+    if (!lotsParDetenteur.TryGetValue((cibleId, categorie, detenteurId, detenteurNomExterne, compteId), out var lots))
         return null;
 
     var restant = quantite;
@@ -310,13 +483,13 @@ decimal? ConsommerLotsMemoire(
 }
 
 void CreerLotMemoire(
-    Dictionary<(Guid, string?, Guid?, string?), List<LotMemoire>> lotsParDetenteur,
-    Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne,
+    Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotMemoire>> lotsParDetenteur,
+    Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, Guid? compteId,
     decimal quantite, decimal? prixInitial)
 {
     if (quantite <= 0)
         return;
-    var cle = (cibleId, categorie, detenteurId, detenteurNomExterne);
+    var cle = (cibleId, categorie, detenteurId, detenteurNomExterne, compteId);
     if (!lotsParDetenteur.TryGetValue(cle, out var lots))
     {
         lots = [];
@@ -329,17 +502,18 @@ void CreerLotMemoire(
 // n'est plus ni lue ni écrite) : recalculée à chaque lecture, pour toutes
 // les transactions à la fois, en rejouant leur historique chronologique en
 // mémoire — jamais désynchronisée d'une évolution de la règle de calcul,
-// sans script de rattrapage à maintenir. Ne rejoue que la notion Actions
-// (seule dont dépend la plus-value), avec exactement la même logique que
-// SynchroniserTitresMetrique/ConsommerLots/CreerLot, appliquée à des lots
-// en mémoire plutôt qu'à la table dbo.Actions.
+// sans script de rattrapage à maintenir. Rejoue les actions avec exactement
+// la même logique que SynchroniserTitres/ConsommerLots/CreerLot (y compris
+// la distinction par Compte), appliquée à des lots en mémoire plutôt qu'à
+// la table dbo.Actions.
 async Task<Dictionary<Guid, decimal?>> CalculerPlusValues(SqlConnection conn)
 {
     var transactions = await conn.QueryAsync<TransactionPourPlusValue>(
-        "SELECT Id, AcheteurId, AcheteurNomExterne, CibleId, NombreActions, Categorie, VendeurId, VendeurNomExterne, PrixAction " +
+        "SELECT Id, AcheteurId, AcheteurNomExterne, CibleId, NombreActions, Categorie, VendeurId, VendeurNomExterne, " +
+        "CompteAcheteurId, CompteVendeurId, PrixAction " +
         "FROM dbo.Transactions ORDER BY [Date] ASC, Id ASC");
 
-    var lotsParDetenteur = new Dictionary<(Guid, string?, Guid?, string?), List<LotMemoire>>();
+    var lotsParDetenteur = new Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotMemoire>>();
     var resultat = new Dictionary<Guid, decimal?>();
 
     foreach (var t in transactions)
@@ -353,17 +527,17 @@ async Task<Dictionary<Guid, decimal?>> CalculerPlusValues(SqlConnection conn)
 
             if (variation < 0)
             {
-                var prixInitialReporte = ConsommerLotsMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.AcheteurId, t.AcheteurNomExterne, -variation);
+                var prixInitialReporte = ConsommerLotsMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.AcheteurId, t.AcheteurNomExterne, t.CompteAcheteurId, -variation);
                 if (vendeurRenseigne)
-                    CreerLotMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.VendeurId, t.VendeurNomExterne, -variation, prixInitialReporte ?? t.PrixAction);
+                    CreerLotMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.VendeurId, t.VendeurNomExterne, t.CompteVendeurId, -variation, prixInitialReporte ?? t.PrixAction);
                 plusValue = CalculerPlusValue(variation, t.PrixAction, prixInitialReporte);
             }
             else
             {
                 decimal? prixInitialReporte = null;
                 if (vendeurRenseigne)
-                    prixInitialReporte = ConsommerLotsMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.VendeurId, t.VendeurNomExterne, variation);
-                CreerLotMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.AcheteurId, t.AcheteurNomExterne, variation, prixInitialReporte ?? t.PrixAction);
+                    prixInitialReporte = ConsommerLotsMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.VendeurId, t.VendeurNomExterne, t.CompteVendeurId, variation);
+                CreerLotMemoire(lotsParDetenteur, t.CibleId, t.Categorie, t.AcheteurId, t.AcheteurNomExterne, t.CompteAcheteurId, variation, prixInitialReporte ?? t.PrixAction);
                 plusValue = CalculerPlusValue(variation, t.PrixAction, prixInitialReporte);
             }
         }
@@ -387,9 +561,15 @@ async Task<Dictionary<Guid, decimal?>> CalculerPlusValues(SqlConnection conn)
 async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionInput input, Guid? idAExclure)
 {
     var totaux = await conn.QuerySingleOrDefaultAsync<TotauxSociete>(
-        "SELECT TOP 1 NombreTotalActions, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable " +
+        "SELECT TOP 1 Id, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable " +
         "FROM dbo.HistoriqueTotauxSociete WHERE SocieteId = @cibleId AND DateEffet <= @date ORDER BY DateEffet DESC",
         new { cibleId = input.CibleId, date = input.Date });
+    // Le total d'actions n'est pas une colonne : c'est la somme des lignes
+    // de détail par Type de cette ligne d'historique (voir ChargerHistoriqueTotaux).
+    var totalActions = totaux is null
+        ? null
+        : await conn.ExecuteScalarAsync<decimal?>(
+            "SELECT SUM(Quantite) FROM dbo.HistoriqueTotalActionsType WHERE HistoriqueTotalSocieteId = @id", new { id = totaux.Id });
 
     var lignes = (await conn.QueryAsync<LigneParticipation>(
         "SELECT AcheteurId, VendeurId, NombreActions, NombreDroitVoteTheorique, NombreDroitVoteExercable " +
@@ -433,11 +613,11 @@ async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionIn
         if (n < 0)
             return $"Cette opération ferait passer le nombre de droits de vote exerçable détenu par une société dans la cible à {n:0.##}, ce qui est négatif.";
 
-    if (totaux?.NombreTotalActions is decimal totalActions)
+    if (totalActions is decimal ta)
     {
         var somme = actionsParId.Values.Sum();
-        if (somme > totalActions)
-            return $"Cette opération ferait dépasser le nombre total d'actions émises par la société cible à cette date ({somme:0.##} pour un total de {totalActions:0.##}).";
+        if (somme > ta)
+            return $"Cette opération ferait dépasser le nombre total d'actions émises par la société cible à cette date ({somme:0.##} pour un total de {ta:0.##}).";
     }
     if (totaux?.NombreTotalDroitVoteTheorique is decimal totalDvTheorique)
     {
@@ -455,16 +635,13 @@ async Task<string?> ValiderBornesParticipation(SqlConnection conn, TransactionIn
     return null;
 }
 
-// Noms des trois tables de titres, alimentées automatiquement à partir des
-// transactions (jamais saisies à la main) : une par notion.
-string[] TablesTitres = ["Actions", "DroitsVoteTheorique", "DroitsVoteExercable"];
-
-// Consomme jusqu'à `quantite` titres appartenant à ce détenteur, pour cette
-// société émettrice et cette catégorie, en épuisant les lots existants du
-// plus ancien au plus récent (FIFO par date d'acquisition) : un lot dont la
-// quantité est entièrement consommée est supprimé, un lot partiellement
-// consommé voit sa Quantite réduite d'autant (jamais supprimé ni recréé,
-// pour ne pas perdre son PrixInitial d'origine sur la portion restante).
+// Consomme jusqu'à `quantite` actions appartenant à ce détenteur (et, si
+// renseigné, ce compte précis), pour cette société émettrice et cette
+// catégorie, en épuisant les lots existants du plus ancien au plus récent
+// (FIFO par date d'acquisition) : un lot dont la quantité est entièrement
+// consommée est supprimé, un lot partiellement consommé voit sa Quantite
+// réduite d'autant (jamais supprimé ni recréé, pour ne pas perdre son
+// PrixInitial d'origine sur la portion restante).
 // Renvoie le prix d'origine moyen, pondéré par quantité, des titres
 // consommés (null si aucun titre consommé, ou si leurs PrixInitial sont
 // tous NULL), pour pouvoir le reporter sur le lot créé en contrepartie côté
@@ -474,19 +651,20 @@ string[] TablesTitres = ["Actions", "DroitsVoteTheorique", "DroitsVoteExercable"
 // suivi unitaire, une quantité très élevée (même des milliards) ne
 // nécessite jamais plus d'une poignée de lignes modifiées.
 async Task<decimal?> ConsommerLots(
-    SqlConnection conn, IDbTransaction tx, string table, Guid societeEmettriceId, string? categorie,
-    Guid? detenteurId, string? detenteurNomExterne, decimal quantite)
+    SqlConnection conn, IDbTransaction tx, Guid societeEmettriceId, string? categorie,
+    Guid? detenteurId, string? detenteurNomExterne, Guid? compteId, decimal quantite)
 {
     if (quantite <= 0)
         return null;
 
     var lots = (await conn.QueryAsync<Lot>(
-        $"SELECT Id, Quantite, PrixInitial FROM dbo.{table} " +
+        "SELECT Id, Quantite, PrixInitial FROM dbo.Actions " +
         "WHERE SocieteEmettriceId = @societeEmettriceId " +
         "  AND ((@detenteurId IS NOT NULL AND SocieteDetentriceId = @detenteurId) OR (@detenteurId IS NULL AND DetenteurNomExterne = @detenteurNomExterne)) " +
         "  AND ((@categorie IS NULL AND Categorie IS NULL) OR Categorie = @categorie) " +
+        "  AND ((@compteId IS NULL AND CompteId IS NULL) OR CompteId = @compteId) " +
         "ORDER BY DateAcquisition ASC, Id ASC",
-        new { societeEmettriceId, detenteurId, detenteurNomExterne, categorie },
+        new { societeEmettriceId, detenteurId, detenteurNomExterne, categorie, compteId },
         tx)).ToList();
 
     var restant = quantite;
@@ -506,9 +684,9 @@ async Task<decimal?> ConsommerLots(
         }
 
         if (consomme >= lot.Quantite)
-            await conn.ExecuteAsync($"DELETE FROM dbo.{table} WHERE Id = @id", new { id = lot.Id }, tx);
+            await conn.ExecuteAsync("DELETE FROM dbo.Actions WHERE Id = @id", new { id = lot.Id }, tx);
         else
-            await conn.ExecuteAsync($"UPDATE dbo.{table} SET Quantite = Quantite - @consomme WHERE Id = @id", new { consomme, id = lot.Id }, tx);
+            await conn.ExecuteAsync("UPDATE dbo.Actions SET Quantite = Quantite - @consomme WHERE Id = @id", new { consomme, id = lot.Id }, tx);
 
         restant -= consomme;
     }
@@ -516,40 +694,52 @@ async Task<decimal?> ConsommerLots(
     return sommeQuantiteConsommee > 0 ? sommePrixPondere / sommeQuantiteConsommee : null;
 }
 
-// Crée un nouveau lot de `quantite` titres pour ce détenteur — toujours une
-// seule ligne, quelle que soit la quantité (contrairement à l'ancien suivi
-// unitaire). Jamais fusionné avec un lot existant même identique : chaque
-// lot reste associé à la transaction qui l'a créé (TransactionOrigineId),
-// pour pouvoir le retirer précisément si cette transaction est modifiée ou
-// supprimée (voir RetirerTitresDeTransaction) — fusionner perdrait cette
-// traçabilité.
+// Crée un nouveau lot de `quantite` actions pour ce détenteur (et ce
+// compte, si renseigné) — toujours une seule ligne, quelle que soit la
+// quantité (contrairement à l'ancien suivi unitaire). Jamais fusionné avec
+// un lot existant même identique : chaque lot reste associé à la
+// transaction qui l'a créé (TransactionOrigineId), pour pouvoir le retirer
+// précisément si cette transaction est modifiée ou supprimée (voir
+// RetirerTitresDeTransaction) — fusionner perdrait cette traçabilité.
 async Task CreerLot(
-    SqlConnection conn, IDbTransaction tx, string table, Guid societeEmettriceId, string? categorie,
-    Guid? detenteurId, string? detenteurNomExterne, decimal quantite,
+    SqlConnection conn, IDbTransaction tx, Guid societeEmettriceId, string? categorie,
+    Guid? detenteurId, string? detenteurNomExterne, Guid? compteId, decimal quantite,
     decimal? prixAcquisition, decimal? prixInitial, string date, Guid transactionId)
 {
     if (quantite <= 0)
         return;
     await conn.ExecuteAsync(
-        $"INSERT INTO dbo.{table} (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId) " +
-        "VALUES (NEWID(), @societeEmettriceId, @categorie, @detenteurId, @detenteurNomExterne, @quantite, @prixInitial, @prixAcquisition, @date, @transactionId)",
-        new { societeEmettriceId, categorie, detenteurId, detenteurNomExterne, quantite, prixInitial, prixAcquisition, date, transactionId },
+        "INSERT INTO dbo.Actions (Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, CompteId, Quantite, PrixInitial, PrixAcquisition, DateAcquisition, TransactionOrigineId) " +
+        "VALUES (NEWID(), @societeEmettriceId, @categorie, @detenteurId, @detenteurNomExterne, @compteId, @quantite, @prixInitial, @prixAcquisition, @date, @transactionId)",
+        new { societeEmettriceId, categorie, detenteurId, detenteurNomExterne, compteId, quantite, prixInitial, prixAcquisition, date, transactionId },
         tx);
 }
 
-// Synchronise une seule table de titres avec la quantité signée d'une
-// transaction (positif = l'acheteur gagne, négatif = l'acheteur perd ;
-// symétrique côté vendeur s'il est renseigné — même règle que
-// ValiderBornesParticipation/calculerParticipations). Le camp perdant est
-// toujours traité en premier, pour pouvoir reporter le prix d'origine de ses
-// lignes retirées sur les nouvelles lignes du camp gagnant.
-async Task SynchroniserTitresMetrique(
-    SqlConnection conn, IDbTransaction tx, string table, Guid cibleId, string? categorie,
-    Guid? acheteurId, string? acheteurNomExterne, decimal? quantiteSignee,
-    Guid? vendeurId, string? vendeurNomExterne,
-    decimal? prixAction, string date, Guid transactionId)
+// Synchronise les lots d'Actions avec la quantité signée d'une transaction
+// (positif = l'acheteur gagne, négatif = l'acheteur perd ; symétrique côté
+// vendeur s'il est renseigné — même règle que ValiderBornesParticipation/
+// calculerParticipations). Le camp perdant est toujours traité en premier,
+// pour pouvoir reporter le prix d'origine de ses lots retirés sur le lot
+// créé en contrepartie côté gagnant.
+//
+// Ne synchronise que les actions : les droits de vote théorique/exerçable
+// n'ont pas de table de lots (retirée, voir dbo.DroitsVoteTheorique/
+// DroitsVoteExercable) — aucun calcul de l'application n'en dépendait.
+//
+// Limite connue : modifier ou supprimer une transaction retire les lots
+// qu'elle avait créés (via TransactionOrigineId, voir RetirerTitresDeTransaction),
+// mais ne restitue pas ceux qu'elle avait consommés chez le camp perdant —
+// leur identité précise n'est pas conservée au-delà du prix moyen reporté.
+// Un correctif manuel dans l'onglet Titres peut être nécessaire dans ce cas,
+// normalement rare (modification peu après la saisie, ou correction d'une
+// erreur de saisie).
+async Task SynchroniserTitres(
+    SqlConnection conn, IDbTransaction tx, Guid cibleId, string? categorie,
+    Guid? acheteurId, string? acheteurNomExterne, Guid? compteAcheteurId,
+    Guid? vendeurId, string? vendeurNomExterne, Guid? compteVendeurId,
+    decimal? nombreActions, decimal? prixAction, string date, Guid transactionId)
 {
-    if (quantiteSignee is not decimal variation || variation == 0)
+    if (nombreActions is not decimal variation || variation == 0)
         return;
 
     var vendeurRenseigne = vendeurId is not null || vendeurNomExterne is not null;
@@ -558,52 +748,24 @@ async Task SynchroniserTitresMetrique(
 
     if (variation < 0)
     {
-        var prixInitialReporte = await ConsommerLots(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, -variation);
+        var prixInitialReporte = await ConsommerLots(conn, tx, cibleId, categorie, acheteurId, acheteurNomExterne, compteAcheteurId, -variation);
         if (vendeurRenseigne)
-            await CreerLot(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, -variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+            await CreerLot(conn, tx, cibleId, categorie, vendeurId, vendeurNomExterne, compteVendeurId, -variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
     }
     else
     {
         decimal? prixInitialReporte = null;
         if (vendeurRenseigne)
-            prixInitialReporte = await ConsommerLots(conn, tx, table, cibleId, categorie, vendeurId, vendeurNomExterne, variation);
-        await CreerLot(conn, tx, table, cibleId, categorie, acheteurId, acheteurNomExterne, variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
+            prixInitialReporte = await ConsommerLots(conn, tx, cibleId, categorie, vendeurId, vendeurNomExterne, compteVendeurId, variation);
+        await CreerLot(conn, tx, cibleId, categorie, acheteurId, acheteurNomExterne, compteAcheteurId, variation, prixAction, prixInitialReporte ?? prixAction, date, transactionId);
     }
 }
 
-// Point d'entrée : applique une transaction aux trois tables de titres, une
-// fois par métrique.
-//
-// Limite connue : modifier ou supprimer une transaction retire les lignes
-// qu'elle avait créées (via TransactionOrigineId, voir RetirerTitresDeTransaction),
-// mais ne restitue pas celles qu'elle avait consommées chez le camp perdant
-// — leur identité précise n'est pas conservée au-delà du prix moyen reporté.
-// Un correctif manuel dans l'onglet Titres peut être nécessaire dans ce cas,
-// normalement rare (modification peu après la saisie, ou correction d'une
-// erreur de saisie).
-async Task SynchroniserTitres(
-    SqlConnection conn, IDbTransaction tx, Guid cibleId, string? categorie,
-    Guid? acheteurId, string? acheteurNomExterne, Guid? vendeurId, string? vendeurNomExterne,
-    decimal? nombreActions, decimal? nombreDroitVoteTheorique, decimal? nombreDroitVoteExercable,
-    decimal? prixAction, string date, Guid transactionId)
-{
-    await SynchroniserTitresMetrique(
-        conn, tx, "Actions", cibleId, categorie, acheteurId, acheteurNomExterne, nombreActions,
-        vendeurId, vendeurNomExterne, prixAction, date, transactionId);
-    await SynchroniserTitresMetrique(
-        conn, tx, "DroitsVoteTheorique", cibleId, categorie, acheteurId, acheteurNomExterne, nombreDroitVoteTheorique,
-        vendeurId, vendeurNomExterne, prixAction, date, transactionId);
-    await SynchroniserTitresMetrique(
-        conn, tx, "DroitsVoteExercable", cibleId, categorie, acheteurId, acheteurNomExterne, nombreDroitVoteExercable,
-        vendeurId, vendeurNomExterne, prixAction, date, transactionId);
-}
-
-// Retire, dans les trois tables, toutes les lignes créées par cette
-// transaction (voir la limite documentée sur SynchroniserTitres).
+// Retire les lots d'Actions créés par cette transaction (voir la limite
+// documentée sur SynchroniserTitres).
 async Task RetirerTitresDeTransaction(SqlConnection conn, IDbTransaction tx, Guid transactionId)
 {
-    foreach (var table in TablesTitres)
-        await conn.ExecuteAsync($"DELETE FROM dbo.{table} WHERE TransactionOrigineId = @transactionId", new { transactionId }, tx);
+    await conn.ExecuteAsync("DELETE FROM dbo.Actions WHERE TransactionOrigineId = @transactionId", new { transactionId }, tx);
 }
 
 app.MapPost("/api/transactions", async (TransactionInput input) =>
@@ -618,6 +780,10 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
     if (erreurBornes is not null)
         return Results.BadRequest(erreurBornes);
 
+    var erreurComptes = await ValiderComptes(conn, input, acheteurNomExterne, vendeurNomExterne);
+    if (erreurComptes is not null)
+        return Results.BadRequest(erreurComptes);
+
     var transactionId = Guid.NewGuid();
     await conn.OpenAsync();
     await using var sqlTx = await conn.BeginTransactionAsync();
@@ -628,20 +794,22 @@ app.MapPost("/api/transactions", async (TransactionInput input) =>
         // juste avant de répondre).
         await conn.ExecuteAsync(
             "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], NombreActions, " +
-            "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, PrixAction) " +
+            "NombreDroitVoteTheorique, NombreDroitVoteExercable, Categorie, VendeurId, VendeurNomExterne, " +
+            "CompteAcheteurId, CompteVendeurId, PrixAction) " +
             "VALUES (@Id, @AcheteurId, @AcheteurNomExterne, @CibleId, @Date, @NombreActions, " +
-            "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @Categorie, @VendeurId, @VendeurNomExterne, @PrixAction)",
+            "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @Categorie, @VendeurId, @VendeurNomExterne, " +
+            "@CompteAcheteurId, @CompteVendeurId, @PrixAction)",
             new
             {
                 Id = transactionId, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
                 input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
-                vendeurNomExterne, input.PrixAction,
+                vendeurNomExterne, input.CompteAcheteurId, input.CompteVendeurId, input.PrixAction,
             },
             sqlTx);
 
         await SynchroniserTitres(
-            conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
-            input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, transactionId);
+            conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.CompteAcheteurId,
+            input.VendeurId, vendeurNomExterne, input.CompteVendeurId, input.NombreActions, input.PrixAction, input.Date, transactionId);
 
         await sqlTx.CommitAsync();
     }
@@ -670,6 +838,10 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
     if (erreurBornes is not null)
         return Results.BadRequest(erreurBornes);
 
+    var erreurComptes = await ValiderComptes(conn, input, acheteurNomExterne, vendeurNomExterne);
+    if (erreurComptes is not null)
+        return Results.BadRequest(erreurComptes);
+
     await conn.OpenAsync();
     await using var sqlTx = await conn.BeginTransactionAsync();
     int lignes;
@@ -683,13 +855,14 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
             "CibleId = @CibleId, [Date] = @Date, NombreActions = @NombreActions, " +
             "NombreDroitVoteTheorique = @NombreDroitVoteTheorique, NombreDroitVoteExercable = @NombreDroitVoteExercable, " +
             "Categorie = @Categorie, VendeurId = @VendeurId, " +
-            "VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction " +
+            "VendeurNomExterne = @VendeurNomExterne, CompteAcheteurId = @CompteAcheteurId, CompteVendeurId = @CompteVendeurId, " +
+            "PrixAction = @PrixAction " +
             "WHERE Id = @id",
             new
             {
                 id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date, input.NombreActions,
                 input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.Categorie, input.VendeurId,
-                vendeurNomExterne, input.PrixAction,
+                vendeurNomExterne, input.CompteAcheteurId, input.CompteVendeurId, input.PrixAction,
             },
             sqlTx);
 
@@ -697,8 +870,8 @@ app.MapPut("/api/transactions/{id:guid}", async (Guid id, TransactionInput input
         {
             await RetirerTitresDeTransaction(conn, sqlTx, id);
             await SynchroniserTitres(
-                conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.VendeurId, vendeurNomExterne,
-                input.NombreActions, input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.PrixAction, input.Date, id);
+                conn, sqlTx, input.CibleId, input.Categorie, input.AcheteurId, acheteurNomExterne, input.CompteAcheteurId,
+                input.VendeurId, vendeurNomExterne, input.CompteVendeurId, input.NombreActions, input.PrixAction, input.Date, id);
         }
 
         await sqlTx.CommitAsync();
@@ -739,27 +912,13 @@ app.MapDelete("/api/transactions/{id:guid}", async (Guid id) =>
 });
 
 const string ColonnesTitre =
-    "Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, Quantite, PrixInitial, PrixAcquisition, " +
+    "Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, CompteId, Quantite, PrixInitial, PrixAcquisition, " +
     "CONVERT(varchar(10), DateAcquisition, 23) AS DateAcquisition, TransactionOrigineId";
 
 app.MapGet("/api/titres/actions", async () =>
 {
     await using var conn = new SqlConnection(ConnectionString());
     var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.Actions ORDER BY DateAcquisition DESC");
-    return Results.Ok(titres);
-});
-
-app.MapGet("/api/titres/droits-vote-theorique", async () =>
-{
-    await using var conn = new SqlConnection(ConnectionString());
-    var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.DroitsVoteTheorique ORDER BY DateAcquisition DESC");
-    return Results.Ok(titres);
-});
-
-app.MapGet("/api/titres/droits-vote-exercable", async () =>
-{
-    await using var conn = new SqlConnection(ConnectionString());
-    var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.DroitsVoteExercable ORDER BY DateAcquisition DESC");
     return Results.Ok(titres);
 });
 
@@ -887,21 +1046,52 @@ record SocieteInput(
 
 record SocieteUpdate(string? Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
-// Le total émis (actions / DV théorique / DV exerçable) par une société, à
-// une date d'effet donnée — voir dbo.HistoriqueTotauxSociete. Utilisé à la
-// fois comme ligne de l'historique (avec Id/SocieteId/DateEffet) et,
-// projection partielle (TotauxSociete, plus bas), comme simple résultat de
-// recherche "le total en vigueur à telle date".
+// Une ligne (= un Type) de la ventilation du nombre d'actions d'une société
+// à une date d'effet donnée (voir HistoriqueTotalSociete).
+record LigneActionsParType(string? Type, decimal Quantite);
+
+// Projection brute d'une ligne de dbo.HistoriqueTotalActionsType, avec
+// l'id de son parent — utilisée uniquement pour regrouper les lignes par
+// ligne d'historique dans ChargerHistoriqueTotaux.
+record LigneActionsParTypeAvecParent(Guid HistoriqueTotalSocieteId, string? Type, decimal Quantite);
+
+// Le total émis par une société à une date d'effet donnée — voir
+// dbo.HistoriqueTotauxSociete. Le nombre total d'actions n'est pas une
+// colonne : c'est la somme de ActionsParType (voir dbo.HistoriqueTotalActionsType),
+// jamais stockée directement (même principe que PlusValue sur Transactions).
+// Seuls les droits de vote théorique/exerçable restent un nombre global.
 record HistoriqueTotalSociete(
     Guid Id, Guid SocieteId, string DateEffet,
-    decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+    decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable,
+    IReadOnlyList<LigneActionsParType> ActionsParType);
 
 record HistoriqueTotalSocieteInput(
     Guid SocieteId, string? DateEffet,
-    decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+    decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable,
+    List<LigneActionsParType>? ActionsParType);
 
-// Projection du total en vigueur à une date donnée (voir ValiderBornesParticipation).
-record TotauxSociete(decimal? NombreTotalActions, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+// Projection (sans le détail par Type) d'une ligne de dbo.HistoriqueTotauxSociete,
+// utilisée pour construire HistoriqueTotalSociete dans ChargerHistoriqueTotaux.
+record HistoriqueTotalSocieteSansDetail(
+    Guid Id, Guid SocieteId, string DateEffet, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+
+// Projection du total en vigueur à une date donnée (voir ValiderBornesParticipation) :
+// Id sert à retrouver la somme des lignes HistoriqueTotalActionsType correspondantes.
+record TotauxSociete(Guid Id, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+
+// Une catégorie de titre (A, B, C...) — voir dbo.Types. Sert uniquement de
+// suggestions sur les champs Categorie (Transactions/Actions), qui restent
+// du texte libre.
+record TypeTitre(Guid Id, string Nom);
+
+record TypeTitreInput(string? Nom);
+
+// Regroupement nommé des titres détenus par un actionnaire, dédié à un seul
+// Type — voir dbo.Comptes. DetenteurId/DetenteurNomExterne : même
+// convention que pour Transactions/Actions (l'un des deux, jamais les deux).
+record Compte(Guid Id, Guid? DetenteurId, string? DetenteurNomExterne, string? Type, string Nom);
+
+record CompteInput(Guid? DetenteurId, string? DetenteurNomExterne, string? Type, string? Nom);
 
 record Transaction(
     Guid Id,
@@ -915,6 +1105,8 @@ record Transaction(
     string? Categorie,
     Guid? VendeurId,
     string? VendeurNomExterne,
+    Guid? CompteAcheteurId,
+    Guid? CompteVendeurId,
     decimal? PrixAction,
     decimal? PlusValue);
 
@@ -929,6 +1121,8 @@ record TransactionInput(
     string? Categorie,
     Guid? VendeurId,
     string? VendeurNomExterne,
+    Guid? CompteAcheteurId,
+    Guid? CompteVendeurId,
     decimal? PrixAction);
 
 // Projection minimale d'une transaction pour ValiderBornesParticipation :
@@ -950,15 +1144,17 @@ class LotMemoire
 // Projection minimale d'une transaction pour CalculerPlusValues.
 record TransactionPourPlusValue(
     Guid Id, Guid? AcheteurId, string? AcheteurNomExterne, Guid CibleId, decimal? NombreActions,
-    string? Categorie, Guid? VendeurId, string? VendeurNomExterne, decimal? PrixAction);
+    string? Categorie, Guid? VendeurId, string? VendeurNomExterne,
+    Guid? CompteAcheteurId, Guid? CompteVendeurId, decimal? PrixAction);
 
-// Projection d'une ligne (un lot) des tables Actions/DroitsVoteTheorique/DroitsVoteExercable.
+// Projection d'une ligne (un lot) de dbo.Actions.
 record Titre(
     Guid Id,
     Guid SocieteEmettriceId,
     string? Categorie,
     Guid? SocieteDetentriceId,
     string? DetenteurNomExterne,
+    Guid? CompteId,
     decimal Quantite,
     decimal? PrixInitial,
     decimal? PrixAcquisition,

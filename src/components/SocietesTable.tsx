@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../types";
 import { formatDecimal, formatPourcentage } from "../lib/format";
 import { valeurGlobale } from "../lib/participations";
 import { PAYS } from "../lib/pays";
@@ -11,6 +11,7 @@ interface Props {
   societes: Societe[];
   historiqueTotaux: HistoriqueTotalSociete[];
   transactions: Transaction[];
+  types: TypeTitre[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Societe, "id">) => void;
   onAddHistoriqueTotal: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
@@ -113,6 +114,7 @@ export function SocietesTable({
   societes,
   historiqueTotaux,
   transactions,
+  types,
   onDelete,
   onUpdate,
   onAddHistoriqueTotal,
@@ -292,6 +294,7 @@ export function SocietesTable({
                       <HistoriqueTotauxPanel
                         societes={societes}
                         historique={historiqueTotaux}
+                        types={types}
                         societeIdVerrouille={societe.id}
                         onAdd={onAddHistoriqueTotal}
                         onUpdate={onUpdateHistoriqueTotal}

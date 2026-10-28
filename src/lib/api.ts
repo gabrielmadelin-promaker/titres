@@ -1,4 +1,4 @@
-import type { HistoriqueTotalSociete, Societe, Titre, Transaction } from "../types";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../types";
 import { lireToken, SessionExpireeError } from "./auth";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:8091/api`;
@@ -100,6 +100,34 @@ export function supprimerHistoriqueTotal(id: string): Promise<void> {
   return request(`/historique-totaux-societe/${id}`, { method: "DELETE" });
 }
 
+export function fetchTypes(): Promise<TypeTitre[]> {
+  return request("/types");
+}
+
+export function creerType(nom: string): Promise<TypeTitre> {
+  return request("/types", { method: "POST", body: JSON.stringify({ nom }) });
+}
+
+export function supprimerType(id: string): Promise<void> {
+  return request(`/types/${id}`, { method: "DELETE" });
+}
+
+export function fetchComptes(): Promise<Compte[]> {
+  return request("/comptes");
+}
+
+export function creerCompte(compte: Omit<Compte, "id">): Promise<Compte> {
+  return request("/comptes", { method: "POST", body: JSON.stringify(compte) });
+}
+
+export function modifierCompte(id: string, compte: Omit<Compte, "id">): Promise<void> {
+  return request(`/comptes/${id}`, { method: "PUT", body: JSON.stringify(compte) });
+}
+
+export function supprimerCompte(id: string): Promise<void> {
+  return request(`/comptes/${id}`, { method: "DELETE" });
+}
+
 export function fetchTransactions(): Promise<Transaction[]> {
   return request("/transactions");
 }
@@ -116,17 +144,9 @@ export function supprimerTransaction(id: string): Promise<void> {
   return request(`/transactions/${id}`, { method: "DELETE" });
 }
 
-// Lecture seule : ces trois tables sont alimentées automatiquement par
-// l'API à chaque transaction, jamais saisies à la main — pas de
-// POST/PUT/DELETE côté client.
+// Lecture seule : cette table est alimentée automatiquement par l'API à
+// chaque transaction, jamais saisie à la main — pas de POST/PUT/DELETE
+// côté client.
 export function fetchActions(): Promise<Titre[]> {
   return request("/titres/actions");
-}
-
-export function fetchDroitsVoteTheorique(): Promise<Titre[]> {
-  return request("/titres/droits-vote-theorique");
-}
-
-export function fetchDroitsVoteExercable(): Promise<Titre[]> {
-  return request("/titres/droits-vote-exercable");
 }

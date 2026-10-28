@@ -9,6 +9,13 @@ export interface Societe {
   lei: string | null;
 }
 
+/** Une ligne (= un Type) de la ventilation du nombre d'actions d'une société à une date d'effet donnée. */
+export interface LigneActionsParType {
+  /** Lettre de catégorie (A/B/C...), ou null pour une quantité non ventilée (donnée ancienne). */
+  type: string | null;
+  quantite: number;
+}
+
 /**
  * Nombre total d'actions / de droits de vote théorique / de droits de vote
  * exerçable émis par une société, à partir d'une date d'effet — dénominateur
@@ -22,15 +29,49 @@ export interface Societe {
  * dateEffet est antérieure ou égale à la date de la transaction ; tant
  * qu'aucune ligne ne couvre cette date (ou que le champ correspondant y est
  * null), le % correspondant ne peut pas être calculé.
+ *
+ * Le nombre total d'actions n'est pas un champ direct : c'est la somme
+ * d'actionsParType (ex. 10 de Type A + 20 de Type B + 30 de Type C = 60),
+ * jamais stockée ailleurs. Seuls les droits de vote théorique/exerçable
+ * restent un nombre global.
  */
 export interface HistoriqueTotalSociete {
   id: string;
   societeId: string;
   /** Date (ISO yyyy-mm-dd) à partir de laquelle ces totaux s'appliquent. */
   dateEffet: string;
-  nombreTotalActions: number | null;
   nombreTotalDroitVoteTheorique: number | null;
   nombreTotalDroitVoteExercable: number | null;
+  actionsParType: LigneActionsParType[];
+}
+
+/**
+ * Une catégorie de titre (A, B, C...) — table de référence gérée (ajout
+ * possible depuis l'application), utilisée en SUGGESTIONS sur les champs
+ * Catégorie (Transaction.categorie, Titre.categorie), qui restent du texte
+ * libre, pas une liste fermée.
+ */
+export interface TypeTitre {
+  id: string;
+  nom: string;
+}
+
+/**
+ * Regroupement nommé des titres détenus par un actionnaire (société suivie
+ * ou tiers externe), toujours dédié à un seul Type (ex. "Compte A1" pour
+ * les titres de Type A d'un actionnaire donné). Choisi sur chaque
+ * transaction (acheteur et/ou vendeur) ; les lots générés automatiquement
+ * dans l'onglet Titres portent ensuite ce Compte.
+ */
+export interface Compte {
+  id: string;
+  /** Détenteur du compte, si c'est une société suivie (sinon null, voir detenteurNomExterne). */
+  detenteurId: string | null;
+  /** Nom libre du détenteur quand il est hors groupe (detenteurId alors null). */
+  detenteurNomExterne: string | null;
+  /** Type auquel ce compte est dédié, facultatif. */
+  type: string | null;
+  nom: string;
 }
 
 export interface Transaction {
@@ -55,6 +96,10 @@ export interface Transaction {
   vendeurId: string | null;
   /** Nom libre du vendeur quand il est connu mais hors groupe (vendeurId alors null). */
   vendeurNomExterne: string | null;
+  /** Compte de l'acheteur concerné par cette transaction, facultatif. */
+  compteAcheteurId: string | null;
+  /** Compte du vendeur concerné par cette transaction, facultatif. */
+  compteVendeurId: string | null;
   /** Prix unitaire de l'action lors de la transaction, en euros. */
   prixAction: number | null;
   /**
@@ -70,13 +115,12 @@ export interface Transaction {
 }
 
 /**
- * Une ligne des tables Actions / DroitsVoteTheorique / DroitsVoteExercable :
- * un LOT de titres (même société émettrice, catégorie, détenteur, prix et
- * date d'acquisition), avec un nombre de titres (quantite) — pas une ligne
- * par titre unitaire : un lot de plusieurs millions de titres tient sur une
- * seule ligne. Générée et mise à jour automatiquement par l'API à chaque
- * création/modification/suppression de transaction — jamais saisie à la
- * main.
+ * Une ligne de la table Actions : un LOT de titres (même société
+ * émettrice, catégorie, détenteur, compte, prix et date d'acquisition),
+ * avec un nombre de titres (quantite) — pas une ligne par titre unitaire :
+ * un lot de plusieurs millions de titres tient sur une seule ligne. Générée
+ * et mise à jour automatiquement par l'API à chaque création/modification/
+ * suppression de transaction — jamais saisie à la main.
  */
 export interface Titre {
   id: string;
@@ -88,6 +132,8 @@ export interface Titre {
   societeDetentriceId: string | null;
   /** Nom libre du détenteur actuel quand il est hors groupe (societeDetentriceId alors null). */
   detenteurNomExterne: string | null;
+  /** Compte du détenteur concerné par ce lot, facultatif. */
+  compteId: string | null;
   /** Nombre de titres de ce lot. */
   quantite: number;
   /** Prix à l'émission d'origine : ne change jamais après la création du lot. */

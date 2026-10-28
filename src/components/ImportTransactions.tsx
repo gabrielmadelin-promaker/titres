@@ -108,6 +108,10 @@ export function ImportTransactions({ societes, onImport }: Props) {
           categorie: texteColonne(ligne, "catégorie", "categorie") || null,
           vendeurId: vendeur?.id ?? null,
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
+          // Compte : pas de colonne dédiée à l'import — se complète ensuite
+          // au besoin depuis le tableau des transactions.
+          compteAcheteurId: null,
+          compteVendeurId: null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
           // Calculée côté API, jamais importée.
           plusValue: null,

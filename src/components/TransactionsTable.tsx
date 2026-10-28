@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
+import type { Compte, HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../types";
 import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../lib/format";
 import { extraireValeurTransaction } from "../lib/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
@@ -11,18 +11,24 @@ interface Props {
   transactions: Transaction[];
   societes: Societe[];
   historiqueTotaux: HistoriqueTotalSociete[];
+  types: TypeTitre[];
+  comptes: Compte[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Transaction, "id">) => void;
+  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
 }
 
 interface TransactionEditRowProps {
   transaction: Transaction;
   societes: Societe[];
+  types: TypeTitre[];
+  comptes: Compte[];
+  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   onSave: (champs: Omit<Transaction, "id">) => void;
   onCancel: () => void;
 }
 
-function TransactionEditRow({ transaction, societes, onSave, onCancel }: TransactionEditRowProps) {
+function TransactionEditRow({ transaction, societes, types, comptes, onAddCompte, onSave, onCancel }: TransactionEditRowProps) {
   const [champs, setChamps] = useState(() => champsDepuisTransaction(transaction));
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -42,6 +48,9 @@ function TransactionEditRow({ transaction, societes, onSave, onCancel }: Transac
         champs={champs}
         onChange={setChamps}
         societes={societes}
+        types={types}
+        comptes={comptes}
+        onAddCompte={onAddCompte}
         idPrefix={`tx-edit-${transaction.id}`}
       />
       {erreur && <p className="form-error">{erreur}</p>}
@@ -66,6 +75,8 @@ type Colonne =
   | "nombreDvTheorique"
   | "nombreDvExercable"
   | "categorie"
+  | "compteAcheteur"
+  | "compteVendeur"
   | "capital"
   | "dvTheorique"
   | "dvExercable"
@@ -79,7 +90,7 @@ function formatOuTiret(valeur: number | null | undefined, formateur: (v: number)
   return valeur == null ? "—" : formateur(valeur);
 }
 
-export function TransactionsTable({ transactions, societes, historiqueTotaux, onDelete, onUpdate }: Props) {
+export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, onDelete, onUpdate, onAddCompte }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "date", sens: "desc" });
   const [filtreAcheteurId, setFiltreAcheteurId] = useState("");
   const [filtreCibleId, setFiltreCibleId] = useState("");
@@ -88,6 +99,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string | null) => (id ? (nomParId.get(id) ?? "(supprimée)") : "—");
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const nomCompteParId = useMemo(() => new Map(comptes.map((c) => [c.id, c.nom])), [comptes]);
+  const nomCompteDe = (id: string | null) => (id ? (nomCompteParId.get(id) ?? "(supprimé)") : "—");
 
   function celluleAcheteur(t: Transaction) {
     if (t.acheteurId) return nomDe(t.acheteurId);
@@ -140,6 +153,10 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
           return t.nombreDroitVoteExercable ?? -Infinity;
         case "categorie":
           return t.categorie ?? "";
+        case "compteAcheteur":
+          return nomCompteDe(t.compteAcheteurId);
+        case "compteVendeur":
+          return nomCompteDe(t.compteVendeurId);
         case "capital":
           return extraireValeurTransaction(t, "capital", historiqueTotaux) ?? -Infinity;
         case "dvTheorique":
@@ -153,7 +170,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
       }
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
-  }, [filtrees, tri, nomParId, historiqueTotaux]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtrees, tri, nomParId, nomCompteParId, historiqueTotaux]);
 
   function exporter() {
     return exporterXlsx(
@@ -172,6 +190,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
         "Nombre de droits de vote théorique": t.nombreDroitVoteTheorique ?? "",
         "Nombre de droits de vote exerçable": t.nombreDroitVoteExercable ?? "",
         Catégorie: t.categorie ?? "",
+        "Compte acheteur": nomCompteDe(t.compteAcheteurId),
+        "Compte vendeur": nomCompteDe(t.compteVendeurId),
         "Capital (%)": extraireValeurTransaction(t, "capital", historiqueTotaux) ?? "",
         "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? "",
         "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? "",
@@ -250,6 +270,12 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "categorie"))}>
                   Catégorie{flecheTri(tri, "categorie")}
                 </th>
+                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "compteAcheteur"))}>
+                  Compte acheteur{flecheTri(tri, "compteAcheteur")}
+                </th>
+                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "compteVendeur"))}>
+                  Compte vendeur{flecheTri(tri, "compteVendeur")}
+                </th>
                 <th
                   className="th-tri num"
                   onClick={() => setTri(basculerTri(tri, "capital"))}
@@ -288,6 +314,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
                     <td className="num">{formatOuTiret(t.nombreDroitVoteTheorique, formatDecimal)}</td>
                     <td className="num">{formatOuTiret(t.nombreDroitVoteExercable, formatDecimal)}</td>
                     <td>{t.categorie ?? "—"}</td>
+                    <td>{nomCompteDe(t.compteAcheteurId)}</td>
+                    <td>{nomCompteDe(t.compteVendeurId)}</td>
                     <td className="num">
                       {formatOuTiret(extraireValeurTransaction(t, "capital", historiqueTotaux), formatPourcentage)}
                     </td>
@@ -316,10 +344,13 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, on
                   </tr>
                   {ligneEditee === t.id && (
                     <tr>
-                      <td colSpan={14}>
+                      <td colSpan={16}>
                         <TransactionEditRow
                           transaction={t}
                           societes={societes}
+                          types={types}
+                          comptes={comptes}
+                          onAddCompte={onAddCompte}
                           onCancel={() => setLigneEditee(null)}
                           onSave={(champs) => {
                             onUpdate(t.id, champs);

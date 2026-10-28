@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { Societe, Titre } from "../types";
+import type { Compte, Societe, Titre } from "../types";
 import { formatDate, formatDecimal, formatMontant } from "../lib/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
@@ -7,29 +7,19 @@ import { exporterXlsx } from "../lib/xlsxExport";
 interface Props {
   societes: Societe[];
   actions: Titre[];
-  droitsVoteTheorique: Titre[];
-  droitsVoteExercable: Titre[];
+  comptes: Compte[];
 }
 
-type Notion = "actions" | "dvTheorique" | "dvExercable";
-
-const NOTIONS: { id: Notion; libelle: string }[] = [
-  { id: "actions", libelle: "Actions" },
-  { id: "dvTheorique", libelle: "Droits de vote théorique" },
-  { id: "dvExercable", libelle: "Droits de vote exerçable" },
-];
-
-type Colonne = "emettrice" | "categorie" | "detenteur" | "quantite" | "prixInitial" | "prixAcquisition" | "dateAcquisition";
+type Colonne = "emettrice" | "categorie" | "detenteur" | "compte" | "quantite" | "prixInitial" | "prixAcquisition" | "dateAcquisition";
 
 /**
- * Consultation en lecture seule des lots de titres (qui détient combien,
- * de quelle catégorie, à quel prix) — ces trois tables sont alimentées
- * automatiquement par l'API à chaque création/modification/suppression de
- * transaction, jamais saisies à la main : pas de formulaire d'ajout ici,
- * uniquement une consultation filtrable et exportable.
+ * Consultation en lecture seule des lots d'Actions (qui détient combien, de
+ * quelle catégorie, sur quel compte, à quel prix) — alimentés automatiquement
+ * par l'API à chaque création/modification/suppression de transaction,
+ * jamais saisis à la main : pas de formulaire d'ajout ici, uniquement une
+ * consultation filtrable et exportable.
  */
-export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVoteExercable }: Props) {
-  const [notion, setNotion] = useState<Notion>("actions");
+export function TitresPanel({ societes, actions, comptes }: Props) {
   const [filtreEmettriceId, setFiltreEmettriceId] = useState("");
   const [filtreDetenteurId, setFiltreDetenteurId] = useState("");
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "emettrice", sens: "asc" });
@@ -37,14 +27,8 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDe = (id: string | null) => (id ? (nomParId.get(id) ?? "(supprimée)") : null);
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-
-  const titresParNotion: Record<Notion, Titre[]> = {
-    actions,
-    dvTheorique: droitsVoteTheorique,
-    dvExercable: droitsVoteExercable,
-  };
-  const titres = titresParNotion[notion];
-  const libelleNotion = NOTIONS.find((n) => n.id === notion)!.libelle;
+  const nomCompteParId = useMemo(() => new Map(comptes.map((c) => [c.id, c.nom])), [comptes]);
+  const nomCompteDe = (id: string | null) => (id ? (nomCompteParId.get(id) ?? "(supprimé)") : "—");
 
   function detenteurTexte(t: Titre): string {
     return t.societeDetentriceId ? (nomDe(t.societeDetentriceId) ?? "(supprimée)") : (t.detenteurNomExterne ?? "—");
@@ -52,12 +36,12 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
 
   const filtres = useMemo(
     () =>
-      titres.filter(
+      actions.filter(
         (t) =>
           (!filtreEmettriceId || t.societeEmettriceId === filtreEmettriceId) &&
           (!filtreDetenteurId || t.societeDetentriceId === filtreDetenteurId),
       ),
-    [titres, filtreEmettriceId, filtreDetenteurId],
+    [actions, filtreEmettriceId, filtreDetenteurId],
   );
 
   const triees = useMemo(() => {
@@ -70,6 +54,8 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
           return t.categorie ?? "";
         case "detenteur":
           return detenteurTexte(t);
+        case "compte":
+          return nomCompteDe(t.compteId);
         case "quantite":
           return t.quantite;
         case "prixInitial":
@@ -82,16 +68,17 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
     };
     return [...filtres].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtres, tri, nomParId]);
+  }, [filtres, tri, nomParId, nomCompteParId]);
 
   function exporter() {
     return exporterXlsx(
-      `titres-${notion}.xlsx`,
-      libelleNotion,
+      "titres-actions.xlsx",
+      "Actions",
       triees.map((t) => ({
         "Société émettrice": nomDe(t.societeEmettriceId) ?? "(supprimée)",
         Catégorie: t.categorie ?? "",
         Détenteur: detenteurTexte(t),
+        Compte: nomCompteDe(t.compteId),
         Quantité: t.quantite,
         "Prix initial (€)": t.prixInitial ?? "",
         "Prix d'acquisition (€)": t.prixAcquisition ?? "",
@@ -104,16 +91,6 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
     <div>
       <div className="table-toolbar">
         <div className="table-filters">
-          <div className="form-field">
-            <label htmlFor="titres-notion">Notion</label>
-            <select id="titres-notion" value={notion} onChange={(e) => setNotion(e.target.value as Notion)}>
-              {NOTIONS.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.libelle}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="form-field">
             <label htmlFor="titres-filtre-emettrice">Société émettrice</label>
             <select
@@ -152,8 +129,8 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
         </div>
       </div>
 
-      {titres.length === 0 ? (
-        <p className="empty">Aucun titre « {libelleNotion.toLowerCase()} » pour le moment.</p>
+      {actions.length === 0 ? (
+        <p className="empty">Aucun titre « actions » pour le moment.</p>
       ) : triees.length === 0 ? (
         <p className="empty">Aucun titre ne correspond à ce filtre.</p>
       ) : (
@@ -169,6 +146,9 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
                 </th>
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "detenteur"))}>
                   Détenteur{flecheTri(tri, "detenteur")}
+                </th>
+                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "compte"))}>
+                  Compte{flecheTri(tri, "compte")}
                 </th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "quantite"))}>
                   Quantité{flecheTri(tri, "quantite")}
@@ -198,6 +178,7 @@ export function TitresPanel({ societes, actions, droitsVoteTheorique, droitsVote
                       </>
                     )}
                   </td>
+                  <td>{nomCompteDe(t.compteId)}</td>
                   <td className="num">{formatDecimal(t.quantite)}</td>
                   <td className="num">{t.prixInitial === null ? "—" : formatMontant(t.prixInitial)}</td>
                   <td className="num">{t.prixAcquisition === null ? "—" : formatMontant(t.prixAcquisition)}</td>

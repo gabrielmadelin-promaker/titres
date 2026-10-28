@@ -8,29 +8,33 @@ export type Metrique =
   | "nombreDroitVoteTheorique"
   | "nombreDroitVoteExercable";
 
-type ChampTotalSociete = "nombreTotalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
+type ChampTotalDroitVote = "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
 
 /**
- * Le total (actions, DV théorique ou DV exerçable) en vigueur pour une
- * société à une date donnée : la ligne de l'historique la plus récente
- * dont dateEffet est antérieure ou égale à cette date — jamais une ligne
- * postérieure, pour qu'une augmentation ou réduction de capital future ne
- * change jamais le total applicable à une transaction passée. Null si
- * aucune ligne ne couvre encore cette date, ou que le champ demandé y est
- * null.
+ * La ligne d'historique en vigueur pour une société à une date donnée : la
+ * plus récente dont dateEffet est antérieure ou égale à cette date — jamais
+ * une ligne postérieure, pour qu'une augmentation ou réduction de capital
+ * future ne change jamais le total applicable à une transaction passée.
+ * Null si aucune ligne ne couvre encore cette date.
  */
-function totalADate(
-  historique: HistoriqueTotalSociete[],
-  societeId: string,
-  champ: ChampTotalSociete,
-  date: string,
-): number | null {
+function ligneADate(historique: HistoriqueTotalSociete[], societeId: string, date: string): HistoriqueTotalSociete | null {
   let trouvee: HistoriqueTotalSociete | null = null;
   for (const h of historique) {
     if (h.societeId !== societeId || h.dateEffet > date) continue;
     if (!trouvee || h.dateEffet > trouvee.dateEffet) trouvee = h;
   }
-  return trouvee?.[champ] ?? null;
+  return trouvee;
+}
+
+/**
+ * Le nombre total d'actions n'est pas un champ direct sur une ligne
+ * d'historique : c'est la somme de ses lignes actionsParType (ventilation
+ * par Type, voir HistoriqueTotalSociete dans types.ts). Null si la ligne
+ * n'a aucune ligne de détail, ou si leur somme est nulle.
+ */
+function totalActions(ligne: HistoriqueTotalSociete): number | null {
+  const somme = ligne.actionsParType.reduce((s, l) => s + l.quantite, 0);
+  return somme > 0 ? somme : null;
 }
 
 /**
@@ -38,7 +42,7 @@ function totalADate(
  * saisi ni stocké : il se dérive uniquement de la quantité correspondante
  * de la transaction (nombre d'actions / de DV théorique / de DV
  * exerçable), rapportée au total émis par la société cible EN VIGUEUR À LA
- * DATE DE LA TRANSACTION (voir totalADate ci-dessus) — pas au total
+ * DATE DE LA TRANSACTION (voir ligneADate ci-dessus) — pas au total
  * d'aujourd'hui, qui peut avoir changé depuis (augmentation ou réduction de
  * capital). Null si l'un des deux manque — pas de quantité sur la
  * transaction, ou pas de total connu à cette date : aucun repli sur
@@ -48,15 +52,24 @@ function totalADate(
  * anciennes transactions en quantité équivalente avant que les colonnes ne
  * soient retirées).
  */
-function extrairePourcentage(
+function extrairePourcentageCapital(nombre: number | null, cibleId: string, date: string, historique: HistoriqueTotalSociete[]): number | null {
+  if (nombre === null) return null;
+  const ligne = ligneADate(historique, cibleId, date);
+  const total = ligne && totalActions(ligne);
+  if (!total) return null;
+  return (nombre / total) * 100;
+}
+
+function extrairePourcentageDroitVote(
   nombre: number | null,
   cibleId: string,
   date: string,
   historique: HistoriqueTotalSociete[],
-  champTotal: ChampTotalSociete,
+  champTotal: ChampTotalDroitVote,
 ): number | null {
   if (nombre === null) return null;
-  const total = totalADate(historique, cibleId, champTotal, date);
+  const ligne = ligneADate(historique, cibleId, date);
+  const total = ligne?.[champTotal];
   if (!total) return null;
   return (nombre / total) * 100;
 }
@@ -75,17 +88,17 @@ const METRIQUES: Record<
   { extraire: (t: Transaction, historique: HistoriqueTotalSociete[]) => number | null; chainable: boolean }
 > = {
   capital: {
-    extraire: (t, historique) => extrairePourcentage(t.nombreActions, t.cibleId, t.date, historique, "nombreTotalActions"),
+    extraire: (t, historique) => extrairePourcentageCapital(t.nombreActions, t.cibleId, t.date, historique),
     chainable: true,
   },
   droitVoteTheorique: {
     extraire: (t, historique) =>
-      extrairePourcentage(t.nombreDroitVoteTheorique, t.cibleId, t.date, historique, "nombreTotalDroitVoteTheorique"),
+      extrairePourcentageDroitVote(t.nombreDroitVoteTheorique, t.cibleId, t.date, historique, "nombreTotalDroitVoteTheorique"),
     chainable: true,
   },
   droitVoteExercable: {
     extraire: (t, historique) =>
-      extrairePourcentage(t.nombreDroitVoteExercable, t.cibleId, t.date, historique, "nombreTotalDroitVoteExercable"),
+      extrairePourcentageDroitVote(t.nombreDroitVoteExercable, t.cibleId, t.date, historique, "nombreTotalDroitVoteExercable"),
     chainable: true,
   },
   nombreActions: { extraire: (t) => t.nombreActions, chainable: false },

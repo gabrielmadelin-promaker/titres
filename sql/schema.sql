@@ -33,17 +33,71 @@ GO
 -- celui de la ligne la plus récente dont DateEffet <= date de la
 -- transaction ; tant qu'aucune ligne ne couvre cette date (ou que le champ
 -- correspondant y est NULL), le pourcentage ne peut pas être calculé.
+-- Le nombre total d'actions n'est pas stocké ici : voir
+-- dbo.HistoriqueTotalActionsType plus bas, qui le ventile par Type — seuls
+-- les droits de vote restent un nombre global par date.
 CREATE TABLE dbo.HistoriqueTotauxSociete (
     Id                             UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_HistoriqueTotauxSociete PRIMARY KEY DEFAULT NEWID(),
     SocieteId                      UNIQUEIDENTIFIER NOT NULL,
     DateEffet                      DATE             NOT NULL,
-    NombreTotalActions             DECIMAL(18,4)    NULL,
     NombreTotalDroitVoteTheorique  DECIMAL(18,4)    NULL,
     NombreTotalDroitVoteExercable  DECIMAL(18,4)    NULL,
     CONSTRAINT UQ_HistoriqueTotauxSociete_SocieteDate UNIQUE (SocieteId, DateEffet)
 );
 GO
 CREATE INDEX IX_HistoriqueTotauxSociete_SocieteId ON dbo.HistoriqueTotauxSociete (SocieteId);
+GO
+
+-- La catégorie d'un titre (A, B, C...), déjà saisie comme texte libre sur
+-- Transactions.Categorie / Actions.Categorie : cette table ne sert qu'à
+-- nourrir des suggestions sur ces champs, qui restent du texte libre (pas
+-- une liste fermée) — ajout possible depuis l'application.
+CREATE TABLE dbo.Types (
+    Id  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Types PRIMARY KEY DEFAULT NEWID(),
+    Nom NVARCHAR(10)     NOT NULL,
+    CONSTRAINT UQ_Types_Nom UNIQUE (Nom)
+);
+GO
+
+-- Regroupement nommé des titres détenus par un actionnaire (société suivie
+-- ou tiers externe), toujours dédié à un seul Type (ex. "Compte A1" pour
+-- les titres de Type A d'un actionnaire donné). Choisi sur chaque
+-- transaction (acheteur et/ou vendeur, voir Transactions plus bas) ; les
+-- lots générés automatiquement dans Actions portent ensuite ce Compte. Pas
+-- de clé étrangère vers Societes (DetenteurId) : un détenteur supprimé ne
+-- doit pas bloquer la suppression ni faire disparaître ses comptes en
+-- cascade — même convention que pour Transactions/Actions plus bas.
+CREATE TABLE dbo.Comptes (
+    Id                  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Comptes PRIMARY KEY DEFAULT NEWID(),
+    DetenteurId         UNIQUEIDENTIFIER NULL,
+    DetenteurNomExterne NVARCHAR(300)    NULL,
+    Type                NVARCHAR(10)     NULL,
+    Nom                 NVARCHAR(200)    NOT NULL,
+    CONSTRAINT CK_Comptes_Detenteur CHECK (
+        (DetenteurId IS NULL AND DetenteurNomExterne IS NOT NULL)
+        OR (DetenteurId IS NOT NULL AND DetenteurNomExterne IS NULL)
+    )
+);
+GO
+CREATE INDEX IX_Comptes_DetenteurId ON dbo.Comptes (DetenteurId);
+GO
+
+-- Ventilation par Type du nombre total d'actions d'une ligne de
+-- HistoriqueTotauxSociete (ex. 10 de Type A + 20 de Type B + 30 de Type C
+-- = 60) : la somme de ces lignes EST le nombre total d'actions à cette
+-- date, jamais stockée ailleurs (même principe que PlusValue sur
+-- Transactions — une valeur dérivable ne se stocke pas). Supprimées en
+-- cascade avec leur ligne d'historique.
+CREATE TABLE dbo.HistoriqueTotalActionsType (
+    Id                       UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_HistoriqueTotalActionsType PRIMARY KEY DEFAULT NEWID(),
+    HistoriqueTotalSocieteId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_HistoriqueTotalActionsType_Historique
+                                 REFERENCES dbo.HistoriqueTotauxSociete (Id) ON DELETE CASCADE,
+    Type                     NVARCHAR(10)     NULL,
+    Quantite                 DECIMAL(18,4)    NOT NULL,
+    CONSTRAINT UQ_HistoriqueTotalActionsType UNIQUE (HistoriqueTotalSocieteId, Type)
+);
+GO
+CREATE INDEX IX_HistoriqueTotalActionsType_Historique ON dbo.HistoriqueTotalActionsType (HistoriqueTotalSocieteId);
 GO
 
 -- Pas de clé étrangère sur AcheteurId/CibleId/VendeurId : comme dans
@@ -69,6 +123,11 @@ CREATE TABLE dbo.Transactions (
     Categorie         NVARCHAR(10)     NULL,
     VendeurId         UNIQUEIDENTIFIER NULL,
     VendeurNomExterne NVARCHAR(300)    NULL,
+    -- Compte (dbo.Comptes) de l'acheteur / du vendeur concerné par cette
+    -- transaction, facultatif — pas de clé étrangère, même raison que pour
+    -- Actions.CompteId plus bas.
+    CompteAcheteurId  UNIQUEIDENTIFIER NULL,
+    CompteVendeurId   UNIQUEIDENTIFIER NULL,
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
     -- Calculée et enregistrée par l'API à chaque création/modification (pas
     -- de colonne calculée SQL : le calcul a besoin du prix de la transaction
@@ -90,21 +149,28 @@ GO
 
 -- Suivi du cycle de vie des titres : une ligne par LOT (regroupement de
 -- titres acquis ensemble — même société émettrice, catégorie, détenteur,
--- prix et date d'acquisition — avec un nombre Quantite), pas par titre
--- unitaire (un lot de plusieurs millions de titres tient sur une seule
--- ligne). Alimentée automatiquement par l'API à chaque création/
+-- compte, prix et date d'acquisition — avec un nombre Quantite), pas par
+-- titre unitaire (un lot de plusieurs millions de titres tient sur une
+-- seule ligne). Alimentée automatiquement par l'API à chaque création/
 -- modification/suppression de transaction (TransactionOrigineId trace la
 -- transaction à l'origine de la ligne, pour pouvoir l'annuler) — jamais
--- saisie à la main. Même structure, une table par notion ; pas de clé
--- étrangère vers Societes/Transactions, même choix que pour Transactions
--- plus haut (une société ou une transaction supprimée ne doit pas
+-- saisie à la main. Pas de clé étrangère vers Societes/Transactions/
+-- Comptes (une société, une transaction ou un compte supprimé ne doit pas
 -- bloquer/casser en cascade).
+--
+-- Seule la notion Actions a une table de lots : DroitsVoteTheorique et
+-- DroitsVoteExercable n'en ont plus (retirées) — aucun calcul de
+-- l'application n'en dépendait (seul le calcul FIFO de la plus-value a
+-- besoin des lots, et uniquement sur les actions) ; le suivi des droits de
+-- vote détenus reste disponible via les quantités saisies sur les
+-- transactions (NombreDroitVoteTheorique/NombreDroitVoteExercable).
 CREATE TABLE dbo.Actions (
     Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Actions PRIMARY KEY DEFAULT NEWID(),
     SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
     Categorie            NVARCHAR(10)     NULL,
     SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
     DetenteurNomExterne  NVARCHAR(300)    NULL,
+    CompteId             UNIQUEIDENTIFIER NULL,
     Quantite             DECIMAL(18,4)    NOT NULL,
     PrixInitial          DECIMAL(18,4)    NULL,
     PrixAcquisition      DECIMAL(18,4)    NULL,
@@ -119,50 +185,7 @@ GO
 CREATE INDEX IX_Actions_SocieteEmettriceId ON dbo.Actions (SocieteEmettriceId);
 CREATE INDEX IX_Actions_SocieteDetentriceId ON dbo.Actions (SocieteDetentriceId);
 CREATE INDEX IX_Actions_TransactionOrigineId ON dbo.Actions (TransactionOrigineId);
-GO
-
-CREATE TABLE dbo.DroitsVoteTheorique (
-    Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_DroitsVoteTheorique PRIMARY KEY DEFAULT NEWID(),
-    SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
-    Categorie            NVARCHAR(10)     NULL,
-    SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
-    DetenteurNomExterne  NVARCHAR(300)    NULL,
-    Quantite             DECIMAL(18,4)    NOT NULL,
-    PrixInitial          DECIMAL(18,4)    NULL,
-    PrixAcquisition      DECIMAL(18,4)    NULL,
-    DateAcquisition      DATE             NULL,
-    TransactionOrigineId UNIQUEIDENTIFIER NULL,
-    CONSTRAINT CK_DroitsVoteTheorique_Detenteur CHECK (
-        (SocieteDetentriceId IS NULL AND DetenteurNomExterne IS NOT NULL)
-        OR (SocieteDetentriceId IS NOT NULL AND DetenteurNomExterne IS NULL)
-    )
-);
-GO
-CREATE INDEX IX_DroitsVoteTheorique_SocieteEmettriceId ON dbo.DroitsVoteTheorique (SocieteEmettriceId);
-CREATE INDEX IX_DroitsVoteTheorique_SocieteDetentriceId ON dbo.DroitsVoteTheorique (SocieteDetentriceId);
-CREATE INDEX IX_DroitsVoteTheorique_TransactionOrigineId ON dbo.DroitsVoteTheorique (TransactionOrigineId);
-GO
-
-CREATE TABLE dbo.DroitsVoteExercable (
-    Id                   UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_DroitsVoteExercable PRIMARY KEY DEFAULT NEWID(),
-    SocieteEmettriceId   UNIQUEIDENTIFIER NOT NULL,
-    Categorie            NVARCHAR(10)     NULL,
-    SocieteDetentriceId  UNIQUEIDENTIFIER NULL,
-    DetenteurNomExterne  NVARCHAR(300)    NULL,
-    Quantite             DECIMAL(18,4)    NOT NULL,
-    PrixInitial          DECIMAL(18,4)    NULL,
-    PrixAcquisition      DECIMAL(18,4)    NULL,
-    DateAcquisition      DATE             NULL,
-    TransactionOrigineId UNIQUEIDENTIFIER NULL,
-    CONSTRAINT CK_DroitsVoteExercable_Detenteur CHECK (
-        (SocieteDetentriceId IS NULL AND DetenteurNomExterne IS NOT NULL)
-        OR (SocieteDetentriceId IS NOT NULL AND DetenteurNomExterne IS NULL)
-    )
-);
-GO
-CREATE INDEX IX_DroitsVoteExercable_SocieteEmettriceId ON dbo.DroitsVoteExercable (SocieteEmettriceId);
-CREATE INDEX IX_DroitsVoteExercable_SocieteDetentriceId ON dbo.DroitsVoteExercable (SocieteDetentriceId);
-CREATE INDEX IX_DroitsVoteExercable_TransactionOrigineId ON dbo.DroitsVoteExercable (TransactionOrigineId);
+CREATE INDEX IX_Actions_CompteId ON dbo.Actions (CompteId);
 GO
 
 -- Authentification temporaire (en attendant le SSO) : voir le commentaire

@@ -1,12 +1,14 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe } from "../types";
+import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../types";
 import { formatDate, formatDecimal } from "../lib/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
 import { exporterXlsx } from "../lib/xlsxExport";
+import { ActionsParTypeEditor } from "./ActionsParTypeEditor";
 
 interface Props {
   societes: Societe[];
   historique: HistoriqueTotalSociete[];
+  types: TypeTitre[];
   onAdd: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
   onUpdate: (id: string, ligne: Omit<HistoriqueTotalSociete, "id">) => void;
   onDelete: (id: string) => void;
@@ -20,10 +22,14 @@ interface Props {
   societeIdVerrouille?: string;
 }
 
-type Colonne = "societe" | "dateEffet" | "nombreTotalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
+type Colonne = "societe" | "dateEffet" | "totalActions" | "nombreTotalDroitVoteTheorique" | "nombreTotalDroitVoteExercable";
 
 function champVide(): string {
   return "";
+}
+
+function totalActions(lignes: LigneActionsParType[]): number {
+  return lignes.reduce((s, l) => s + l.quantite, 0);
 }
 
 interface ChampsFormulaireProps {
@@ -31,15 +37,17 @@ interface ChampsFormulaireProps {
   setSocieteId: (v: string) => void;
   dateEffet: string;
   setDateEffet: (v: string) => void;
-  nombreTotalActions: string;
-  setNombreTotalActions: (v: string) => void;
+  actionsParType: LigneActionsParType[];
+  setActionsParType: (v: LigneActionsParType[]) => void;
   nombreTotalDroitVoteTheorique: string;
   setNombreTotalDroitVoteTheorique: (v: string) => void;
   nombreTotalDroitVoteExercable: string;
   setNombreTotalDroitVoteExercable: (v: string) => void;
   societesTriees: Societe[];
+  types: TypeTitre[];
   /** Société déjà connue (verrouillée) : le champ de sélection n'est pas affiché. */
   societeIdVerrouille?: string;
+  idPrefix: string;
 }
 
 /** Champs communs au formulaire d'ajout et à la ligne d'édition (même structure que TransactionChampsFields). */
@@ -48,14 +56,16 @@ function ChampsFormulaire({
   setSocieteId,
   dateEffet,
   setDateEffet,
-  nombreTotalActions,
-  setNombreTotalActions,
+  actionsParType,
+  setActionsParType,
   nombreTotalDroitVoteTheorique,
   setNombreTotalDroitVoteTheorique,
   nombreTotalDroitVoteExercable,
   setNombreTotalDroitVoteExercable,
   societesTriees,
+  types,
   societeIdVerrouille,
+  idPrefix,
 }: ChampsFormulaireProps) {
   return (
     <>
@@ -76,16 +86,7 @@ function ChampsFormulaire({
         <label>Date d'effet</label>
         <input type="date" value={dateEffet} onChange={(e) => setDateEffet(e.target.value)} required />
       </div>
-      <div className="form-field">
-        <label>Nombre total d'actions émises</label>
-        <input
-          type="number"
-          step="0.01"
-          min="0"
-          value={nombreTotalActions}
-          onChange={(e) => setNombreTotalActions(e.target.value)}
-        />
-      </div>
+      <ActionsParTypeEditor lignes={actionsParType} onChange={setActionsParType} types={types} idPrefix={idPrefix} />
       <div className="form-field">
         <label>Nombre total de droits de vote théorique émis</label>
         <input
@@ -112,14 +113,15 @@ function ChampsFormulaire({
 
 interface FormAjoutProps {
   societesTriees: Societe[];
+  types: TypeTitre[];
   onAdd: (ligne: Omit<HistoriqueTotalSociete, "id">) => Promise<boolean>;
   societeIdVerrouille?: string;
 }
 
-function FormAjout({ societesTriees, onAdd, societeIdVerrouille }: FormAjoutProps) {
+function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille }: FormAjoutProps) {
   const [societeId, setSocieteId] = useState(societeIdVerrouille ?? champVide());
   const [dateEffet, setDateEffet] = useState(champVide());
-  const [nombreTotalActions, setNombreTotalActions] = useState(champVide());
+  const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>([]);
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
   const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(champVide());
 
@@ -129,14 +131,14 @@ function FormAjout({ societesTriees, onAdd, societeIdVerrouille }: FormAjoutProp
     const reussi = await onAdd({
       societeId,
       dateEffet,
-      nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
+      actionsParType: actionsParType.filter((l) => l.quantite !== 0),
       nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
       nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
     if (!reussi) return;
     setSocieteId(societeIdVerrouille ?? champVide());
     setDateEffet(champVide());
-    setNombreTotalActions(champVide());
+    setActionsParType([]);
     setNombreTotalDroitVoteTheorique(champVide());
     setNombreTotalDroitVoteExercable(champVide());
   }
@@ -148,14 +150,16 @@ function FormAjout({ societesTriees, onAdd, societeIdVerrouille }: FormAjoutProp
         setSocieteId={setSocieteId}
         dateEffet={dateEffet}
         setDateEffet={setDateEffet}
-        nombreTotalActions={nombreTotalActions}
-        setNombreTotalActions={setNombreTotalActions}
+        actionsParType={actionsParType}
+        setActionsParType={setActionsParType}
         nombreTotalDroitVoteTheorique={nombreTotalDroitVoteTheorique}
         setNombreTotalDroitVoteTheorique={setNombreTotalDroitVoteTheorique}
         nombreTotalDroitVoteExercable={nombreTotalDroitVoteExercable}
         setNombreTotalDroitVoteExercable={setNombreTotalDroitVoteExercable}
         societesTriees={societesTriees}
+        types={types}
         societeIdVerrouille={societeIdVerrouille}
+        idPrefix="totaux-ajout"
       />
       <button type="submit" className="btn btn-primary">
         Ajouter
@@ -167,15 +171,16 @@ function FormAjout({ societesTriees, onAdd, societeIdVerrouille }: FormAjoutProp
 interface LigneEditionProps {
   ligne: HistoriqueTotalSociete;
   societesTriees: Societe[];
+  types: TypeTitre[];
   onSave: (champs: Omit<HistoriqueTotalSociete, "id">) => void;
   onCancel: () => void;
   societeIdVerrouille?: string;
 }
 
-function LigneEdition({ ligne, societesTriees, onSave, onCancel, societeIdVerrouille }: LigneEditionProps) {
+function LigneEdition({ ligne, societesTriees, types, onSave, onCancel, societeIdVerrouille }: LigneEditionProps) {
   const [societeId, setSocieteId] = useState(ligne.societeId);
   const [dateEffet, setDateEffet] = useState(ligne.dateEffet);
-  const [nombreTotalActions, setNombreTotalActions] = useState(ligne.nombreTotalActions?.toString() ?? "");
+  const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>(ligne.actionsParType);
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(
     ligne.nombreTotalDroitVoteTheorique?.toString() ?? "",
   );
@@ -189,7 +194,7 @@ function LigneEdition({ ligne, societesTriees, onSave, onCancel, societeIdVerrou
     onSave({
       societeId,
       dateEffet,
-      nombreTotalActions: nombreTotalActions ? Number(nombreTotalActions) : null,
+      actionsParType: actionsParType.filter((l) => l.quantite !== 0),
       nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
       nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
     });
@@ -202,14 +207,16 @@ function LigneEdition({ ligne, societesTriees, onSave, onCancel, societeIdVerrou
         setSocieteId={setSocieteId}
         dateEffet={dateEffet}
         setDateEffet={setDateEffet}
-        nombreTotalActions={nombreTotalActions}
-        setNombreTotalActions={setNombreTotalActions}
+        actionsParType={actionsParType}
+        setActionsParType={setActionsParType}
         nombreTotalDroitVoteTheorique={nombreTotalDroitVoteTheorique}
         setNombreTotalDroitVoteTheorique={setNombreTotalDroitVoteTheorique}
         nombreTotalDroitVoteExercable={nombreTotalDroitVoteExercable}
         setNombreTotalDroitVoteExercable={setNombreTotalDroitVoteExercable}
         societesTriees={societesTriees}
+        types={types}
         societeIdVerrouille={societeIdVerrouille}
+        idPrefix={`totaux-edit-${ligne.id}`}
       />
       <div className="edit-row-actions">
         <button type="button" className="btn btn-secondary btn-small" onClick={onCancel}>
@@ -223,7 +230,7 @@ function LigneEdition({ ligne, societesTriees, onSave, onCancel, societeIdVerrou
   );
 }
 
-export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, onDelete, societeIdVerrouille }: Props) {
+export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUpdate, onDelete, societeIdVerrouille }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "societe", sens: "asc" });
   const [filtreSocieteId, setFiltreSocieteId] = useState("");
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
@@ -246,8 +253,8 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
           return nomParId.get(h.societeId) ?? "(supprimée)";
         case "dateEffet":
           return h.dateEffet;
-        case "nombreTotalActions":
-          return h.nombreTotalActions ?? -Infinity;
+        case "totalActions":
+          return totalActions(h.actionsParType);
         case "nombreTotalDroitVoteTheorique":
           return h.nombreTotalDroitVoteTheorique ?? -Infinity;
         case "nombreTotalDroitVoteExercable":
@@ -264,7 +271,8 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
       triees.map((h) => ({
         ...(societeIdVerrouille ? {} : { Société: nomDe(h.societeId) }),
         "Date d'effet": h.dateEffet,
-        "Nombre total d'actions": h.nombreTotalActions ?? "",
+        "Nombre total d'actions": totalActions(h.actionsParType) || "",
+        "Détail par Type": h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${l.quantite}`).join(", "),
         "Nombre total de droits de vote théorique": h.nombreTotalDroitVoteTheorique ?? "",
         "Nombre total de droits de vote exerçable": h.nombreTotalDroitVoteExercable ?? "",
       })),
@@ -274,7 +282,7 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
   return (
     <div>
       <h3>Ajouter une ligne</h3>
-      <FormAjout societesTriees={societesTriees} onAdd={onAdd} societeIdVerrouille={societeIdVerrouille} />
+      <FormAjout societesTriees={societesTriees} types={types} onAdd={onAdd} societeIdVerrouille={societeIdVerrouille} />
 
       <h3>Historique</h3>
       <div className="table-toolbar">
@@ -315,9 +323,14 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "dateEffet"))}>
                   Date d'effet{flecheTri(tri, "dateEffet")}
                 </th>
-                <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreTotalActions"))}>
-                  Total actions{flecheTri(tri, "nombreTotalActions")}
+                <th
+                  className="th-tri num"
+                  onClick={() => setTri(basculerTri(tri, "totalActions"))}
+                  title="Somme des quantités par Type."
+                >
+                  Total actions{flecheTri(tri, "totalActions")}
                 </th>
+                <th>Détail par Type</th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreTotalDroitVoteTheorique"))}>
                   Total DV théorique{flecheTri(tri, "nombreTotalDroitVoteTheorique")}
                 </th>
@@ -333,7 +346,12 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
                   <tr>
                     {!societeIdVerrouille && <td>{nomDe(h.societeId)}</td>}
                     <td>{formatDate(h.dateEffet)}</td>
-                    <td className="num">{h.nombreTotalActions === null ? "—" : formatDecimal(h.nombreTotalActions)}</td>
+                    <td className="num">{totalActions(h.actionsParType) === 0 ? "—" : formatDecimal(totalActions(h.actionsParType))}</td>
+                    <td>
+                      {h.actionsParType.length === 0
+                        ? "—"
+                        : h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${formatDecimal(l.quantite)}`).join(", ")}
+                    </td>
                     <td className="num">
                       {h.nombreTotalDroitVoteTheorique === null ? "—" : formatDecimal(h.nombreTotalDroitVoteTheorique)}
                     </td>
@@ -357,10 +375,11 @@ export function HistoriqueTotauxPanel({ societes, historique, onAdd, onUpdate, o
                   </tr>
                   {ligneEditee === h.id && (
                     <tr>
-                      <td colSpan={societeIdVerrouille ? 5 : 6}>
+                      <td colSpan={societeIdVerrouille ? 6 : 7}>
                         <LigneEdition
                           ligne={h}
                           societesTriees={societesTriees}
+                          types={types}
                           societeIdVerrouille={societeIdVerrouille}
                           onCancel={() => setLigneEditee(null)}
                           onSave={(champs) => {

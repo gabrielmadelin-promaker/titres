@@ -16,6 +16,10 @@ export interface TransactionChamps {
   nombreDroitVoteTheorique: string;
   nombreDroitVoteExercable: string;
   categorie: string;
+  /** Compte de l'acheteur concerné, facultatif ("" = non renseigné). */
+  compteAcheteurId: string;
+  /** Compte du vendeur concerné, facultatif ("" = non renseigné). */
+  compteVendeurId: string;
   prixAction: string;
 }
 
@@ -37,6 +41,8 @@ export function champsVides(): TransactionChamps {
     nombreDroitVoteTheorique: "",
     nombreDroitVoteExercable: "",
     categorie: "",
+    compteAcheteurId: "",
+    compteVendeurId: "",
     prixAction: "",
   };
 }
@@ -55,6 +61,8 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
     nombreDroitVoteTheorique: t.nombreDroitVoteTheorique?.toString() ?? "",
     nombreDroitVoteExercable: t.nombreDroitVoteExercable?.toString() ?? "",
     categorie: t.categorie ?? "",
+    compteAcheteurId: t.compteAcheteurId ?? "",
+    compteVendeurId: t.compteVendeurId ?? "",
     prixAction: t.prixAction?.toString() ?? "",
   };
 }
@@ -105,6 +113,8 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     categorie: c.categorie.trim() || null,
     vendeurId: c.vendeurExterne ? null : c.vendeurId || null,
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
+    compteAcheteurId: c.compteAcheteurId || null,
+    compteVendeurId: c.compteVendeurId || null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,
     // Calculée côté API, jamais saisie : valeur ignorée par le serveur à
     // l'écriture, remplacée par la vraie valeur renvoyée dans sa réponse.

@@ -456,6 +456,69 @@ h3 {
   margin-left: 6px;
 }
 
+.liste-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.badge-supprimable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.badge-supprimable button {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.badge-supprimable button:hover {
+  color: var(--danger);
+}
+
+.actions-par-type-ligne {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.actions-par-type-ligne input[type="text"] {
+  width: 90px;
+}
+
+.actions-par-type-ligne input[type="number"] {
+  flex: 1;
+}
+
+.actions-par-type-total {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.compte-creation {
+  display: flex;
+  gap: 6px;
+}
+
+.compte-creation input[type="text"] {
+  flex: 1;
+}
+
 .form {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
