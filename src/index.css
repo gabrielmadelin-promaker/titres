@@ -491,10 +491,15 @@ h3 {
   color: var(--danger);
 }
 
+.actions-par-type {
+  grid-column: 1 / -1;
+}
+
 .actions-par-type-ligne {
   display: flex;
   gap: 6px;
   margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
 .actions-par-type-ligne input[type="text"] {
@@ -503,6 +508,7 @@ h3 {
 
 .actions-par-type-ligne input[type="number"] {
   flex: 1;
+  min-width: 120px;
 }
 
 .actions-par-type-total {
@@ -513,6 +519,7 @@ h3 {
 .compte-creation {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .compte-creation input[type="text"] {
@@ -725,7 +732,7 @@ h3 {
   border-radius: 12px;
   box-shadow: 0 16px 40px rgba(13, 36, 56, 0.25);
   width: 100%;
-  max-width: 640px;
+  max-width: 760px;
 }
 
 .modal-header {
