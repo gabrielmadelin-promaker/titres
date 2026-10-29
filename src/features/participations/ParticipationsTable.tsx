@@ -1,14 +1,14 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe, Transaction } from "../types";
-import { formatDecimal, formatPourcentage } from "../lib/format";
+import type { HistoriqueTotalSociete, Societe, Transaction } from "../../types";
+import { formatDecimal, formatPourcentage } from "../../utils/format";
 import {
   calculerCheminsParticipation,
   calculerParticipationsDetaillees,
   type Metrique,
   type ParticipationDetaillee,
-} from "../lib/participations";
-import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
-import { exporterXlsx } from "../lib/xlsxExport";
+} from "../../utils/participations";
+import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
+import { exporterXlsx } from "../../utils/xlsxExport";
 
 interface Props {
   societes: Societe[];

@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
-import { ComptesPanel } from "./components/ComptesPanel";
-import { ImportSocietes } from "./components/ImportSocietes";
-import { ImportTransactions } from "./components/ImportTransactions";
-import { LoginForm } from "./components/LoginForm";
+import * as api from "./api/client";
+import type { Utilisateur } from "./api/client";
+import { SessionExpireeError } from "./api/auth";
+import { ComptesPanel } from "./features/comptes/ComptesPanel";
+import { ImportSocietes } from "./features/societes/ImportSocietes";
+import { ImportTransactions } from "./features/transactions/ImportTransactions";
+import { LoginForm } from "./features/auth/LoginForm";
 import { Modal } from "./components/Modal";
-import { ParticipationsTable } from "./components/ParticipationsTable";
-import { SocieteForm } from "./components/SocieteForm";
-import { SocietesTable } from "./components/SocietesTable";
-import { TransactionForm } from "./components/TransactionForm";
-import { TransactionsTable } from "./components/TransactionsTable";
-import { TitresPanel } from "./components/TitresPanel";
-import { TypesPanel } from "./components/TypesPanel";
-import { UtilisateursPanel } from "./components/UtilisateursPanel";
-import * as api from "./lib/api";
-import type { Utilisateur, UtilisateurConnecte } from "./lib/api";
-import { effacerToken, lireToken, SessionExpireeError } from "./lib/auth";
+import { ParticipationsTable } from "./features/participations/ParticipationsTable";
+import { SocieteForm } from "./features/societes/SocieteForm";
+import { SocietesTable } from "./features/societes/SocietesTable";
+import { TransactionForm } from "./features/transactions/TransactionForm";
+import { TransactionsTable } from "./features/transactions/TransactionsTable";
+import { TitresPanel } from "./features/titres/TitresPanel";
+import { TypesPanel } from "./features/categories/TypesPanel";
+import { UtilisateursPanel } from "./features/utilisateurs/UtilisateursPanel";
+import { useSession } from "./hooks/useSession";
 import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "./types";
 
 const ONGLETS = [
@@ -34,8 +35,8 @@ function messageErreur(e: unknown): string {
 }
 
 function App() {
-  const [utilisateurConnecte, setUtilisateurConnecte] = useState<UtilisateurConnecte | null>(null);
-  const [verificationSession, setVerificationSession] = useState(true);
+  const { utilisateurConnecte, setUtilisateurConnecte, verificationSession, seDeconnecterLocal, seDeconnecter } =
+    useSession();
 
   const [societes, setSocietes] = useState<Societe[]>([]);
   const [historiqueTotaux, setHistoriqueTotaux] = useState<HistoriqueTotalSociete[]>([]);
@@ -50,11 +51,6 @@ function App() {
   const [modaleSocieteOuverte, setModaleSocieteOuverte] = useState(false);
   const [modaleTransactionOuverte, setModaleTransactionOuverte] = useState(false);
 
-  function seDeconnecterLocal() {
-    effacerToken();
-    setUtilisateurConnecte(null);
-  }
-
   // Centralise la réaction à une session expirée/invalide : partout ailleurs
   // dans ce composant, un catch(e) passe par ici plutôt que par un simple
   // setErreur, pour ramener l'utilisateur à l'écran de connexion au lieu de
@@ -66,19 +62,6 @@ function App() {
     }
     setErreur(`${prefixe} : ${messageErreur(e)}`);
   }
-
-  useEffect(() => {
-    const token = lireToken();
-    if (!token) {
-      setVerificationSession(false);
-      return;
-    }
-    api
-      .verifierSession()
-      .then((u) => setUtilisateurConnecte(u))
-      .catch(() => effacerToken())
-      .finally(() => setVerificationSession(false));
-  }, []);
 
   useEffect(() => {
     if (!utilisateurConnecte) return;
@@ -120,16 +103,6 @@ function App() {
     } catch (e) {
       gererErreur(e, "Impossible de recharger les titres");
     }
-  }
-
-  async function seDeconnecter() {
-    try {
-      await api.deconnecter();
-    } catch {
-      // Sans conséquence si la requête échoue (session déjà expirée, réseau
-      // coupé...) : le jeton local est effacé de toute façon.
-    }
-    seDeconnecterLocal();
   }
 
   // Renvoie l'id créé (ou null en cas d'échec) plutôt qu'un simple booléen :

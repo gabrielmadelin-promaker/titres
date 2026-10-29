@@ -1,11 +1,11 @@
 import { Fragment, useMemo, useState } from "react";
-import type { Compte, HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../types";
-import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../lib/format";
-import { extraireValeurTransaction } from "../lib/participations";
-import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
-import { champsDepuisTransaction, champsVersTransaction, validerChamps } from "../lib/transactionChamps";
+import type { Compte, HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
+import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../../utils/format";
+import { extraireValeurTransaction } from "../../utils/participations";
+import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
+import { champsDepuisTransaction, champsVersTransaction, validerChamps } from "../../utils/transactionChamps";
 import { TransactionChampsFields } from "./TransactionChamps";
-import { exporterXlsx } from "../lib/xlsxExport";
+import { exporterXlsx } from "../../utils/xlsxExport";
 
 interface Props {
   transactions: Transaction[];

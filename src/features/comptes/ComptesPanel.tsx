@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import type { Compte, Societe, TypeTitre } from "../types";
-import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
+import type { Compte, Societe, TypeTitre } from "../../types";
+import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
 
 interface Props {
   societes: Societe[];

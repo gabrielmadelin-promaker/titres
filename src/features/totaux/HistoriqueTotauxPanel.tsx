@@ -1,8 +1,8 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../types";
-import { formatDate, formatDecimal } from "../lib/format";
-import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
-import { exporterXlsx } from "../lib/xlsxExport";
+import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../../types";
+import { formatDate, formatDecimal } from "../../utils/format";
+import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
+import { exporterXlsx } from "../../utils/xlsxExport";
 import { ActionsParTypeEditor } from "./ActionsParTypeEditor";
 
 interface Props {

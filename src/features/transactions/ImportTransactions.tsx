@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Societe, Transaction } from "../types";
-import { dateExcelVersIso, lireFeuilleXlsx, nombreColonne, texteColonne, valeurColonne } from "../lib/xlsxImport";
+import type { Societe, Transaction } from "../../types";
+import { dateExcelVersIso, lireFeuilleXlsx, nombreColonne, texteColonne, valeurColonne } from "../../utils/xlsxImport";
 
 interface Props {
   societes: Societe[];

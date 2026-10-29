@@ -1,5 +1,5 @@
-import type { Compte, Societe, TypeTitre } from "../types";
-import type { TransactionChamps } from "../lib/transactionChamps";
+import type { Compte, Societe, TypeTitre } from "../../types";
+import type { TransactionChamps } from "../../utils/transactionChamps";
 import { TransactionLignesEditor } from "./TransactionLignesEditor";
 
 interface Props {

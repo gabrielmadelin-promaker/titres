@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Compte, Societe, Transaction, TypeTitre } from "../types";
-import { champsVersTransaction, champsVides, validerChamps } from "../lib/transactionChamps";
+import type { Compte, Societe, Transaction, TypeTitre } from "../../types";
+import { champsVersTransaction, champsVides, validerChamps } from "../../utils/transactionChamps";
 import { TransactionChampsFields } from "./TransactionChamps";
 
 interface Props {

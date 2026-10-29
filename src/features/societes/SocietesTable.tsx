@@ -1,11 +1,11 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../types";
-import { formatDecimal, formatPourcentage } from "../lib/format";
-import { valeurGlobale } from "../lib/participations";
-import { PAYS } from "../lib/pays";
-import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
-import { exporterXlsx } from "../lib/xlsxExport";
-import { HistoriqueTotauxPanel } from "./HistoriqueTotauxPanel";
+import type { HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
+import { formatDecimal, formatPourcentage } from "../../utils/format";
+import { valeurGlobale } from "../../utils/participations";
+import { PAYS } from "../../utils/pays";
+import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
+import { exporterXlsx } from "../../utils/xlsxExport";
+import { HistoriqueTotauxPanel } from "../totaux/HistoriqueTotauxPanel";
 
 interface Props {
   societes: Societe[];

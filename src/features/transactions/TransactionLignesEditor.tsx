@@ -1,5 +1,5 @@
-import type { Compte, TypeTitre } from "../types";
-import type { LigneChamps } from "../lib/transactionChamps";
+import type { Compte, TypeTitre } from "../../types";
+import type { LigneChamps } from "../../utils/transactionChamps";
 
 interface Props {
   lignes: LigneChamps[];

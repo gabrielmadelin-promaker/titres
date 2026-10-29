@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import type { Compte, Societe, Titre } from "../types";
-import { formatDate, formatDecimal, formatMontant } from "../lib/format";
-import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
-import { exporterXlsx } from "../lib/xlsxExport";
+import type { Compte, Societe, Titre } from "../../types";
+import { formatDate, formatDecimal, formatMontant } from "../../utils/format";
+import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
+import { exporterXlsx } from "../../utils/xlsxExport";
 
 interface Props {
   societes: Societe[];

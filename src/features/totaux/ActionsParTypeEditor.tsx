@@ -1,4 +1,4 @@
-import type { LigneActionsParType, TypeTitre } from "../types";
+import type { LigneActionsParType, TypeTitre } from "../../types";
 
 interface Props {
   lignes: LigneActionsParType[];

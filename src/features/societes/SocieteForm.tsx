@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../types";
-import { PAYS } from "../lib/pays";
-import { ActionsParTypeEditor } from "./ActionsParTypeEditor";
+import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../../types";
+import { PAYS } from "../../utils/pays";
+import { ActionsParTypeEditor } from "../totaux/ActionsParTypeEditor";
 
 interface Props {
   /** Renvoie l'id de la société créée (ou null en cas d'échec). */

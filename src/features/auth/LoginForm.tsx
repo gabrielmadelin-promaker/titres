@@ -1,7 +1,7 @@
 import { useState } from "react";
-import * as api from "../lib/api";
-import type { UtilisateurConnecte } from "../lib/api";
-import { ecrireToken } from "../lib/auth";
+import * as api from "../../api/client";
+import type { UtilisateurConnecte } from "../../api/client";
+import { ecrireToken } from "../../api/auth";
 
 interface Props {
   onConnecte: (utilisateur: UtilisateurConnecte) => void;

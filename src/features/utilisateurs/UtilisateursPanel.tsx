@@ -1,6 +1,6 @@
 import { useState } from "react";
-import * as api from "../lib/api";
-import type { Utilisateur } from "../lib/api";
+import * as api from "../../api/client";
+import type { Utilisateur } from "../../api/client";
 
 const ROLES = ["DSI", "Direction des titres"] as const;
 

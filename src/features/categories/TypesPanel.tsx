@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { TypeTitre } from "../types";
-import { Modal } from "./Modal";
+import type { TypeTitre } from "../../types";
+import { Modal } from "../../components/Modal";
 
 interface Props {
   types: TypeTitre[];
