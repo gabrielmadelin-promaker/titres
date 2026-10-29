@@ -44,12 +44,16 @@ static class TransactionsService
             .ToList();
     }
 
+    // Recharge une seule transaction (avec ses lignes et leur PlusValue) après une écriture — recalcule tout
+    // via ChargerTransactions plutôt qu'une requête ciblée, pour garantir la même logique de calcul.
     public static async Task<Transaction> ChargerTransaction(SqlConnection conn, Guid id)
     {
         var toutes = await ChargerTransactions(conn);
         return toutes.First(t => t.Id == id);
     }
 
+    // Valide les champs d'une transaction (acheteur/vendeur, au moins une ligne, prix non négatif, date requise) ;
+    // renvoie l'acheteur et le vendeur externes normalisés en plus de l'erreur éventuelle.
     public static (string? Erreur, string? AcheteurNomExterne, string? VendeurNomExterne) ValiderTransaction(TransactionInput input)
     {
         var acheteurNomExterne = string.IsNullOrWhiteSpace(input.AcheteurNomExterne) ? null : input.AcheteurNomExterne.Trim();

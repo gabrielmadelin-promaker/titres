@@ -110,6 +110,7 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   );
 }
 
+/** Liste des sociétés, avec édition en ligne et accès aux totaux (HistoriqueTotauxPanel) de chacune. */
 export function SocietesTable({
   societes,
   historiqueTotaux,

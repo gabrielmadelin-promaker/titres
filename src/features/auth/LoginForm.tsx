@@ -7,6 +7,7 @@ interface Props {
   onConnecte: (utilisateur: UtilisateurConnecte) => void;
 }
 
+/** Écran de connexion, affiché tant qu'aucune session valide n'est établie. */
 export function LoginForm({ onConnecte }: Props) {
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");

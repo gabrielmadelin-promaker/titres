@@ -37,6 +37,7 @@ function ligneVide(): LigneChamps {
   return { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "" };
 }
 
+/** Formulaire vierge, prêt pour l'ajout d'une nouvelle transaction (date du jour, une ligne vide). */
 export function champsVides(): TransactionChamps {
   return {
     acheteurExterne: false,
@@ -54,6 +55,7 @@ export function champsVides(): TransactionChamps {
   };
 }
 
+/** Pré-remplit le formulaire à partir d'une transaction existante (édition). */
 export function champsDepuisTransaction(t: Transaction): TransactionChamps {
   return {
     acheteurExterne: t.acheteurId === null,
@@ -86,6 +88,7 @@ function nombreOptionnelValide(brut: string): boolean {
   return !Number.isNaN(v) && v !== 0;
 }
 
+/** Valide le formulaire ; renvoie le message d'erreur à afficher, ou null si tout est correct. */
 export function validerChamps(c: TransactionChamps): string | null {
   if (c.acheteurExterne ? !c.acheteurNomExterne.trim() : !c.acheteurId) {
     return "Renseignez la société acheteuse (dans la liste, ou son nom si elle est hors groupe).";

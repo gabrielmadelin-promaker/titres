@@ -9,6 +9,7 @@ interface Props {
   ) => Promise<{ ajoutees: number; erreurs: string[] }>;
 }
 
+/** Bouton d'import en masse de transactions depuis un fichier .xlsx. */
 export function ImportTransactions({ societes, onImport }: Props) {
   const [enCours, setEnCours] = useState(false);
   const [resultat, setResultat] = useState<string | null>(null);

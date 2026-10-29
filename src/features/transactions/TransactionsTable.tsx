@@ -96,6 +96,7 @@ function plusValueTotal(t: Transaction): number | null {
   return valeurs.length > 0 ? valeurs.reduce((s, v) => s + v, 0) : null;
 }
 
+/** Liste des transactions, avec édition en ligne et export xlsx. */
 export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, onDelete, onUpdate }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "date", sens: "desc" });
   const [filtreAcheteurId, setFiltreAcheteurId] = useState("");

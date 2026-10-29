@@ -21,6 +21,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Formulaire d'ajout d'une société, avec une première ligne de totaux optionnelle. */
 export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: Props) {
   const [nom, setNom] = useState("");
   const [valeurNominale, setValeurNominale] = useState(champVide());

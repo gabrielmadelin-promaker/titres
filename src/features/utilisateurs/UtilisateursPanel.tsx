@@ -15,6 +15,7 @@ function formatCreeLe(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("fr-FR");
 }
 
+/** Gestion des comptes utilisateurs de l'application — réservé au rôle DSI. */
 export function UtilisateursPanel({ utilisateurs, onAjoute, onSupprime }: Props) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>(ROLES[0]);

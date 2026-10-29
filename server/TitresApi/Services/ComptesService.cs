@@ -9,6 +9,8 @@ static class ComptesService
 {
     public const string ColonnesCompte = "Id, DetenteurId, DetenteurNomExterne, SocieteEmettriceId, Type, Nom";
 
+    // Valide les champs d'un Compte (nom requis, un seul détenteur renseigné) ; renvoie le nom et le
+    // détenteur externe normalisés (espaces retirés) en plus de l'erreur éventuelle.
     public static (string? Erreur, string? Nom, string? DetenteurNomExterne) ValiderCompteInput(CompteInput input)
     {
         var nom = input.Nom?.Trim();

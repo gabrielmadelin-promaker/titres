@@ -7,6 +7,7 @@ using Microsoft.Data.SqlClient;
 // totaux par Catégorie.
 static class ComptesEndpoints
 {
+    // Enregistre les routes /api/comptes (consultation, renommage, suppression).
     public static void MapComptesEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

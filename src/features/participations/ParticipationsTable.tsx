@@ -120,6 +120,7 @@ function DetailChemins({ transactions, historiqueTotaux, acheteurId, cibleId, me
   );
 }
 
+/** Qui détient combien du capital de qui, y compris indirectement via des chaînes de participation. */
 export function ParticipationsTable({ societes, historiqueTotaux, transactions }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "acheteur", sens: "asc" });
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");

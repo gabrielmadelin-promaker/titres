@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 // de titres (TitresLotsService) dans la même transaction SQL.
 static class TransactionsEndpoints
 {
+    // Enregistre les routes /api/transactions.
     public static void MapTransactionsEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

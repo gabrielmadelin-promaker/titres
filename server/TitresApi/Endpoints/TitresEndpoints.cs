@@ -10,6 +10,7 @@ static class TitresEndpoints
         "Id, SocieteEmettriceId, Categorie, SocieteDetentriceId, DetenteurNomExterne, CompteId, Quantite, PrixInitial, PrixAcquisition, " +
         "CONVERT(varchar(10), DateAcquisition, 23) AS DateAcquisition, TransactionOrigineId";
 
+    // Enregistre la route /api/titres/actions.
     public static void MapTitresEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

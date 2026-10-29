@@ -6,6 +6,7 @@ static class TypesEndpoints
 {
     const string ColonnesType = "Id, Nom";
 
+    // Enregistre les routes /api/types.
     public static void MapTypesEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

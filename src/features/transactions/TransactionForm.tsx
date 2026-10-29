@@ -12,6 +12,7 @@ interface Props {
   onSuccess?: () => void;
 }
 
+/** Formulaire d'ajout d'une transaction (une ou plusieurs lignes par Catégorie). */
 export function TransactionForm({ societes, types, comptes, onAdd, onSuccess }: Props) {
   const [champs, setChamps] = useState(champsVides());
   const [erreur, setErreur] = useState<string | null>(null);

@@ -240,6 +240,7 @@ function LigneEdition({ ligne, societesTriees, types, onSave, onCancel, societeI
   );
 }
 
+/** Historique des totaux émis (DV théorique/exerçable + ventilation par Catégorie) d'une ou toutes les sociétés. */
 export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUpdate, onDelete, societeIdVerrouille }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "societe", sens: "asc" });
   const [filtreSocieteId, setFiltreSocieteId] = useState("");

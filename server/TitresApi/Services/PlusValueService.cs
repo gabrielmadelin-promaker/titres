@@ -61,6 +61,7 @@ static class PlusValueService
         return sommeQuantiteConsommee > 0 ? sommePrixPondere / sommeQuantiteConsommee : null;
     }
 
+    // Ajoute un lot en mémoire pour ce détenteur (voir ConsommerLotsMemoire ci-dessus pour le FIFO qui le consomme).
     static void CreerLotMemoire(
         Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotMemoire>> lotsParDetenteur,
         Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, Guid? compteId,

@@ -6,6 +6,7 @@ static class SocietesEndpoints
 {
     const string ColonnesSociete = "Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei";
 
+    // Enregistre les routes /api/societes.
     public static void MapSocietesEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

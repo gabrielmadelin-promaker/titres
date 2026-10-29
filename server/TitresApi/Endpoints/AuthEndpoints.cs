@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 // jeton sur chaque requête protégée).
 static class AuthEndpoints
 {
+    // Enregistre les routes /api/auth/*.
     public static void MapAuthEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

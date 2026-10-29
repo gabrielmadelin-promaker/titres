@@ -11,6 +11,7 @@ export function basculerTri<C extends string>(etat: EtatTri<C>, colonne: C): Eta
   return { colonne, sens: "asc" };
 }
 
+/** Compare deux valeurs de colonne (numérique si les deux le sont, alphabétique français sinon). */
 export function comparerValeurs(a: string | number, b: string | number): number {
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a).localeCompare(String(b), "fr");

@@ -1,5 +1,6 @@
 const CLE_TOKEN = "titres_token";
 
+/** Jeton de session courant, ou null si absent (déconnecté, stockage indisponible). */
 export function lireToken(): string | null {
   try {
     return localStorage.getItem(CLE_TOKEN);
@@ -8,6 +9,7 @@ export function lireToken(): string | null {
   }
 }
 
+/** Mémorise le jeton de session (survit à un rechargement de page). */
 export function ecrireToken(token: string): void {
   try {
     localStorage.setItem(CLE_TOKEN, token);
@@ -18,6 +20,7 @@ export function ecrireToken(token: string): void {
   }
 }
 
+/** Oublie le jeton de session (déconnexion). */
 export function effacerToken(): void {
   try {
     localStorage.removeItem(CLE_TOKEN);

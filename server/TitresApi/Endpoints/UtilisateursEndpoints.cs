@@ -29,6 +29,7 @@ static class UtilisateursEndpoints
         return new string(motDePasse);
     }
 
+    // Enregistre les routes /api/utilisateurs.
     public static void MapUtilisateursEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();

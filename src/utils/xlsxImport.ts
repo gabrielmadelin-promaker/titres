@@ -23,6 +23,7 @@ export function valeurColonne(ligne: RowObject, ...nomsPossibles: string[]): unk
   return undefined;
 }
 
+/** Valeur texte d'une colonne (chaîne vide si absente). */
 export function texteColonne(ligne: RowObject, ...nomsPossibles: string[]): string {
   const valeur = valeurColonne(ligne, ...nomsPossibles);
   return valeur === undefined || valeur === null ? "" : String(valeur).trim();

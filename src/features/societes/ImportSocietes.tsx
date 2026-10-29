@@ -7,6 +7,7 @@ interface Props {
   onImport: (societes: Omit<Societe, "id">[]) => Promise<{ ajoutees: number; erreurs: string[] }>;
 }
 
+/** Bouton d'import en masse de sociétés depuis un fichier .xlsx. */
 export function ImportSocietes({ societes, onImport }: Props) {
   const [enCours, setEnCours] = useState(false);
   const [resultat, setResultat] = useState<string | null>(null);

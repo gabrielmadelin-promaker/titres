@@ -8,6 +8,7 @@ using Microsoft.Data.SqlClient;
 // SQL que l'écriture des totaux.
 static class HistoriqueTotauxEndpoints
 {
+    // Enregistre les routes /api/historique-totaux-societe.
     public static void MapHistoriqueTotauxEndpoints(this WebApplication app)
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();
