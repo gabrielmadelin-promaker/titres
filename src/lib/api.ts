@@ -1,7 +1,14 @@
 import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../types";
 import { lireToken, SessionExpireeError } from "./auth";
 
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:8091/api`;
+// Chemin relatif à l'origine de la page plutôt qu'une URL construite avec un
+// port en dur (`:8091`) : cette dernière empêchait tout passage en HTTPS
+// (port 443) sans patcher le JS compilé à la main après chaque déploiement.
+// Avec un chemin relatif, ça fonctionne aussi bien en LAN/VPN (ex.
+// http://serveur:8090) qu'en HTTPS derrière un reverse-proxy (ex.
+// https://titra.bollore.net) — à condition que chaque site IIS qui sert le
+// frontend redirige /api vers l'API (URL Rewrite, ex. http://127.0.0.1:8091/api).
+const API_BASE = "/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = lireToken();
