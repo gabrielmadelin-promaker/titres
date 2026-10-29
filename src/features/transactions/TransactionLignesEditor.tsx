@@ -1,4 +1,5 @@
 import type { Compte, TypeTitre } from "../../types";
+import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
 import type { LigneChamps } from "../../utils/transactionChamps";
 
 interface Props {
@@ -119,7 +120,7 @@ export function TransactionLignesEditor({
               <input
                 id={`${idPrefix}-${i}-categorie`}
                 type="text"
-                maxLength={50}
+                maxLength={LONGUEUR_MAX_CATEGORIE}
                 list={`${idPrefix}-types-suggestions`}
                 placeholder="Ex : Action ordinaire"
                 value={ligne.categorie}

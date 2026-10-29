@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TypeTitre } from "../../types";
 import { Modal } from "../../components/Modal";
+import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
 
 interface Props {
   types: TypeTitre[];
@@ -34,7 +35,7 @@ function FormAjout({ onAdd, onSuccess }: FormAjoutProps) {
         <input
           id="categorie-nom"
           type="text"
-          maxLength={50}
+          maxLength={LONGUEUR_MAX_CATEGORIE}
           value={nom}
           onChange={(e) => setNom(e.target.value)}
           placeholder="Ex : Action ordinaire"

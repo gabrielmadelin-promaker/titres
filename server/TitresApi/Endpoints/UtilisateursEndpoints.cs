@@ -8,12 +8,14 @@ static class UtilisateursEndpoints
 {
     const string ColonnesUtilisateur = "Id, Email, MotDePasse, Role, CreeLe";
 
-    static readonly string[] RolesValides = { "DSI", "Direction des titres" };
+    const string RoleDsi = "DSI";
+    const string RoleDirectionDesTitres = "Direction des titres";
+    static readonly string[] RolesValides = { RoleDsi, RoleDirectionDesTitres };
 
     // Seul le rôle DSI a accès à cet écran et à ces données (mots de passe en
     // clair inclus) — unique restriction de rôle pour l'instant, sur demande
     // explicite ; tout le reste de l'API reste ouvert à n'importe quel rôle.
-    static bool EstDsi(HttpContext ctx) => ctx.Items["Role"] as string == "DSI";
+    static bool EstDsi(HttpContext ctx) => ctx.Items["Role"] as string == RoleDsi;
 
     // Génère un mot de passe temporaire de 10 caractères, sans les caractères
     // ambigus à recopier (0/O, 1/l/I). Pas de niveau cryptographique requis vu

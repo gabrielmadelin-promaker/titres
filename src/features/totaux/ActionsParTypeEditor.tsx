@@ -1,4 +1,5 @@
 import type { LigneActionsParType, TypeTitre } from "../../types";
+import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
 
 interface Props {
   lignes: LigneActionsParType[];
@@ -36,7 +37,7 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
         <div className="actions-par-type-ligne" key={i}>
           <input
             type="text"
-            maxLength={50}
+            maxLength={LONGUEUR_MAX_CATEGORIE}
             list={`${idPrefix}-types-suggestions`}
             value={ligne.type ?? ""}
             onChange={(e) => modifierLigne(i, { type: e.target.value || null })}

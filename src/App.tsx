@@ -16,6 +16,7 @@ import { TitresPanel } from "./features/titres/TitresPanel";
 import { TypesPanel } from "./features/categories/TypesPanel";
 import { UtilisateursPanel } from "./features/utilisateurs/UtilisateursPanel";
 import { useSession } from "./hooks/useSession";
+import { ROLE_DSI } from "./utils/roles";
 import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "./types";
 
 const ONGLETS = [
@@ -70,7 +71,7 @@ function App() {
     // que pour le rôle DSI, seul à voir cet écran — pas la peine de faire
     // transiter ces données jusqu'au navigateur d'un autre rôle, même si
     // l'écran qui les affiche ne serait de toute façon pas rendu.
-    const estDsi = utilisateurConnecte.role === "DSI";
+    const estDsi = utilisateurConnecte.role === ROLE_DSI;
     Promise.all([
       api.fetchSocietes(),
       api.fetchHistoriqueTotaux(),
@@ -329,7 +330,7 @@ function App() {
 
   // Seul le rôle DSI voit et accède à l'écran de gestion des utilisateurs
   // (seule restriction de rôle pour l'instant, sur demande explicite).
-  const estDsi = utilisateurConnecte.role === "DSI";
+  const estDsi = utilisateurConnecte.role === ROLE_DSI;
 
   return (
     <div className="app">

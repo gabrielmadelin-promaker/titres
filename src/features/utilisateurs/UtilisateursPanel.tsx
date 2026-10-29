@@ -1,8 +1,7 @@
 import { useState } from "react";
 import * as api from "../../api/client";
 import type { Utilisateur } from "../../api/client";
-
-const ROLES = ["DSI", "Direction des titres"] as const;
+import { ROLES } from "../../utils/roles";
 
 interface Props {
   utilisateurs: Utilisateur[];

@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import type { Compte, Societe, TypeTitre } from "../../types";
+import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
 
 interface Props {
@@ -99,7 +100,7 @@ function ChampsCompte({
         <input
           id={`${idPrefix}-type`}
           type="text"
-          maxLength={50}
+          maxLength={LONGUEUR_MAX_CATEGORIE}
           list={`${idPrefix}-types-suggestions`}
           value={type}
           onChange={(e) => setType(e.target.value)}
