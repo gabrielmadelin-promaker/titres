@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { Compte, TypeTitre } from "../types";
 import type { LigneChamps } from "../lib/transactionChamps";
 
@@ -7,7 +6,6 @@ interface Props {
   onChange: (lignes: LigneChamps[]) => void;
   types: TypeTitre[];
   comptes: Compte[];
-  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   acheteurDetenteurId: string | null;
   acheteurDetenteurNomExterne: string | null;
   vendeurDetenteurId: string | null;
@@ -25,12 +23,9 @@ interface CompteSelectProps {
   categorie: string;
   value: string;
   onChange: (id: string) => void;
-  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   idPrefix: string;
   label: string;
 }
-
-const NOUVEAU_COMPTE = "__nouveau__";
 
 /**
  * Sélecteur du compte (dbo.Comptes) concerné par une ligne de transaction,
@@ -38,9 +33,10 @@ const NOUVEAU_COMPTE = "__nouveau__";
  * choisi, à la société cible et à la Catégorie de cette ligne (un compte
  * est toujours dédié à une seule Société émettrice et une seule Catégorie,
  * un compte sans l'un des deux renseigné reste compatible avec n'importe
- * laquelle — même règle que côté backend, voir ResoudreCompte). Laisser ce
- * champ vide est volontaire : un compte par défaut est alors trouvé ou créé
- * automatiquement à l'enregistrement.
+ * laquelle — même règle que côté backend, voir ResoudreCompte). Aucune
+ * création manuelle ici : un compte se choisit parmi les existants, ou se
+ * laisse vide ("Auto") pour être trouvé ou créé automatiquement par l'API
+ * à l'enregistrement — jamais nommé à la main.
  */
 function CompteSelect({
   comptes,
@@ -50,13 +46,9 @@ function CompteSelect({
   categorie,
   value,
   onChange,
-  onAddCompte,
   idPrefix,
   label,
 }: CompteSelectProps) {
-  const [creation, setCreation] = useState(false);
-  const [nomNouveauCompte, setNomNouveauCompte] = useState("");
-
   const detenteurRenseigne = detenteurId !== null || Boolean(detenteurNomExterne?.trim());
   const categorieNormalisee = categorie.trim() || null;
   const comptesFiltres = comptes.filter(
@@ -66,46 +58,6 @@ function CompteSelect({
       (c.type === null || c.type === categorieNormalisee),
   );
 
-  async function creerCompte() {
-    const nom = nomNouveauCompte.trim();
-    if (!nom) return;
-    const cree = await onAddCompte({
-      detenteurId,
-      detenteurNomExterne: detenteurId === null ? (detenteurNomExterne?.trim() ?? null) : null,
-      societeEmettriceId,
-      type: categorieNormalisee,
-      nom,
-    });
-    if (!cree) return;
-    onChange(cree.id);
-    setCreation(false);
-    setNomNouveauCompte("");
-  }
-
-  if (creation) {
-    return (
-      <div className="form-field">
-        <label htmlFor={`${idPrefix}-nouveau-compte`}>Nom du nouveau compte ({label})</label>
-        <div className="compte-creation">
-          <input
-            id={`${idPrefix}-nouveau-compte`}
-            type="text"
-            value={nomNouveauCompte}
-            onChange={(e) => setNomNouveauCompte(e.target.value)}
-            placeholder="Ex : Compte A1"
-            autoFocus
-          />
-          <button type="button" className="btn btn-secondary btn-small" onClick={creerCompte}>
-            Créer
-          </button>
-          <button type="button" className="btn btn-secondary btn-small" onClick={() => setCreation(false)}>
-            Annuler
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="form-field">
       <label htmlFor={`${idPrefix}-compte`}>Compte ({label})</label>
@@ -113,10 +65,7 @@ function CompteSelect({
         id={`${idPrefix}-compte`}
         value={value}
         disabled={!detenteurRenseigne}
-        onChange={(e) => {
-          if (e.target.value === NOUVEAU_COMPTE) setCreation(true);
-          else onChange(e.target.value);
-        }}
+        onChange={(e) => onChange(e.target.value)}
       >
         <option value="">Auto (trouvé ou créé automatiquement)</option>
         {comptesFiltres.map((c) => (
@@ -124,7 +73,6 @@ function CompteSelect({
             {c.nom}
           </option>
         ))}
-        {detenteurRenseigne && <option value={NOUVEAU_COMPTE}>+ Nouveau compte...</option>}
       </select>
     </div>
   );
@@ -141,7 +89,6 @@ export function TransactionLignesEditor({
   onChange,
   types,
   comptes,
-  onAddCompte,
   acheteurDetenteurId,
   acheteurDetenteurNomExterne,
   vendeurDetenteurId,
@@ -199,7 +146,6 @@ export function TransactionLignesEditor({
               categorie={ligne.categorie}
               value={ligne.compteAcheteurId}
               onChange={(id) => modifierLigne(i, { compteAcheteurId: id })}
-              onAddCompte={onAddCompte}
               idPrefix={`${idPrefix}-${i}-compte-acheteur`}
               label="acheteur"
             />
@@ -211,7 +157,6 @@ export function TransactionLignesEditor({
               categorie={ligne.categorie}
               value={ligne.compteVendeurId}
               onChange={(id) => modifierLigne(i, { compteVendeurId: id })}
-              onAddCompte={onAddCompte}
               idPrefix={`${idPrefix}-${i}-compte-vendeur`}
               label="vendeur"
             />

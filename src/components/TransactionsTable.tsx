@@ -15,7 +15,6 @@ interface Props {
   comptes: Compte[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Transaction, "id">) => void;
-  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
 }
 
 interface TransactionEditRowProps {
@@ -23,12 +22,11 @@ interface TransactionEditRowProps {
   societes: Societe[];
   types: TypeTitre[];
   comptes: Compte[];
-  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   onSave: (champs: Omit<Transaction, "id">) => void;
   onCancel: () => void;
 }
 
-function TransactionEditRow({ transaction, societes, types, comptes, onAddCompte, onSave, onCancel }: TransactionEditRowProps) {
+function TransactionEditRow({ transaction, societes, types, comptes, onSave, onCancel }: TransactionEditRowProps) {
   const [champs, setChamps] = useState(() => champsDepuisTransaction(transaction));
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -50,7 +48,6 @@ function TransactionEditRow({ transaction, societes, types, comptes, onAddCompte
         societes={societes}
         types={types}
         comptes={comptes}
-        onAddCompte={onAddCompte}
         idPrefix={`tx-edit-${transaction.id}`}
       />
       {erreur && <p className="form-error">{erreur}</p>}
@@ -99,7 +96,7 @@ function plusValueTotal(t: Transaction): number | null {
   return valeurs.length > 0 ? valeurs.reduce((s, v) => s + v, 0) : null;
 }
 
-export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, onDelete, onUpdate, onAddCompte }: Props) {
+export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, onDelete, onUpdate }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "date", sens: "desc" });
   const [filtreAcheteurId, setFiltreAcheteurId] = useState("");
   const [filtreCibleId, setFiltreCibleId] = useState("");
@@ -362,7 +359,6 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                           societes={societes}
                           types={types}
                           comptes={comptes}
-                          onAddCompte={onAddCompte}
                           onCancel={() => setLigneEditee(null)}
                           onSave={(champs) => {
                             onUpdate(t.id, champs);

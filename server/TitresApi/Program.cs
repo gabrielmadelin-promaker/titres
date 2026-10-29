@@ -339,21 +339,6 @@ app.MapGet("/api/comptes", async () =>
     return (null, nom, detenteurNomExterne);
 }
 
-app.MapPost("/api/comptes", async (CompteInput input) =>
-{
-    var (erreur, nom, detenteurNomExterne) = ValiderCompteInput(input);
-    if (erreur is not null)
-        return Results.BadRequest(erreur);
-
-    var compte = new Compte(Guid.NewGuid(), input.DetenteurId, detenteurNomExterne, input.SocieteEmettriceId, input.Type, nom!);
-    await using var conn = new SqlConnection(ConnectionString());
-    await conn.ExecuteAsync(
-        "INSERT INTO dbo.Comptes (Id, DetenteurId, DetenteurNomExterne, SocieteEmettriceId, Type, Nom) " +
-        "VALUES (@Id, @DetenteurId, @DetenteurNomExterne, @SocieteEmettriceId, @Type, @Nom)",
-        compte);
-    return Results.Created($"/api/comptes/{compte.Id}", compte);
-});
-
 app.MapPut("/api/comptes/{id:guid}", async (Guid id, CompteInput input) =>
 {
     var (erreur, nom, detenteurNomExterne) = ValiderCompteInput(input);

@@ -116,10 +116,6 @@ export function fetchComptes(): Promise<Compte[]> {
   return request("/comptes");
 }
 
-export function creerCompte(compte: Omit<Compte, "id">): Promise<Compte> {
-  return request("/comptes", { method: "POST", body: JSON.stringify(compte) });
-}
-
 export function modifierCompte(id: string, compte: Omit<Compte, "id">): Promise<void> {
   return request(`/comptes/${id}`, { method: "PUT", body: JSON.stringify(compte) });
 }

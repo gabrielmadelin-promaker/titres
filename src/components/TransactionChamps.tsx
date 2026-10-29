@@ -8,12 +8,11 @@ interface Props {
   societes: Societe[];
   types: TypeTitre[];
   comptes: Compte[];
-  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   idPrefix: string;
 }
 
 /** Champs de saisie d'une transaction, partagés entre le formulaire d'ajout et la ligne de modification. */
-export function TransactionChampsFields({ champs, onChange, societes, types, comptes, onAddCompte, idPrefix }: Props) {
+export function TransactionChampsFields({ champs, onChange, societes, types, comptes, idPrefix }: Props) {
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
   function set<K extends keyof TransactionChamps>(cle: K, valeur: TransactionChamps[K]) {
@@ -128,7 +127,6 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
         onChange={(lignes) => set("lignes", lignes)}
         types={types}
         comptes={comptes}
-        onAddCompte={onAddCompte}
         acheteurDetenteurId={champs.acheteurExterne ? null : champs.acheteurId || null}
         acheteurDetenteurNomExterne={champs.acheteurExterne ? champs.acheteurNomExterne : null}
         vendeurDetenteurId={champs.vendeurExterne ? null : champs.vendeurId || null}

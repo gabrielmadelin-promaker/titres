@@ -1,13 +1,11 @@
 import { Fragment, useMemo, useState } from "react";
 import type { Compte, Societe, TypeTitre } from "../types";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../lib/tri";
-import { Modal } from "./Modal";
 
 interface Props {
   societes: Societe[];
   comptes: Compte[];
   types: TypeTitre[];
-  onAdd: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   onUpdate: (id: string, compte: Omit<Compte, "id">) => void;
   onDelete: (id: string) => void;
 }
@@ -121,68 +119,6 @@ function ChampsCompte({
   );
 }
 
-interface FormAjoutProps {
-  societesTriees: Societe[];
-  types: TypeTitre[];
-  onAdd: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
-  onSuccess: () => void;
-}
-
-function FormAjout({ societesTriees, types, onAdd, onSuccess }: FormAjoutProps) {
-  const [detenteurExterne, setDetenteurExterne] = useState(false);
-  const [detenteurId, setDetenteurId] = useState("");
-  const [detenteurNomExterne, setDetenteurNomExterne] = useState("");
-  const [societeEmettriceId, setSocieteEmettriceId] = useState("");
-  const [type, setType] = useState("");
-  const [nom, setNom] = useState("");
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (detenteurExterne ? !detenteurNomExterne.trim() : !detenteurId) return;
-    if (!nom.trim()) return;
-    const cree = await onAdd({
-      detenteurId: detenteurExterne ? null : detenteurId,
-      detenteurNomExterne: detenteurExterne ? detenteurNomExterne.trim() : null,
-      societeEmettriceId: societeEmettriceId || null,
-      type: type.trim() || null,
-      nom: nom.trim(),
-    });
-    if (!cree) return;
-    setDetenteurExterne(false);
-    setDetenteurId("");
-    setDetenteurNomExterne("");
-    setSocieteEmettriceId("");
-    setType("");
-    setNom("");
-    onSuccess();
-  }
-
-  return (
-    <form className="form" onSubmit={handleSubmit}>
-      <ChampsCompte
-        detenteurExterne={detenteurExterne}
-        setDetenteurExterne={setDetenteurExterne}
-        detenteurId={detenteurId}
-        setDetenteurId={setDetenteurId}
-        detenteurNomExterne={detenteurNomExterne}
-        setDetenteurNomExterne={setDetenteurNomExterne}
-        societeEmettriceId={societeEmettriceId}
-        setSocieteEmettriceId={setSocieteEmettriceId}
-        type={type}
-        setType={setType}
-        nom={nom}
-        setNom={setNom}
-        societesTriees={societesTriees}
-        types={types}
-        idPrefix="compte-ajout"
-      />
-      <button type="submit" className="btn btn-primary">
-        Ajouter
-      </button>
-    </form>
-  );
-}
-
 interface LigneEditionProps {
   compte: Compte;
   societesTriees: Societe[];
@@ -243,10 +179,15 @@ function LigneEdition({ compte, societesTriees, types, onSave, onCancel }: Ligne
   );
 }
 
-export function ComptesPanel({ societes, comptes, types, onAdd, onUpdate, onDelete }: Props) {
+/**
+ * Consultation et gestion des Comptes : jamais créés à la main (voir
+ * ResoudreCompte côté backend — trouvés ou créés automatiquement lors
+ * d'une transaction, ou de la ventilation par Catégorie des totaux d'une
+ * société), seulement renommables/supprimables ici.
+ */
+export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "detenteur", sens: "asc" });
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
-  const [modaleOuverte, setModaleOuverte] = useState(false);
 
   const societesTriees = useMemo(() => [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr")), [societes]);
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
@@ -271,21 +212,17 @@ export function ComptesPanel({ societes, comptes, types, onAdd, onUpdate, onDele
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comptes, tri, nomParId]);
 
-  if (societes.length === 0 && comptes.length === 0) {
-    return <p className="empty">Ajoutez d'abord une société pour pouvoir créer des comptes.</p>;
+  if (comptes.length === 0) {
+    return (
+      <p className="empty">
+        Aucun compte pour le moment — ils sont créés automatiquement à la saisie d'une transaction ou des totaux d'une
+        société.
+      </p>
+    );
   }
 
   return (
     <div>
-      <div className="table-toolbar">
-        <button type="button" className="btn btn-primary" onClick={() => setModaleOuverte(true)}>
-          + Ajouter un compte
-        </button>
-      </div>
-      <Modal title="Ajouter un compte" open={modaleOuverte} onClose={() => setModaleOuverte(false)}>
-        <FormAjout societesTriees={societesTriees} types={types} onAdd={onAdd} onSuccess={() => setModaleOuverte(false)} />
-      </Modal>
-
       {triees.length === 0 ? (
         <p className="empty">Aucun compte pour le moment.</p>
       ) : (

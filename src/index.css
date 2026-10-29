@@ -532,16 +532,6 @@ h3 {
   margin-bottom: 8px;
 }
 
-.compte-creation {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.compte-creation input[type="text"] {
-  flex: 1;
-}
-
 .form {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

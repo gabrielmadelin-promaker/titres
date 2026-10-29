@@ -8,12 +8,11 @@ interface Props {
   types: TypeTitre[];
   comptes: Compte[];
   onAdd: (transaction: Omit<Transaction, "id">) => Promise<boolean>;
-  onAddCompte: (compte: Omit<Compte, "id">) => Promise<Compte | null>;
   /** Appelé après un ajout réussi (ex. pour fermer la fenêtre temporaire qui contient ce formulaire). */
   onSuccess?: () => void;
 }
 
-export function TransactionForm({ societes, types, comptes, onAdd, onAddCompte, onSuccess }: Props) {
+export function TransactionForm({ societes, types, comptes, onAdd, onSuccess }: Props) {
   const [champs, setChamps] = useState(champsVides());
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -51,7 +50,6 @@ export function TransactionForm({ societes, types, comptes, onAdd, onAddCompte, 
         societes={societes}
         types={types}
         comptes={comptes}
-        onAddCompte={onAddCompte}
         idPrefix="tx"
       />
 

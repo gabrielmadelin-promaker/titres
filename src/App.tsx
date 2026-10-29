@@ -219,18 +219,6 @@ function App() {
     }
   }
 
-  async function ajouterCompte(compte: Omit<Compte, "id">) {
-    try {
-      const cree = await api.creerCompte(compte);
-      setComptes((prev) => [...prev, cree]);
-      setErreur(null);
-      return cree;
-    } catch (e) {
-      gererErreur(e, "Impossible d'ajouter ce compte");
-      return null;
-    }
-  }
-
   async function modifierCompte(id: string, champs: Omit<Compte, "id">) {
     const avant = comptes;
     setComptes((prev) => prev.map((c) => (c.id === id ? { ...c, ...champs } : c)));
@@ -463,7 +451,6 @@ function App() {
                   types={types}
                   comptes={comptes}
                   onAdd={ajouterTransaction}
-                  onAddCompte={ajouterCompte}
                   onSuccess={() => setModaleTransactionOuverte(false)}
                 />
               </Modal>
@@ -476,7 +463,6 @@ function App() {
                 comptes={comptes}
                 onDelete={supprimerTransaction}
                 onUpdate={modifierTransaction}
-                onAddCompte={ajouterCompte}
               />
             </section>
           )}
@@ -496,14 +482,14 @@ function App() {
             <section className="panel">
               <h2>Comptes</h2>
               <p className="subtitle-panel">
-                Regroupement nommé des titres détenus par un actionnaire, dédié à une seule Catégorie. Choisi sur
-                chaque transaction : les lots générés automatiquement dans l'onglet Titres portent ensuite ce Compte.
+                Regroupement nommé des titres détenus par un actionnaire, dédié à une seule Société émettrice et une
+                seule Catégorie. Jamais créés à la main : trouvés ou créés automatiquement à la saisie d'une
+                transaction ou des totaux d'une société. Renommables ou supprimables ici.
               </p>
               <ComptesPanel
                 societes={societes}
                 comptes={comptes}
                 types={types}
-                onAdd={ajouterCompte}
                 onUpdate={modifierCompte}
                 onDelete={supprimerCompte}
               />
