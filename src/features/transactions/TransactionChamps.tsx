@@ -127,6 +127,7 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
         onChange={(lignes) => set("lignes", lignes)}
         types={types}
         comptes={comptes}
+        societes={societes}
         acheteurDetenteurId={champs.acheteurExterne ? null : champs.acheteurId || null}
         acheteurDetenteurNomExterne={champs.acheteurExterne ? champs.acheteurNomExterne : null}
         vendeurDetenteurId={champs.vendeurExterne ? null : champs.vendeurId || null}

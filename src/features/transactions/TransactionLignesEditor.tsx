@@ -1,4 +1,4 @@
-import type { Compte, TypeTitre } from "../../types";
+import type { Compte, Societe, TypeTitre } from "../../types";
 import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
 import type { LigneChamps } from "../../utils/transactionChamps";
 
@@ -7,6 +7,7 @@ interface Props {
   onChange: (lignes: LigneChamps[]) => void;
   types: TypeTitre[];
   comptes: Compte[];
+  societes: Societe[];
   acheteurDetenteurId: string | null;
   acheteurDetenteurNomExterne: string | null;
   vendeurDetenteurId: string | null;
@@ -21,6 +22,7 @@ interface CompteSelectProps {
   detenteurId: string | null;
   detenteurNomExterne: string | null;
   societeEmettriceId: string | null;
+  nomSociete: string | null;
   categorie: string;
   value: string;
   onChange: (id: string) => void;
@@ -37,13 +39,19 @@ interface CompteSelectProps {
  * laquelle — même règle que côté backend, voir ResoudreCompte). Aucune
  * création manuelle ici : un compte se choisit parmi les existants, ou se
  * laisse vide ("Auto") pour être trouvé ou créé automatiquement par l'API
- * à l'enregistrement — jamais nommé à la main.
+ * à l'enregistrement — jamais nommé à la main. L'option "+ Nouveau
+ * compte" prévisualise le nom qui serait généré (même numérotation que
+ * ResoudreCompte côté backend : rang suivant parmi les comptes déjà
+ * existants pour ce détenteur et cette société, toutes Catégories
+ * confondues) — un aperçu, pas une réservation : le nom réel est recalculé
+ * à l'enregistrement.
  */
 function CompteSelect({
   comptes,
   detenteurId,
   detenteurNomExterne,
   societeEmettriceId,
+  nomSociete,
   categorie,
   value,
   onChange,
@@ -52,12 +60,20 @@ function CompteSelect({
 }: CompteSelectProps) {
   const detenteurRenseigne = detenteurId !== null || Boolean(detenteurNomExterne?.trim());
   const categorieNormalisee = categorie.trim() || null;
+  const detenteurNomExterneNormalise = detenteurNomExterne?.trim() ?? null;
+  const memeDetenteur = (c: Compte) =>
+    detenteurId !== null ? c.detenteurId === detenteurId : c.detenteurNomExterne === detenteurNomExterneNormalise;
+
   const comptesFiltres = comptes.filter(
     (c) =>
-      (detenteurId !== null ? c.detenteurId === detenteurId : c.detenteurNomExterne === detenteurNomExterne?.trim()) &&
+      memeDetenteur(c) &&
       (c.societeEmettriceId === null || c.societeEmettriceId === societeEmettriceId) &&
       (c.type === null || c.type === categorieNormalisee),
   );
+  // Même règle de numérotation que ComptesService.ResoudreCompte côté backend :
+  // compte toutes les Catégories pour ce détenteur et cette société exacte.
+  const rangProchainCompte = comptes.filter((c) => memeDetenteur(c) && c.societeEmettriceId === societeEmettriceId).length + 1;
+  const nomNouveauCompte = `${nomSociete ?? "(société cible)"} - ${categorieNormalisee ?? "Non catégorisé"} - ${rangProchainCompte}`;
 
   return (
     <div className="form-field">
@@ -68,12 +84,12 @@ function CompteSelect({
         disabled={!detenteurRenseigne}
         onChange={(e) => onChange(e.target.value)}
       >
-        <option value="">Auto (trouvé ou créé automatiquement)</option>
         {comptesFiltres.map((c) => (
           <option key={c.id} value={c.id}>
             {c.nom}
           </option>
         ))}
+        <option value="">+ Nouveau compte ({nomNouveauCompte})</option>
       </select>
     </div>
   );
@@ -90,6 +106,7 @@ export function TransactionLignesEditor({
   onChange,
   types,
   comptes,
+  societes,
   acheteurDetenteurId,
   acheteurDetenteurNomExterne,
   vendeurDetenteurId,
@@ -97,6 +114,8 @@ export function TransactionLignesEditor({
   societeEmettriceId,
   idPrefix,
 }: Props) {
+  const nomSociete = societes.find((s) => s.id === societeEmettriceId)?.nom ?? null;
+
   function modifierLigne(index: number, champs: Partial<LigneChamps>) {
     onChange(lignes.map((l, i) => (i === index ? { ...l, ...champs } : l)));
   }
@@ -144,6 +163,7 @@ export function TransactionLignesEditor({
               detenteurId={acheteurDetenteurId}
               detenteurNomExterne={acheteurDetenteurNomExterne}
               societeEmettriceId={societeEmettriceId}
+              nomSociete={nomSociete}
               categorie={ligne.categorie}
               value={ligne.compteAcheteurId}
               onChange={(id) => modifierLigne(i, { compteAcheteurId: id })}
@@ -155,6 +175,7 @@ export function TransactionLignesEditor({
               detenteurId={vendeurDetenteurId}
               detenteurNomExterne={vendeurDetenteurNomExterne}
               societeEmettriceId={societeEmettriceId}
+              nomSociete={nomSociete}
               categorie={ligne.categorie}
               value={ligne.compteVendeurId}
               onChange={(id) => modifierLigne(i, { compteVendeurId: id })}
