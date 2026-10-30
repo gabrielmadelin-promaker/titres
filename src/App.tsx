@@ -22,14 +22,24 @@ import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeT
 const ONGLETS = [
   { id: "societes", label: "Sociétés" },
   { id: "transactions", label: "Transactions" },
-  { id: "categories", label: "Catégories" },
   { id: "comptes", label: "Comptes" },
   { id: "participations", label: "Participations" },
-  { id: "titres", label: "Titres" },
-  { id: "utilisateurs", label: "Utilisateurs" },
+  { id: "administration", label: "Administration" },
 ] as const;
 
 type OngletId = (typeof ONGLETS)[number]["id"];
+
+// Sous-écrans de l'onglet Administration : paramétrage et consultation
+// technique, par opposition aux écrans "métier" (Sociétés, Transactions,
+// Comptes, Participations). "utilisateurs" reste filtré au rôle DSI (voir
+// le filtre appliqué à l'affichage de SOUS_ONGLETS_ADMIN plus bas).
+const SOUS_ONGLETS_ADMIN = [
+  { id: "categories", label: "Catégories" },
+  { id: "titres", label: "Compteur FIFO" },
+  { id: "utilisateurs", label: "Utilisateurs" },
+] as const;
+
+type SousOngletAdminId = (typeof SOUS_ONGLETS_ADMIN)[number]["id"];
 
 function messageErreur(e: unknown): string {
   return e instanceof Error ? e.message : "Une erreur est survenue.";
@@ -47,6 +57,7 @@ function App() {
   const [comptes, setComptes] = useState<Compte[]>([]);
   const [utilisateurs, setUtilisateurs] = useState<Utilisateur[]>([]);
   const [onglet, setOnglet] = useState<OngletId>("societes");
+  const [sousOngletAdmin, setSousOngletAdmin] = useState<SousOngletAdminId>("categories");
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [modaleSocieteOuverte, setModaleSocieteOuverte] = useState(false);
@@ -356,7 +367,7 @@ function App() {
       )}
 
       <nav className="tabs">
-        {ONGLETS.filter((o) => o.id !== "utilisateurs" || estDsi).map((o) => (
+        {ONGLETS.map((o) => (
           <button
             key={o.id}
             type="button"
@@ -441,17 +452,6 @@ function App() {
             </section>
           )}
 
-          {onglet === "categories" && (
-            <section className="panel">
-              <h2>Catégories</h2>
-              <p className="subtitle-panel">
-                Catégories de titres (ex. Action ordinaire, Action de préférence...), utilisées en suggestions sur les
-                champs Catégorie des transactions et des totaux de société.
-              </p>
-              <TypesPanel types={types} onAdd={ajouterType} onDelete={supprimerType} />
-            </section>
-          )}
-
           {onglet === "comptes" && (
             <section className="panel">
               <h2>Comptes</h2>
@@ -478,23 +478,50 @@ function App() {
             </section>
           )}
 
-          {onglet === "titres" && (
+          {onglet === "administration" && (
             <section className="panel">
-              <h2>Titres</h2>
-              <p className="subtitle-panel">
-                Lots de titres — qui détient combien, de quelle catégorie, à quel prix. Généré automatiquement à
-                partir des transactions : lecture seule.
-              </p>
-              <TitresPanel societes={societes} actions={actions} comptes={comptes} />
-            </section>
-          )}
+              <h2>Administration</h2>
+              <nav className="tabs tabs-secondary">
+                {SOUS_ONGLETS_ADMIN.filter((o) => o.id !== "utilisateurs" || estDsi).map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`tab ${sousOngletAdmin === o.id ? "tab-active" : ""}`}
+                    onClick={() => setSousOngletAdmin(o.id)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </nav>
 
-          {onglet === "utilisateurs" && estDsi && (
-            <UtilisateursPanel
-              utilisateurs={utilisateurs}
-              onAjoute={(u) => setUtilisateurs((prev) => [...prev, u])}
-              onSupprime={(id) => setUtilisateurs((prev) => prev.filter((u) => u.id !== id))}
-            />
+              {sousOngletAdmin === "categories" && (
+                <>
+                  <p className="subtitle-panel">
+                    Catégories de titres (ex. Action ordinaire, Action de préférence...), utilisées en suggestions sur
+                    les champs Catégorie des transactions et des totaux de société.
+                  </p>
+                  <TypesPanel types={types} onAdd={ajouterType} onDelete={supprimerType} />
+                </>
+              )}
+
+              {sousOngletAdmin === "titres" && (
+                <>
+                  <p className="subtitle-panel">
+                    Lots de titres — qui détient combien, de quelle catégorie, à quel prix. Généré automatiquement à
+                    partir des transactions : lecture seule.
+                  </p>
+                  <TitresPanel societes={societes} actions={actions} comptes={comptes} />
+                </>
+              )}
+
+              {sousOngletAdmin === "utilisateurs" && estDsi && (
+                <UtilisateursPanel
+                  utilisateurs={utilisateurs}
+                  onAjoute={(u) => setUtilisateurs((prev) => [...prev, u])}
+                  onSupprime={(id) => setUtilisateurs((prev) => prev.filter((u) => u.id !== id))}
+                />
+              )}
+            </section>
           )}
         </main>
       )}
