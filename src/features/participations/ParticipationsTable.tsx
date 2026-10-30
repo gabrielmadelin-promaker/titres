@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe, Transaction } from "../../types";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction } from "../../types";
 import { formatDecimal, formatPourcentage } from "../../utils/format";
 import {
   calculerCheminsParticipation,
@@ -14,6 +14,9 @@ interface Props {
   societes: Societe[];
   historiqueTotaux: HistoriqueTotalSociete[];
   transactions: Transaction[];
+  comptes: Compte[];
+  /** Lots de titres (dbo.Actions) : seule source du détail par Compte — pas de suivi par Compte pour les droits de vote. */
+  titres: Titre[];
 }
 
 interface GroupeMetrique {
@@ -120,8 +123,34 @@ function DetailChemins({ transactions, historiqueTotaux, acheteurId, cibleId, me
   );
 }
 
+interface LigneDetailCompte {
+  compteId: string;
+  nom: string;
+  categorie: string | null;
+  quantite: number;
+}
+
+/** Ventilation par Compte de la détention directe (acheteurId → cibleId), en nombre d'actions — pas de
+ * suivi par Compte pour les droits de vote (voir TitresLotsService côté backend). */
+function detailParCompte(titres: Titre[], comptes: Compte[], acheteurId: string, cibleId: string): LigneDetailCompte[] {
+  const nomParCompteId = new Map(comptes.map((c) => [c.id, c]));
+  const quantiteParCompte = new Map<string, number>();
+  for (const t of titres) {
+    if (t.societeDetentriceId !== acheteurId || t.societeEmettriceId !== cibleId || !t.compteId) continue;
+    quantiteParCompte.set(t.compteId, (quantiteParCompte.get(t.compteId) ?? 0) + t.quantite);
+  }
+  return [...quantiteParCompte.entries()]
+    .map(([compteId, quantite]) => ({
+      compteId,
+      nom: nomParCompteId.get(compteId)?.nom ?? "(compte supprimé)",
+      categorie: nomParCompteId.get(compteId)?.type ?? null,
+      quantite,
+    }))
+    .sort((a, b) => b.quantite - a.quantite);
+}
+
 /** Qui détient combien du capital de qui, y compris indirectement via des chaînes de participation. */
-export function ParticipationsTable({ societes, historiqueTotaux, transactions }: Props) {
+export function ParticipationsTable({ societes, historiqueTotaux, transactions, comptes, titres }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "acheteur", sens: "asc" });
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");
   const [filtreDetenueId, setFiltreDetenueId] = useState("");
@@ -130,6 +159,7 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions }
     () => new Set(GROUPES.map((g) => g.metrique)),
   );
   const [afficherDetail, setAfficherDetail] = useState(false);
+  const [afficherDetailComptes, setAfficherDetailComptes] = useState(false);
 
   function basculerMetrique(metrique: Metrique) {
     setMetriquesVisibles((prev) => {
@@ -300,6 +330,16 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions }
             Détail direct / indirect
           </label>
         </div>
+        <div className="form-field-checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={afficherDetailComptes}
+              onChange={(e) => setAfficherDetailComptes(e.target.checked)}
+            />
+            Détail par Compte
+          </label>
+        </div>
       </div>
 
       {triees.length === 0 ? (
@@ -436,6 +476,43 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions }
                       </td>
                     </tr>
                   )}
+                  {afficherDetailComptes &&
+                    (() => {
+                      const lignesComptes = detailParCompte(titres, comptes, p.acheteurId, p.cibleId);
+                      return (
+                        <tr>
+                          <td
+                            className="chemins-cellule"
+                            colSpan={2 + groupesAffiches.reduce((s, g) => s + colonnesPourGroupe(g, afficherDetail), 0)}
+                          >
+                            {lignesComptes.length === 0 ? (
+                              <p className="chemins-titre">
+                                Aucun Compte de {nomDe(p.acheteurId)} ne détient de titres {nomDe(p.cibleId)}
+                                directement (détention uniquement indirecte, ou titres non rattachés à un Compte).
+                              </p>
+                            ) : (
+                              <>
+                                <p className="chemins-titre">
+                                  Détail par Compte de la détention directe {nomDe(p.acheteurId)} → {nomDe(p.cibleId)}{" "}
+                                  (en nombre d'actions — non disponible pour les droits de vote) :
+                                </p>
+                                <ul className="chemins-liste">
+                                  {lignesComptes.map((l) => (
+                                    <li key={l.compteId} className="chemins-ligne">
+                                      <span>
+                                        {l.nom}
+                                        {l.categorie && <span className="chemins-pct"> ({l.categorie})</span>}
+                                      </span>
+                                      <span className="chemins-contribution">{formatDecimal(l.quantite)}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })()}
                 </Fragment>
               ))}
             </tbody>

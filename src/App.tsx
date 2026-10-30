@@ -474,7 +474,13 @@ function App() {
             <section className="panel">
               <h2>Participations</h2>
               <p className="subtitle-panel">Qui détient combien du capital de qui.</p>
-              <ParticipationsTable societes={societes} historiqueTotaux={historiqueTotaux} transactions={transactions} />
+              <ParticipationsTable
+                societes={societes}
+                historiqueTotaux={historiqueTotaux}
+                transactions={transactions}
+                comptes={comptes}
+                titres={actions}
+              />
             </section>
           )}
 
