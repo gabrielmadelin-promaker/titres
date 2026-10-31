@@ -132,14 +132,23 @@ interface LigneDetailCompte {
 
 /** Ventilation par Compte de la détention directe (acheteurId → cibleId), en nombre d'actions — pas de
  * suivi par Compte pour les droits de vote (voir TitresLotsService côté backend). */
-function detailParCompte(titres: Titre[], comptes: Compte[], acheteurId: string, cibleId: string): LigneDetailCompte[] {
+interface DetailParCompte {
+  lignes: LigneDetailCompte[];
+  /** Quantité de titres de ce couple (acheteur, cible) dont le lot n'est rattaché à aucun Compte (CompteId
+   * NULL) — typiquement des lots créés avant l'introduction des Comptes, jamais réconciliés depuis. */
+  quantiteSansCompte: number;
+}
+
+function detailParCompte(titres: Titre[], comptes: Compte[], acheteurId: string, cibleId: string): DetailParCompte {
   const nomParCompteId = new Map(comptes.map((c) => [c.id, c]));
   const quantiteParCompte = new Map<string, number>();
+  let quantiteSansCompte = 0;
   for (const t of titres) {
-    if (t.societeDetentriceId !== acheteurId || t.societeEmettriceId !== cibleId || !t.compteId) continue;
-    quantiteParCompte.set(t.compteId, (quantiteParCompte.get(t.compteId) ?? 0) + t.quantite);
+    if (t.societeDetentriceId !== acheteurId || t.societeEmettriceId !== cibleId) continue;
+    if (t.compteId) quantiteParCompte.set(t.compteId, (quantiteParCompte.get(t.compteId) ?? 0) + t.quantite);
+    else quantiteSansCompte += t.quantite;
   }
-  return [...quantiteParCompte.entries()]
+  const lignes = [...quantiteParCompte.entries()]
     .map(([compteId, quantite]) => ({
       compteId,
       nom: nomParCompteId.get(compteId)?.nom ?? "(compte supprimé)",
@@ -147,6 +156,7 @@ function detailParCompte(titres: Titre[], comptes: Compte[], acheteurId: string,
       quantite,
     }))
     .sort((a, b) => b.quantite - a.quantite);
+  return { lignes, quantiteSansCompte };
 }
 
 /** Qui détient combien du capital de qui, y compris indirectement via des chaînes de participation. */
@@ -478,19 +488,25 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                   )}
                   {afficherDetailComptes &&
                     (() => {
-                      const lignesComptes = detailParCompte(titres, comptes, p.acheteurId, p.cibleId);
+                      const { lignes: lignesComptes, quantiteSansCompte } = detailParCompte(
+                        titres,
+                        comptes,
+                        p.acheteurId,
+                        p.cibleId,
+                      );
                       return (
                         <tr>
                           <td
                             className="chemins-cellule"
                             colSpan={2 + groupesAffiches.reduce((s, g) => s + colonnesPourGroupe(g, afficherDetail), 0)}
                           >
-                            {lignesComptes.length === 0 ? (
+                            {lignesComptes.length === 0 && quantiteSansCompte === 0 && (
                               <p className="chemins-titre">
-                                Aucun Compte de {nomDe(p.acheteurId)} ne détient de titres {nomDe(p.cibleId)}
-                                directement (détention uniquement indirecte, ou titres non rattachés à un Compte).
+                                Aucun Compte de {nomDe(p.acheteurId)} ne détient de titres {nomDe(p.cibleId)}{" "}
+                                directement (détention uniquement indirecte, ou aucun lot de titres pour ce couple).
                               </p>
-                            ) : (
+                            )}
+                            {lignesComptes.length > 0 && (
                               <>
                                 <p className="chemins-titre">
                                   Détail par Compte de la détention directe {nomDe(p.acheteurId)} → {nomDe(p.cibleId)}{" "}
@@ -508,6 +524,14 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                                   ))}
                                 </ul>
                               </>
+                            )}
+                            {quantiteSansCompte > 0 && (
+                              <p className="chemins-reste">
+                                + {formatDecimal(quantiteSansCompte)} titre{quantiteSansCompte > 1 ? "s" : ""}{" "}
+                                {nomDe(p.acheteurId)} → {nomDe(p.cibleId)} sur des lots sans Compte rattaché
+                                (probablement antérieurs à l'introduction des Comptes) — non attribuable à un Compte
+                                précis sans correction des données.
+                              </p>
                             )}
                           </td>
                         </tr>
