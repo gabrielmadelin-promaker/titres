@@ -17,6 +17,9 @@ CREATE TABLE dbo.Societes (
     Id            UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
     Nom           NVARCHAR(200)    NOT NULL,
     ValeurNominale DECIMAL(18,4)   NULL,
+    -- Devise de ValeurNominale (code ISO 4217, ex. EUR, USD) ; sans incidence
+    -- tant que ValeurNominale est NULL.
+    Devise        NVARCHAR(3)      NOT NULL CONSTRAINT DF_Societes_Devise DEFAULT 'EUR',
     Pays          NVARCHAR(100)    NULL,
     SiegeSocial   NVARCHAR(300)    NULL,
     Siren         NVARCHAR(20)     NULL,
@@ -129,6 +132,9 @@ CREATE TABLE dbo.Transactions (
     VendeurId         UNIQUEIDENTIFIER NULL,
     VendeurNomExterne NVARCHAR(300)    NULL,
     PrixAction        DECIMAL(18,4)    NULL CONSTRAINT CK_Transactions_PrixAction CHECK (PrixAction >= 0),
+    -- Devise de PrixAction (code ISO 4217, ex. EUR, USD) ; sans incidence
+    -- tant que PrixAction est NULL.
+    Devise            NVARCHAR(3)      NOT NULL CONSTRAINT DF_Transactions_Devise DEFAULT 'EUR',
     CONSTRAINT CK_Transactions_Acheteur CHECK (
         (AcheteurId IS NULL AND AcheteurNomExterne IS NOT NULL)
         OR (AcheteurId IS NOT NULL AND AcheteurNomExterne IS NULL)

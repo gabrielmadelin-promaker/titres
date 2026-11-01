@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Societe } from "../../types";
+import { DEVISE_PAR_DEFAUT } from "../../utils/devises";
 import { lireFeuilleXlsx, nombreColonne, texteColonne } from "../../utils/xlsxImport";
 
 interface Props {
@@ -41,6 +42,7 @@ export function ImportSocietes({ societes, onImport }: Props) {
         aAjouter.push({
           nom,
           valeurNominale: nombreColonne(ligne, "valeur nominale", "valeur nominale de l'action"),
+          devise: texteColonne(ligne, "devise").trim().toUpperCase() || DEVISE_PAR_DEFAUT,
           pays: texteColonne(ligne, "pays") || null,
           siegeSocial: texteColonne(ligne, "siège social", "siege social") || null,
           siren: texteColonne(ligne, "siren") || null,
@@ -70,8 +72,9 @@ export function ImportSocietes({ societes, onImport }: Props) {
         <input type="file" accept=".xlsx" onChange={handleFile} disabled={enCours} hidden />
       </label>
       <p className="import-hint">
-        Colonnes : « Nom » (requise), « Valeur nominale », « Pays », « Siège social », « SIREN », « LEI » (toutes
-        facultatives). Les totaux émis (actions, droits de vote) se renseignent dans l'onglet Totaux, par date d'effet.
+        Colonnes : « Nom » (requise), « Valeur nominale », « Devise » (EUR par défaut), « Pays », « Siège social »,
+        « SIREN », « LEI » (toutes facultatives). Les totaux émis (actions, droits de vote) se renseignent dans
+        l'onglet Totaux, par date d'effet.
       </p>
       {resultat && <p className="import-result">{resultat}</p>}
       {erreurs.length > 0 && (

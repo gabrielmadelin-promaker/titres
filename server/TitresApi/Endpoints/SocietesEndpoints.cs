@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 // Opérations CRUD sur les sociétés suivies (dbo.Societes).
 static class SocietesEndpoints
 {
-    const string ColonnesSociete = "Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei";
+    const string ColonnesSociete = "Id, Nom, ValeurNominale, Devise, Pays, SiegeSocial, Siren, Lei";
 
     // Enregistre les routes /api/societes.
     public static void MapSocietesEndpoints(this WebApplication app)
@@ -23,12 +23,15 @@ static class SocietesEndpoints
             var nom = input.Nom?.Trim();
             if (string.IsNullOrEmpty(nom))
                 return Results.BadRequest("Le nom est requis.");
+            var (erreurDevise, devise) = Devises.Normaliser(input.Devise);
+            if (erreurDevise is not null)
+                return Results.BadRequest(erreurDevise);
 
-            var societe = new Societe(Guid.NewGuid(), nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei);
+            var societe = new Societe(Guid.NewGuid(), nom, input.ValeurNominale, devise, input.Pays, input.SiegeSocial, input.Siren, input.Lei);
             await using var conn = new SqlConnection(ConnectionString());
             await conn.ExecuteAsync(
-                "INSERT INTO dbo.Societes (Id, Nom, ValeurNominale, Pays, SiegeSocial, Siren, Lei) " +
-                "VALUES (@Id, @Nom, @ValeurNominale, @Pays, @SiegeSocial, @Siren, @Lei)",
+                "INSERT INTO dbo.Societes (Id, Nom, ValeurNominale, Devise, Pays, SiegeSocial, Siren, Lei) " +
+                "VALUES (@Id, @Nom, @ValeurNominale, @Devise, @Pays, @SiegeSocial, @Siren, @Lei)",
                 societe);
             return Results.Created($"/api/societes/{societe.Id}", societe);
         });
@@ -38,12 +41,15 @@ static class SocietesEndpoints
             var nom = input.Nom?.Trim();
             if (string.IsNullOrEmpty(nom))
                 return Results.BadRequest("Le nom est requis.");
+            var (erreurDevise, devise) = Devises.Normaliser(input.Devise);
+            if (erreurDevise is not null)
+                return Results.BadRequest(erreurDevise);
 
             await using var conn = new SqlConnection(ConnectionString());
             var lignes = await conn.ExecuteAsync(
-                "UPDATE dbo.Societes SET Nom = @Nom, ValeurNominale = @ValeurNominale, " +
+                "UPDATE dbo.Societes SET Nom = @Nom, ValeurNominale = @ValeurNominale, Devise = @devise, " +
                 "Pays = @Pays, SiegeSocial = @SiegeSocial, Siren = @Siren, Lei = @Lei WHERE Id = @id",
-                new { id, Nom = nom, input.ValeurNominale, input.Pays, input.SiegeSocial, input.Siren, input.Lei });
+                new { id, Nom = nom, input.ValeurNominale, devise, input.Pays, input.SiegeSocial, input.Siren, input.Lei });
             return lignes > 0 ? Results.NoContent() : Results.NotFound();
         });
 

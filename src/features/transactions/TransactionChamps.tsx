@@ -1,4 +1,5 @@
 import type { Compte, Societe, TypeTitre } from "../../types";
+import { DEVISES } from "../../utils/devises";
 import type { TransactionChamps } from "../../utils/transactionChamps";
 import { TransactionLignesEditor } from "./TransactionLignesEditor";
 
@@ -187,15 +188,28 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-prix`}>Prix de l'action (€)</label>
-        <input
-          id={`${idPrefix}-prix`}
-          type="number"
-          min="0"
-          step="0.01"
-          value={champs.prixAction}
-          onChange={(e) => set("prixAction", e.target.value)}
-        />
+        <label htmlFor={`${idPrefix}-prix`}>Prix de l'action</label>
+        <div className="form-field-montant">
+          <input
+            id={`${idPrefix}-prix`}
+            type="number"
+            min="0"
+            step="0.01"
+            value={champs.prixAction}
+            onChange={(e) => set("prixAction", e.target.value)}
+          />
+          <select
+            aria-label="Devise du prix de l'action"
+            value={champs.devise}
+            onChange={(e) => set("devise", e.target.value)}
+          >
+            {DEVISES.map((d) => (
+              <option key={d.code} value={d.code}>
+                {d.code}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </>
   );

@@ -209,8 +209,9 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
         "Capital (%)": extraireValeurTransaction(t, "capital", historiqueTotaux) ?? "",
         "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? "",
         "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? "",
-        "Prix de l'action (€)": t.prixAction ?? "",
-        "Plus-value (€)": plusValueTotal(t) ?? "",
+        "Prix de l'action": t.prixAction ?? "",
+        Devise: t.devise,
+        "Plus-value": plusValueTotal(t) ?? "",
       })),
     );
   }
@@ -335,8 +336,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                     <td className="num">
                       {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux), formatPourcentage)}
                     </td>
-                    <td className="num">{formatOuTiret(t.prixAction, formatMontant)}</td>
-                    <td className="num">{formatOuTiret(plusValueTotal(t), formatMontant)}</td>
+                    <td className="num">{formatOuTiret(t.prixAction, (v) => formatMontant(v, t.devise))}</td>
+                    <td className="num">{formatOuTiret(plusValueTotal(t), (v) => formatMontant(v, t.devise))}</td>
                     <td className="actions">
                       <div className="actions-groupe">
                         <button

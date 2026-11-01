@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import type { HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
+import { DEVISES } from "../../utils/devises";
 import { formatDecimal, formatPourcentage } from "../../utils/format";
 import { valeurGlobale } from "../../utils/participations";
 import { PAYS } from "../../utils/pays";
@@ -40,6 +41,7 @@ interface SocieteEditRowProps {
 function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   const [nom, setNom] = useState(societe.nom);
   const [valeurNominale, setValeurNominale] = useState(societe.valeurNominale?.toString() ?? "");
+  const [devise, setDevise] = useState(societe.devise);
   const [pays, setPays] = useState(societe.pays ?? "");
   const [siegeSocial, setSiegeSocial] = useState(societe.siegeSocial ?? "");
   const [siren, setSiren] = useState(societe.siren ?? "");
@@ -52,6 +54,7 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
     onSave({
       nom: nomPropre,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
+      devise,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
@@ -67,13 +70,22 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
       </div>
       <div className="form-field">
         <label>Valeur nominale</label>
-        <input
-          type="number"
-          step="0.0001"
-          min="0"
-          value={valeurNominale}
-          onChange={(e) => setValeurNominale(e.target.value)}
-        />
+        <div className="form-field-montant">
+          <input
+            type="number"
+            step="0.0001"
+            min="0"
+            value={valeurNominale}
+            onChange={(e) => setValeurNominale(e.target.value)}
+          />
+          <select aria-label="Devise de la valeur nominale" value={devise} onChange={(e) => setDevise(e.target.value)}>
+            {DEVISES.map((d) => (
+              <option key={d.code} value={d.code}>
+                {d.code}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="form-field">
         <label>Pays</label>
@@ -174,6 +186,7 @@ export function SocietesTable({
       triees.map((l) => ({
         Société: l.societe.nom,
         "Valeur nominale": l.societe.valeurNominale ?? "",
+        Devise: l.societe.devise,
         Pays: l.societe.pays ?? "",
         "Siège social": l.societe.siegeSocial ?? "",
         SIREN: l.societe.siren ?? "",
@@ -242,7 +255,9 @@ export function SocietesTable({
               <Fragment key={societe.id}>
                 <tr>
                   <td>{societe.nom}</td>
-                  <td className="num">{societe.valeurNominale === null ? "—" : formatDecimal(societe.valeurNominale)}</td>
+                  <td className="num">
+                    {societe.valeurNominale === null ? "—" : `${formatDecimal(societe.valeurNominale)} ${societe.devise}`}
+                  </td>
                   <td>{societe.pays ?? "—"}</td>
                   <td>{societe.siegeSocial ?? "—"}</td>
                   <td>{societe.siren ?? "—"}</td>

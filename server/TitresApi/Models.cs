@@ -3,17 +3,21 @@
 // ici, voir Services/ pour les règles métier et Endpoints/ pour les
 // opérations HTTP qui les exposent.
 
-record Societe(Guid Id, string Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
+// Devise (code ISO 4217, ex. EUR, USD) : sans incidence tant que
+// ValeurNominale est null, jamais null elle-même (toujours "EUR" par défaut
+// si non précisée, voir SocietesEndpoints).
+record Societe(Guid Id, string Nom, decimal? ValeurNominale, string Devise, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
 record SocieteInput(
     string? Nom,
     decimal? ValeurNominale = null,
+    string? Devise = null,
     string? Pays = null,
     string? SiegeSocial = null,
     string? Siren = null,
     string? Lei = null);
 
-record SocieteUpdate(string? Nom, decimal? ValeurNominale, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
+record SocieteUpdate(string? Nom, decimal? ValeurNominale, string? Devise, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
 // Une ligne (= un Type) de la ventilation du nombre d'actions d'une société
 // à une date d'effet donnée (voir HistoriqueTotalSociete).
@@ -79,6 +83,10 @@ record Transaction(
     Guid? VendeurId,
     string? VendeurNomExterne,
     decimal? PrixAction,
+    // Devise de PrixAction (code ISO 4217, ex. EUR, USD) : sans incidence
+    // tant que PrixAction est null, jamais null elle-même ("EUR" par défaut
+    // si non précisée, voir TransactionsEndpoints).
+    string Devise,
     IReadOnlyList<LigneTransaction> Lignes);
 
 record TransactionInput(
@@ -91,6 +99,7 @@ record TransactionInput(
     Guid? VendeurId,
     string? VendeurNomExterne,
     decimal? PrixAction,
+    string? Devise,
     List<LigneTransactionInput>? Lignes);
 
 // Un mouvement d'actions d'une Catégorie donnée au sein d'une transaction —
@@ -110,7 +119,7 @@ record LigneTransactionAvecParent(Guid Id, Guid TransactionId, string? Categorie
 record TransactionSansLignes(
     Guid Id, Guid? AcheteurId, string? AcheteurNomExterne, Guid CibleId, string Date,
     decimal? NombreDroitVoteTheorique, decimal? NombreDroitVoteExercable,
-    Guid? VendeurId, string? VendeurNomExterne, decimal? PrixAction);
+    Guid? VendeurId, string? VendeurNomExterne, decimal? PrixAction, string Devise);
 
 // Projection minimale d'une transaction pour TransactionsService.ValiderBornesParticipation :
 // seules les colonnes qui contribuent aux totaux par actionnaire (NombreActions

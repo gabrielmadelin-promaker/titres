@@ -3,6 +3,8 @@ export interface Societe {
   nom: string;
   /** Valeur nominale de l'action, dans la devise de la société. */
   valeurNominale: number | null;
+  /** Devise (code ISO 4217, ex. EUR, USD) de valeurNominale — sans incidence tant qu'elle est null. */
+  devise: string;
   pays: string | null;
   siegeSocial: string | null;
   siren: string | null;
@@ -122,8 +124,10 @@ export interface Transaction {
   vendeurId: string | null;
   /** Nom libre du vendeur quand il est connu mais hors groupe (vendeurId alors null). */
   vendeurNomExterne: string | null;
-  /** Prix unitaire de l'action lors de la transaction, en euros (partagé par toutes les lignes). */
+  /** Prix unitaire de l'action lors de la transaction, dans devise (partagé par toutes les lignes). */
   prixAction: number | null;
+  /** Devise (code ISO 4217, ex. EUR, USD) de prixAction — sans incidence tant qu'il est null. */
+  devise: string;
   /** Mouvements d'actions de cette transaction, par Catégorie (au moins une ligne). */
   lignes: LigneTransaction[];
 }

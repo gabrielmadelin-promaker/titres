@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Societe, Transaction } from "../../types";
+import { DEVISE_PAR_DEFAUT } from "../../utils/devises";
 import { dateExcelVersIso, lireFeuilleXlsx, nombreColonne, texteColonne, valeurColonne } from "../../utils/xlsxImport";
 
 interface Props {
@@ -108,6 +109,7 @@ export function ImportTransactions({ societes, onImport }: Props) {
           vendeurId: vendeur?.id ?? null,
           vendeurNomExterne: nomVendeur && !vendeur ? nomVendeur : null,
           prixAction: nombreColonne(ligne, "prix de l'action", "prix action", "prix"),
+          devise: texteColonne(ligne, "devise").trim().toUpperCase() || DEVISE_PAR_DEFAUT,
           // Une seule ligne par transaction importée (pas de colonnes "par
           // Catégorie" dans le fichier) ; Compte : pas de colonne dédiée à
           // l'import — se complète ensuite au besoin depuis le tableau des
@@ -150,7 +152,7 @@ export function ImportTransactions({ societes, onImport }: Props) {
       <p className="import-hint">
         Colonnes : « Acheteur », « Cible », « Nombre d'actions » (non nul, négatif pour une vente), « Date »
         (requises) ; « Nombre de droits de vote théorique », « Nombre de droits de vote exerçable », « Catégorie »,
-        « Vendeur », « Prix de l'action » (facultatives). « Cible » doit être
+        « Vendeur », « Prix de l'action », « Devise » (facultatives, EUR par défaut). « Cible » doit être
         une société déjà importée ; « Acheteur »/« Vendeur » non reconnus sont importés tels quels comme sociétés
         hors groupe. Les pourcentages (anciens fichiers) ne sont plus acceptés à l'import : ils sont désormais
         calculés automatiquement à partir du nombre d'actions et du total émis par la société cible.

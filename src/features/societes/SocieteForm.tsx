@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../../types";
+import { DEVISE_PAR_DEFAUT, DEVISES } from "../../utils/devises";
 import { PAYS } from "../../utils/pays";
 import { ActionsParTypeEditor } from "../totaux/ActionsParTypeEditor";
 
@@ -25,6 +26,7 @@ function today(): string {
 export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: Props) {
   const [nom, setNom] = useState("");
   const [valeurNominale, setValeurNominale] = useState(champVide());
+  const [devise, setDevise] = useState(DEVISE_PAR_DEFAUT);
   const [pays, setPays] = useState(champVide());
   const [siegeSocial, setSiegeSocial] = useState(champVide());
   const [siren, setSiren] = useState(champVide());
@@ -44,6 +46,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
     const societeId = await onAdd({
       nom: nomPropre,
       valeurNominale: valeurNominale ? Number(valeurNominale) : null,
+      devise,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
@@ -68,6 +71,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
 
     setNom("");
     setValeurNominale(champVide());
+    setDevise(DEVISE_PAR_DEFAUT);
     setPays(champVide());
     setSiegeSocial(champVide());
     setSiren(champVide());
@@ -95,14 +99,23 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
 
       <div className="form-field">
         <label htmlFor="societe-valeur-nominale">Valeur nominale de l'action</label>
-        <input
-          id="societe-valeur-nominale"
-          type="number"
-          step="0.0001"
-          min="0"
-          value={valeurNominale}
-          onChange={(e) => setValeurNominale(e.target.value)}
-        />
+        <div className="form-field-montant">
+          <input
+            id="societe-valeur-nominale"
+            type="number"
+            step="0.0001"
+            min="0"
+            value={valeurNominale}
+            onChange={(e) => setValeurNominale(e.target.value)}
+          />
+          <select aria-label="Devise de la valeur nominale" value={devise} onChange={(e) => setDevise(e.target.value)}>
+            {DEVISES.map((d) => (
+              <option key={d.code} value={d.code}>
+                {d.code}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="form-field">

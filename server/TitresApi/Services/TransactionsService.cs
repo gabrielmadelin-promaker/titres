@@ -9,7 +9,7 @@ static class TransactionsService
 {
     public const string ColonnesTransaction =
         "Id, AcheteurId, AcheteurNomExterne, CibleId, CONVERT(varchar(10), [Date], 23) AS Date, " +
-        "NombreDroitVoteTheorique, NombreDroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction";
+        "NombreDroitVoteTheorique, NombreDroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Devise";
 
     public const string ColonnesLigneTransaction = "Id, TransactionId, Categorie, NombreActions, CompteAcheteurId, CompteVendeurId";
 
@@ -39,7 +39,7 @@ static class TransactionsService
         return parents
             .Select(p => new Transaction(
                 p.Id, p.AcheteurId, p.AcheteurNomExterne, p.CibleId, p.Date,
-                p.NombreDroitVoteTheorique, p.NombreDroitVoteExercable, p.VendeurId, p.VendeurNomExterne, p.PrixAction,
+                p.NombreDroitVoteTheorique, p.NombreDroitVoteExercable, p.VendeurId, p.VendeurNomExterne, p.PrixAction, p.Devise,
                 lignesParParent.GetValueOrDefault(p.Id, Array.Empty<LigneTransaction>())))
             .ToList();
     }

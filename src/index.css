@@ -583,6 +583,23 @@ h3 {
   color: var(--text-h);
 }
 
+/* Montant + devise côte à côte (ex. Valeur nominale, Prix de l'action) :
+   l'input prend toute la place restante, le select de devise reste étroit. */
+.form-field-montant {
+  display: flex;
+  gap: 6px;
+}
+
+.form-field-montant input {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-field-montant select {
+  flex: 0 0 auto;
+  width: 90px;
+}
+
 .form-field input:focus,
 .form-field select:focus {
   outline: 2px solid var(--accent);

@@ -1,4 +1,5 @@
 import type { LigneTransaction, Transaction } from "../types";
+import { DEVISE_PAR_DEFAUT } from "./devises";
 
 /** Représentation "brute" (chaînes de formulaire) d'une ligne (Catégorie, nombre d'actions, Comptes). */
 export interface LigneChamps {
@@ -30,6 +31,8 @@ export interface TransactionChamps {
   nombreDroitVoteTheorique: string;
   nombreDroitVoteExercable: string;
   prixAction: string;
+  /** Devise de prixAction (code ISO 4217, ex. EUR, USD). */
+  devise: string;
 }
 
 function today(): string {
@@ -56,6 +59,7 @@ export function champsVides(): TransactionChamps {
     nombreDroitVoteTheorique: "",
     nombreDroitVoteExercable: "",
     prixAction: "",
+    devise: DEVISE_PAR_DEFAUT,
   };
 }
 
@@ -83,6 +87,7 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
     nombreDroitVoteTheorique: t.nombreDroitVoteTheorique?.toString() ?? "",
     nombreDroitVoteExercable: t.nombreDroitVoteExercable?.toString() ?? "",
     prixAction: t.prixAction?.toString() ?? "",
+    devise: t.devise,
   };
 }
 
@@ -135,6 +140,7 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
     vendeurId: c.vendeurExterne ? null : c.vendeurId || null,
     vendeurNomExterne: c.vendeurExterne ? c.vendeurNomExterne.trim() : null,
     prixAction: c.prixAction ? Number(c.prixAction) : null,
+    devise: c.devise,
     lignes: c.lignes.map(
       (l): LigneTransaction => ({
         // Id/plusValue : calculés côté API, jamais saisis — valeurs ignorées

@@ -6,11 +6,18 @@ const decimalFormatter = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 4,
 });
 
-const montantFormatter = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 2,
-});
+// Un formateur par devise (construit à la demande, puis réutilisé) : Intl.NumberFormat
+// est coûteux à instancier, inutile de le refaire à chaque appel de formatMontant.
+const montantFormatters = new Map<string, Intl.NumberFormat>();
+
+function montantFormatter(devise: string): Intl.NumberFormat {
+  let formatter = montantFormatters.get(devise);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: devise, maximumFractionDigits: 2 });
+    montantFormatters.set(devise, formatter);
+  }
+  return formatter;
+}
 
 const dateFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -28,9 +35,9 @@ export function formatDecimal(value: number): string {
   return decimalFormatter.format(value);
 }
 
-/** Montant en euros (ex. prix d'action, plus-value). */
-export function formatMontant(value: number): string {
-  return montantFormatter.format(value);
+/** Montant dans la devise donnée (ex. prix d'action, plus-value) — EUR par défaut. */
+export function formatMontant(value: number, devise = "EUR"): string {
+  return montantFormatter(devise).format(value);
 }
 
 /** Date ISO (yyyy-mm-dd) affichée au format français jj/mm/aaaa ; "—" si vide. */

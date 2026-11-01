@@ -20,6 +20,7 @@ interface LignePlusValue {
   categorie: string | null;
   nombreActions: number;
   prixAction: number | null;
+  devise: string;
   plusValue: number;
 }
 
@@ -60,6 +61,7 @@ export function PlusValuesPanel({ societes, transactions }: Props) {
           categorie: l.categorie,
           nombreActions: l.nombreActions,
           prixAction: t.prixAction,
+          devise: t.devise,
           plusValue: l.plusValue,
         });
       }
@@ -98,6 +100,13 @@ export function PlusValuesPanel({ societes, transactions }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtrees, tri, nomParId]);
 
+  // Une somme n'a de sens que si toutes les lignes partagent la même devise
+  // (rare mais possible si plusieurs devises sont utilisées) : sinon, pas de
+  // total affiché plutôt qu'un chiffre trompeur mélangeant des devises.
+  const deviseUnique = useMemo(() => {
+    const devises = new Set(triees.map((l) => l.devise));
+    return devises.size === 1 ? [...devises][0] : null;
+  }, [triees]);
   const totalPlusValue = useMemo(() => triees.reduce((s, l) => s + l.plusValue, 0), [triees]);
 
   function exporter() {
@@ -111,8 +120,9 @@ export function PlusValuesPanel({ societes, transactions }: Props) {
         Vendeur: vendeurTexte(l),
         Catégorie: l.categorie ?? "",
         "Nombre d'actions": l.nombreActions,
-        "Prix action (€)": l.prixAction ?? "",
-        "Plus-value (€)": l.plusValue,
+        "Prix action": l.prixAction ?? "",
+        Devise: l.devise,
+        "Plus-value": l.plusValue,
       })),
     );
   }
@@ -134,7 +144,13 @@ export function PlusValuesPanel({ societes, transactions }: Props) {
           </div>
         </div>
         <div className="viz-actions">
-          <span className="subtitle-panel">Total : {formatMontant(totalPlusValue)}</span>
+          <span className="subtitle-panel">
+            {deviseUnique
+              ? `Total : ${formatMontant(totalPlusValue, deviseUnique)}`
+              : triees.length > 0
+                ? "Total non affiché (devises mixtes)"
+                : ""}
+          </span>
           <button type="button" className="btn btn-secondary btn-small" onClick={exporter}>
             Exporter en xlsx
           </button>
@@ -185,8 +201,8 @@ export function PlusValuesPanel({ societes, transactions }: Props) {
                   <td>{vendeurTexte(l)}</td>
                   <td>{l.categorie ?? "—"}</td>
                   <td className="num">{formatDecimal(l.nombreActions)}</td>
-                  <td className="num">{l.prixAction === null ? "—" : formatMontant(l.prixAction)}</td>
-                  <td className={`num ${l.plusValue < 0 ? "valeur-negative" : ""}`}>{formatMontant(l.plusValue)}</td>
+                  <td className="num">{l.prixAction === null ? "—" : formatMontant(l.prixAction, l.devise)}</td>
+                  <td className={`num ${l.plusValue < 0 ? "valeur-negative" : ""}`}>{formatMontant(l.plusValue, l.devise)}</td>
                 </tr>
               ))}
             </tbody>

@@ -22,6 +22,9 @@ static class TransactionsEndpoints
             var (erreur, acheteurNomExterne, vendeurNomExterne) = TransactionsService.ValiderTransaction(input);
             if (erreur is not null)
                 return Results.BadRequest(erreur);
+            var (erreurDevise, devise) = Devises.Normaliser(input.Devise);
+            if (erreurDevise is not null)
+                return Results.BadRequest(erreurDevise);
 
             await using var conn = new SqlConnection(ConnectionString());
 
@@ -46,13 +49,13 @@ static class TransactionsEndpoints
 
                 await conn.ExecuteAsync(
                     "INSERT INTO dbo.Transactions (Id, AcheteurId, AcheteurNomExterne, CibleId, [Date], " +
-                    "NombreDroitVoteTheorique, NombreDroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction) " +
+                    "NombreDroitVoteTheorique, NombreDroitVoteExercable, VendeurId, VendeurNomExterne, PrixAction, Devise) " +
                     "VALUES (@Id, @AcheteurId, @AcheteurNomExterne, @CibleId, @Date, " +
-                    "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @VendeurId, @VendeurNomExterne, @PrixAction)",
+                    "@NombreDroitVoteTheorique, @NombreDroitVoteExercable, @VendeurId, @VendeurNomExterne, @PrixAction, @devise)",
                     new
                     {
                         Id = transactionId, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date,
-                        input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.VendeurId, vendeurNomExterne, input.PrixAction,
+                        input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.VendeurId, vendeurNomExterne, input.PrixAction, devise,
                     },
                     sqlTx);
 
@@ -86,6 +89,9 @@ static class TransactionsEndpoints
             var (erreur, acheteurNomExterne, vendeurNomExterne) = TransactionsService.ValiderTransaction(input);
             if (erreur is not null)
                 return Results.BadRequest(erreur);
+            var (erreurDevise, devise) = Devises.Normaliser(input.Devise);
+            if (erreurDevise is not null)
+                return Results.BadRequest(erreurDevise);
 
             await using var conn = new SqlConnection(ConnectionString());
 
@@ -114,12 +120,12 @@ static class TransactionsEndpoints
                     "UPDATE dbo.Transactions SET AcheteurId = @AcheteurId, AcheteurNomExterne = @AcheteurNomExterne, " +
                     "CibleId = @CibleId, [Date] = @Date, " +
                     "NombreDroitVoteTheorique = @NombreDroitVoteTheorique, NombreDroitVoteExercable = @NombreDroitVoteExercable, " +
-                    "VendeurId = @VendeurId, VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction " +
+                    "VendeurId = @VendeurId, VendeurNomExterne = @VendeurNomExterne, PrixAction = @PrixAction, Devise = @devise " +
                     "WHERE Id = @id",
                     new
                     {
                         id, input.AcheteurId, acheteurNomExterne, input.CibleId, input.Date,
-                        input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.VendeurId, vendeurNomExterne, input.PrixAction,
+                        input.NombreDroitVoteTheorique, input.NombreDroitVoteExercable, input.VendeurId, vendeurNomExterne, input.PrixAction, devise,
                     },
                     sqlTx);
 
