@@ -473,6 +473,12 @@ h3 {
   margin-left: 6px;
 }
 
+/* Moins-value (ex. rapport des plus/moins-values) : met en évidence une
+   valeur négative sans dupliquer le signe "-" déjà rendu par formatMontant. */
+.valeur-negative {
+  color: var(--danger);
+}
+
 .liste-badges {
   display: flex;
   flex-wrap: wrap;

@@ -8,6 +8,7 @@ import { ImportTransactions } from "./features/transactions/ImportTransactions";
 import { LoginForm } from "./features/auth/LoginForm";
 import { Modal } from "./components/Modal";
 import { ParticipationsTable } from "./features/participations/ParticipationsTable";
+import { PlusValuesPanel } from "./features/plusvalues/PlusValuesPanel";
 import { SocieteForm } from "./features/societes/SocieteForm";
 import { SocietesTable } from "./features/societes/SocietesTable";
 import { TransactionForm } from "./features/transactions/TransactionForm";
@@ -36,6 +37,7 @@ type OngletId = (typeof ONGLETS)[number]["id"];
 const SOUS_ONGLETS_ADMIN = [
   { id: "categories", label: "Catégories" },
   { id: "titres", label: "Compteur FIFO" },
+  { id: "plusValues", label: "Plus-values" },
   { id: "utilisateurs", label: "Utilisateurs" },
 ] as const;
 
@@ -517,6 +519,16 @@ function App() {
                     partir des transactions : lecture seule.
                   </p>
                   <TitresPanel societes={societes} actions={actions} comptes={comptes} />
+                </>
+              )}
+
+              {sousOngletAdmin === "plusValues" && (
+                <>
+                  <p className="subtitle-panel">
+                    Toutes les opérations ayant dégagé une plus ou moins-value (calculée automatiquement à partir du
+                    prix d'origine des titres cédés) : lecture seule.
+                  </p>
+                  <PlusValuesPanel societes={societes} transactions={transactions} />
                 </>
               )}
 
