@@ -14,6 +14,7 @@ interface Props {
 /** Champs de saisie d'une transaction, partagés entre le formulaire d'ajout et la ligne de modification. */
 export function TransactionChampsFields({ champs, onChange, societes, types, comptes, idPrefix }: Props) {
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const vendeurNA = champs.vendeurNA;
 
   function set<K extends keyof TransactionChamps>(cle: K, valeur: TransactionChamps[K]) {
     onChange({ ...champs, [cle]: valeur });
@@ -78,16 +79,39 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
       <div className="form-field">
         <div className="form-field-entete">
           <label htmlFor={`${idPrefix}-vendeur`}>Société vendeuse</label>
-          <label className="form-field-toggle">
-            <input
-              type="checkbox"
-              checked={champs.vendeurExterne}
-              onChange={(e) => onChange({ ...champs, vendeurExterne: e.target.checked })}
-            />
-            Hors groupe
-          </label>
+          <div className="form-field-toggle-groupe">
+            {!vendeurNA && (
+              <label className="form-field-toggle">
+                <input
+                  type="checkbox"
+                  checked={champs.vendeurExterne}
+                  onChange={(e) => onChange({ ...champs, vendeurExterne: e.target.checked })}
+                />
+                Hors groupe
+              </label>
+            )}
+            <label className="form-field-toggle">
+              <input
+                type="checkbox"
+                checked={vendeurNA}
+                onChange={(e) =>
+                  onChange(
+                    e.target.checked
+                      ? { ...champs, vendeurNA: true, vendeurExterne: false, vendeurId: "", vendeurNomExterne: "" }
+                      : { ...champs, vendeurNA: false },
+                  )
+                }
+              />
+              N/A (émission initiale)
+            </label>
+          </div>
         </div>
-        {champs.vendeurExterne ? (
+        {vendeurNA ? (
+          <p className="form-field-na">
+            Pas de vendeur : cette transaction correspond à l'émission initiale des titres (aucune société ne les
+            détenait auparavant).
+          </p>
+        ) : champs.vendeurExterne ? (
           <input
             id={`${idPrefix}-vendeur`}
             type="text"
@@ -101,7 +125,9 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
             value={champs.vendeurId}
             onChange={(e) => onChange({ ...champs, vendeurId: e.target.value })}
           >
-            <option value="">Non renseignée</option>
+            <option value="" disabled>
+              Choisir...
+            </option>
             {societesTriees.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.nom}

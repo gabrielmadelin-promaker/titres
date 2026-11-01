@@ -21,6 +21,9 @@ export interface TransactionChamps {
   vendeurExterne: boolean;
   vendeurId: string;
   vendeurNomExterne: string;
+  /** true = pas de vendeur par choix explicite (émission initiale), plutôt que simplement pas encore renseigné —
+   * purement indicatif côté formulaire : un vendeur vide est de toute façon accepté tel quel par l'API. */
+  vendeurNA: boolean;
   date: string;
   /** Mouvements d'actions, par Catégorie (au moins une ligne). */
   lignes: LigneChamps[];
@@ -47,6 +50,7 @@ export function champsVides(): TransactionChamps {
     vendeurExterne: false,
     vendeurId: "",
     vendeurNomExterne: "",
+    vendeurNA: true,
     date: today(),
     lignes: [ligneVide()],
     nombreDroitVoteTheorique: "",
@@ -65,6 +69,7 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
     vendeurExterne: Boolean(t.vendeurNomExterne),
     vendeurId: t.vendeurId ?? "",
     vendeurNomExterne: t.vendeurNomExterne ?? "",
+    vendeurNA: !t.vendeurId && !t.vendeurNomExterne,
     date: t.date,
     lignes:
       t.lignes.length > 0

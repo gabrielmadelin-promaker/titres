@@ -598,6 +598,15 @@ h3 {
   gap: 8px;
 }
 
+/* Regroupe plusieurs bascules (ex. "Hors groupe" + "N/A") côte à côte dans
+   un form-field-entete, sans les faire se chevaucher sur petit écran. */
+.form-field-toggle-groupe {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .form-field-toggle {
   display: flex;
   align-items: center;
@@ -608,6 +617,18 @@ h3 {
   color: var(--text);
   cursor: pointer;
   white-space: nowrap;
+}
+
+/* Message de remplacement quand un champ société est marqué "N/A" plutôt
+   que laissé à choisir (ex. vendeur sur une émission initiale). */
+.form-field-na {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text);
+  background: var(--accent-bg);
+  border-radius: 6px;
 }
 
 .form-field-toggle input {

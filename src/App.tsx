@@ -23,7 +23,7 @@ const ONGLETS = [
   { id: "societes", label: "Sociétés" },
   { id: "transactions", label: "Transactions" },
   { id: "comptes", label: "Comptes" },
-  { id: "participations", label: "Participations" },
+  { id: "participations", label: "Actionnariat" },
   { id: "administration", label: "Administration" },
 ] as const;
 
@@ -472,7 +472,7 @@ function App() {
 
           {onglet === "participations" && (
             <section className="panel">
-              <h2>Participations</h2>
+              <h2>Actionnariat</h2>
               <p className="subtitle-panel">Qui détient combien du capital de qui.</p>
               <ParticipationsTable
                 societes={societes}
