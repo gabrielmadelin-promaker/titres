@@ -53,7 +53,7 @@ export function champsVides(): TransactionChamps {
     vendeurExterne: false,
     vendeurId: "",
     vendeurNomExterne: "",
-    vendeurNA: true,
+    vendeurNA: false,
     date: today(),
     lignes: [ligneVide()],
     nombreDroitVoteTheorique: "",
