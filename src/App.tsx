@@ -230,12 +230,25 @@ function App() {
   }
 
   async function supprimerSociete(id: string) {
-    const utilisee = transactions.some(
+    // Pas de suppression en cascade (choix délibéré, voir sql/schema.sql) :
+    // une société supprimée laisse des références orphelines plutôt que
+    // d'effacer silencieusement tout son historique. On prévient juste
+    // précisément de ce qui va rester orphelin, pour une décision éclairée.
+    const nbTransactions = transactions.filter(
       (t) => t.acheteurId === id || t.cibleId === id || t.vendeurId === id,
-    );
-    const message = utilisee
-      ? "Cette société est référencée par au moins une transaction (comme acheteuse, cible ou vendeuse). Les transactions concernées resteront, mais afficheront une société supprimée. La supprimer quand même ?"
-      : "Supprimer cette société ?";
+    ).length;
+    const nbComptes = comptes.filter((c) => c.detenteurId === id || c.societeEmettriceId === id).length;
+    const nbTotaux = historiqueTotaux.filter((h) => h.societeId === id).length;
+
+    const references: string[] = [];
+    if (nbTransactions > 0) references.push(`${nbTransactions} transaction(s)`);
+    if (nbComptes > 0) references.push(`${nbComptes} compte(s)`);
+    if (nbTotaux > 0) references.push(`${nbTotaux} ligne(s) de totaux`);
+
+    const message =
+      references.length > 0
+        ? `Cette société est référencée par ${references.join(", ")}. Ces éléments resteront après suppression, mais afficheront une société supprimée (pas de suppression en cascade). La supprimer quand même ?`
+        : "Supprimer cette société ?";
     if (!window.confirm(message)) return;
     try {
       await api.supprimerSociete(id);

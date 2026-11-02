@@ -66,11 +66,9 @@ static class TransactionsEndpoints
                         "VALUES (NEWID(), @transactionId, @Categorie, @NombreActions, @CompteAcheteurId, @CompteVendeurId)",
                         new { transactionId, ligne.Categorie, ligne.NombreActions, ligne.CompteAcheteurId, ligne.CompteVendeurId },
                         sqlTx);
-
-                    await TitresLotsService.SynchroniserTitres(
-                        conn, sqlTx, input.CibleId, ligne.Categorie, input.AcheteurId, acheteurNomExterne, ligne.CompteAcheteurId,
-                        input.VendeurId, vendeurNomExterne, ligne.CompteVendeurId, ligne.NombreActions, input.PrixAction, input.Date, transactionId);
                 }
+
+                await TitresLotsService.RecalculerTousLesLots(conn, sqlTx);
 
                 await sqlTx.CommitAsync();
             }
@@ -131,7 +129,6 @@ static class TransactionsEndpoints
 
                 if (lignesAffectees > 0)
                 {
-                    await TitresLotsService.RetirerTitresDeTransaction(conn, sqlTx, id);
                     await conn.ExecuteAsync("DELETE FROM dbo.TransactionLignes WHERE TransactionId = @id", new { id }, sqlTx);
 
                     foreach (var ligne in lignesResolues!)
@@ -141,11 +138,9 @@ static class TransactionsEndpoints
                             "VALUES (NEWID(), @id, @Categorie, @NombreActions, @CompteAcheteurId, @CompteVendeurId)",
                             new { id, ligne.Categorie, ligne.NombreActions, ligne.CompteAcheteurId, ligne.CompteVendeurId },
                             sqlTx);
-
-                        await TitresLotsService.SynchroniserTitres(
-                            conn, sqlTx, input.CibleId, ligne.Categorie, input.AcheteurId, acheteurNomExterne, ligne.CompteAcheteurId,
-                            input.VendeurId, vendeurNomExterne, ligne.CompteVendeurId, ligne.NombreActions, input.PrixAction, input.Date, id);
                     }
+
+                    await TitresLotsService.RecalculerTousLesLots(conn, sqlTx);
                 }
 
                 await sqlTx.CommitAsync();
@@ -170,9 +165,9 @@ static class TransactionsEndpoints
             await using var sqlTx = await conn.BeginTransactionAsync();
             try
             {
-                await TitresLotsService.RetirerTitresDeTransaction(conn, sqlTx, id);
                 // TransactionLignes est supprimée en cascade (ON DELETE CASCADE) avec sa transaction.
                 await conn.ExecuteAsync("DELETE FROM dbo.Transactions WHERE Id = @id", new { id }, sqlTx);
+                await TitresLotsService.RecalculerTousLesLots(conn, sqlTx);
                 await sqlTx.CommitAsync();
             }
             catch

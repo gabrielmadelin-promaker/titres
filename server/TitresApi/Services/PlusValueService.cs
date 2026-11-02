@@ -8,7 +8,7 @@ static class PlusValueService
 {
     // PlusValue n'est jamais saisie, ni stockée en base : recalculée à chaque
     // lecture (voir CalculerPlusValues). Basée sur le FIFO réel des lots
-    // d'Actions consommés par cette ligne de transaction (voir TitresLotsService.ConsommerLots) :
+    // d'Actions consommés par cette ligne de transaction (voir TitresLotsService.RecalculerTousLesLots) :
     // prix de cette transaction moins le prix d'origine moyen, pondéré par
     // quantité, des titres effectivement vendus — mathématiquement équivalent à
     // la somme tranche par tranche (prix de vente − prix de chaque lot
@@ -23,11 +23,12 @@ static class PlusValueService
         return Math.Abs(nombreActions.Value) * (prixAction.Value - prixInitialReporteActions.Value);
     }
 
-    // Variantes en mémoire de TitresLotsService.ConsommerLots/CreerLot, sans
-    // aucune écriture en base : utilisées uniquement pour rejouer l'historique
-    // lors du calcul de PlusValue à la lecture (voir CalculerPlusValues
-    // ci-dessous), avec exactement la même logique FIFO (lots triés par ordre
-    // d'acquisition, les plus anciens consommés en premier).
+    // Variantes en mémoire des fonctions équivalentes de
+    // TitresLotsService.RecalculerTousLesLots, sans aucune écriture en base :
+    // utilisées uniquement pour rejouer l'historique lors du calcul de
+    // PlusValue à la lecture (voir CalculerPlusValues ci-dessous), avec
+    // exactement la même logique FIFO (lots triés par ordre d'acquisition,
+    // les plus anciens consommés en premier).
     static decimal? ConsommerLotsMemoire(
         Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotMemoire>> lotsParDetenteur,
         Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, Guid? compteId, decimal quantite)
@@ -83,7 +84,7 @@ static class PlusValueService
     // à la fois, en rejouant leur historique chronologique en mémoire — jamais
     // désynchronisée d'une évolution de la règle de calcul, sans script de
     // rattrapage à maintenir. Rejoue les lignes avec exactement la même logique
-    // que TitresLotsService.SynchroniserTitres/ConsommerLots/CreerLot (y
+    // que TitresLotsService.RecalculerTousLesLots (y
     // compris la distinction par Compte), appliquée à des lots en mémoire
     // plutôt qu'à la table dbo.Actions. Résultat indexé par
     // TransactionLignes.Id (une ligne, pas une transaction entière : deux

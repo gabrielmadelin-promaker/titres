@@ -127,9 +127,6 @@ record TransactionSansLignes(
 record LigneParticipation(
     Guid? AcheteurId, Guid? VendeurId, decimal? NombreActions, decimal? NombreDroitVoteTheorique, decimal? NombreDroitVoteExercable);
 
-// Projection d'un lot existant, pour la consommation FIFO dans TitresLotsService.ConsommerLots.
-record Lot(Guid Id, decimal Quantite, decimal? PrixInitial);
-
 // Lot en mémoire (jamais écrit en base), pour rejouer le FIFO lors du
 // calcul de PlusValue à la lecture — voir PlusValueService.
 class LotMemoire
@@ -137,6 +134,26 @@ class LotMemoire
     public decimal Quantite;
     public decimal? PrixInitial;
 }
+
+// Lot en mémoire le temps du recalcul complet de dbo.Actions (voir
+// TitresLotsService.RecalculerTousLesLots) : contrairement à LotMemoire, porte
+// aussi PrixAcquisition/DateAcquisition/TransactionOrigineId, puisque ceux-ci
+// finissent bien écrits en base (pas seulement un prix moyen de passage).
+class LotRecalcul
+{
+    public decimal Quantite;
+    public decimal? PrixInitial;
+    public decimal? PrixAcquisition;
+    public required string DateAcquisition;
+    public Guid TransactionOrigineId;
+}
+
+// Projection chronologique d'une ligne de transaction, pour le recalcul
+// complet des lots dans TitresLotsService.RecalculerTousLesLots.
+record LigneTransactionPourRecalculTitres(
+    Guid TransactionId, string Date, Guid CibleId, decimal? PrixAction,
+    Guid? AcheteurId, string? AcheteurNomExterne, Guid? VendeurId, string? VendeurNomExterne,
+    string? Categorie, decimal NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId);
 
 // Projection minimale d'une ligne de transaction pour PlusValueService.CalculerPlusValues
 // (jointe à sa transaction parente pour les champs partagés).
