@@ -204,7 +204,10 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
       />
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-dv-theorique`}>Nombre de droits de vote théorique</label>
+        <label htmlFor={`${idPrefix}-dv-theorique`}>
+          Nombre de droits de vote théorique
+          {pctDvTheorique !== null && <span className="label-hint label-hint-pourcentage"> ({formatPourcentage(pctDvTheorique)})</span>}
+        </label>
         <input
           id={`${idPrefix}-dv-theorique`}
           type="number"
@@ -213,13 +216,13 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
           value={champs.nombreDroitVoteTheorique}
           onChange={(e) => set("nombreDroitVoteTheorique", e.target.value)}
         />
-        {pctDvTheorique !== null && (
-          <p className="form-field-hint form-field-hint-pourcentage">≈ {formatPourcentage(pctDvTheorique)} des DV théoriques</p>
-        )}
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-dv-exercable`}>Nombre de droits de vote exerçable</label>
+        <label htmlFor={`${idPrefix}-dv-exercable`}>
+          Nombre de droits de vote exerçable
+          {pctDvExercable !== null && <span className="label-hint label-hint-pourcentage"> ({formatPourcentage(pctDvExercable)})</span>}
+        </label>
         <input
           id={`${idPrefix}-dv-exercable`}
           type="number"
@@ -228,13 +231,15 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
           value={champs.nombreDroitVoteExercable}
           onChange={(e) => set("nombreDroitVoteExercable", e.target.value)}
         />
-        {pctDvExercable !== null && (
-          <p className="form-field-hint form-field-hint-pourcentage">≈ {formatPourcentage(pctDvExercable)} des DV exerçables</p>
-        )}
       </div>
 
       <div className="form-field">
-        <label htmlFor={`${idPrefix}-prix`}>Prix de l'action</label>
+        <label htmlFor={`${idPrefix}-prix`}>
+          Prix de l'action
+          {plusValueProjetee !== null && (
+            <span className="label-hint label-hint-plusvalue"> ({formatMontant(plusValueProjetee, champs.devise)})</span>
+          )}
+        </label>
         <div className="form-field-montant">
           <input
             id={`${idPrefix}-prix`}
@@ -256,11 +261,6 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
             ))}
           </select>
         </div>
-        {plusValueProjetee !== null && (
-          <p className="form-field-hint form-field-hint-plusvalue">
-            Plus-value projetée : {formatMontant(plusValueProjetee, champs.devise)}
-          </p>
-        )}
       </div>
     </>
   );

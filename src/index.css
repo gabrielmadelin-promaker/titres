@@ -671,20 +671,21 @@ h3 {
 }
 
 /* Aperçu en direct pendant la saisie d'une transaction (% projeté, plus-value
-   projetée) : un simple aperçu avant enregistrement, jamais la valeur qui
-   fait autorité (recalculée par le serveur) — voir utils/participations.ts
+   projetée), affiché en ligne dans le libellé du champ (pas sous le champ,
+   pour ne pas décaler le reste du formulaire à chaque frappe) — un simple
+   aperçu avant enregistrement, jamais la valeur qui fait autorité
+   (recalculée par le serveur) — voir utils/participations.ts
    (apercuPourcentage*) et utils/plusValuePreview.ts (apercuPlusValue). */
-.form-field-hint {
-  margin: 4px 0 0;
-  font-size: 12px;
+.label-hint {
+  font-weight: 400;
   font-style: italic;
 }
 
-.form-field-hint-pourcentage {
+.label-hint-pourcentage {
   color: var(--success);
 }
 
-.form-field-hint-plusvalue {
+.label-hint-plusvalue {
   color: var(--warning);
 }
 

@@ -142,7 +142,15 @@ export function TransactionLignesEditor({
               />
             </div>
             <div className="form-field">
-              <label htmlFor={`${idPrefix}-${i}-nombre-actions`}>Nombre d'actions</label>
+              <label htmlFor={`${idPrefix}-${i}-nombre-actions`}>
+                Nombre d'actions
+                {societeEmettriceId &&
+                  ligne.nombreActions &&
+                  (() => {
+                    const pct = apercuPourcentageActions(Number(ligne.nombreActions), societeEmettriceId, date, historiqueTotaux);
+                    return pct === null ? null : <span className="label-hint label-hint-pourcentage"> ({formatPourcentage(pct)})</span>;
+                  })()}
+              </label>
               <input
                 id={`${idPrefix}-${i}-nombre-actions`}
                 type="number"
@@ -152,14 +160,6 @@ export function TransactionLignesEditor({
                 onChange={(e) => modifierLigne(i, { nombreActions: e.target.value })}
                 required
               />
-              {societeEmettriceId &&
-                ligne.nombreActions &&
-                (() => {
-                  const pct = apercuPourcentageActions(Number(ligne.nombreActions), societeEmettriceId, date, historiqueTotaux);
-                  return pct === null ? null : (
-                    <p className="form-field-hint form-field-hint-pourcentage">≈ {formatPourcentage(pct)} du capital</p>
-                  );
-                })()}
             </div>
             <CompteSelect
               comptes={comptes}
