@@ -62,13 +62,17 @@ static class PlusValueService
         return sommeQuantiteConsommee > 0 ? sommePrixPondere / sommeQuantiteConsommee : null;
     }
 
-    // Ajoute un lot en mémoire pour ce détenteur (voir ConsommerLotsMemoire ci-dessus pour le FIFO qui le consomme).
+    // Ajoute un lot en mémoire pour ce détenteur (voir ConsommerLotsMemoire
+    // ci-dessus pour le FIFO qui le consomme). Comme TitresLotsService, un
+    // tiers hors groupe (detenteurId null) ne reçoit jamais de lot : ses
+    // titres ne sont pas suivis une fois sortis du groupe, donc pas de prix
+    // d'origine à reporter s'il les revend un jour au groupe.
     static void CreerLotMemoire(
         Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotMemoire>> lotsParDetenteur,
         Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, Guid? compteId,
         decimal quantite, decimal? prixInitial)
     {
-        if (quantite <= 0)
+        if (quantite <= 0 || detenteurId is null)
             return;
         var cle = (cibleId, categorie, detenteurId, detenteurNomExterne, compteId);
         if (!lotsParDetenteur.TryGetValue(cle, out var lots))

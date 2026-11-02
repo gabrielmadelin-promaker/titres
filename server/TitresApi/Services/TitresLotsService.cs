@@ -67,12 +67,16 @@ static class TitresLotsService
     // toujours une ligne distincte, jamais fusionnée avec un lot existant
     // même identique : chaque lot reste associé à la transaction qui l'a créé
     // (TransactionOrigineId), pour l'onglet Titres et la traçabilité.
+    // Un tiers hors groupe (detenteurId null, même avec un nom externe
+    // renseigné) ne reçoit jamais de lot : ses titres ne sont pas suivis une
+    // fois sortis du groupe — même règle que ComptesService.ResoudreCompte,
+    // qui ne lui crée jamais de compte non plus.
     static void Creer(
         Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotRecalcul>> lots,
         Guid cibleId, string? categorie, Guid? detenteurId, string? detenteurNomExterne, Guid? compteId,
         decimal quantite, decimal? prixAcquisition, decimal? prixInitial, string date, Guid transactionId)
     {
-        if (quantite <= 0)
+        if (quantite <= 0 || detenteurId is null)
             return;
         var cle = (cibleId, categorie, detenteurId, detenteurNomExterne, compteId);
         if (!lots.TryGetValue(cle, out var liste))

@@ -156,9 +156,7 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
         comptes={comptes}
         societes={societes}
         acheteurDetenteurId={champs.acheteurExterne ? null : champs.acheteurId || null}
-        acheteurDetenteurNomExterne={champs.acheteurExterne ? champs.acheteurNomExterne : null}
         vendeurDetenteurId={champs.vendeurExterne ? null : champs.vendeurId || null}
-        vendeurDetenteurNomExterne={champs.vendeurExterne ? champs.vendeurNomExterne : null}
         societeEmettriceId={champs.cibleId || null}
         idPrefix={`${idPrefix}-ligne`}
       />

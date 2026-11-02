@@ -33,20 +33,25 @@ static class ComptesService
     //   s'il en existe PLUSIEURS, impossible de deviner lequel utiliser — erreur,
     //   l'utilisateur doit choisir explicitement.
     // Ne résout rien (renvoie null, null) si aucun détenteur n'est connu (ex.
-    // vendeur non renseigné sur une transaction).
+    // vendeur non renseigné sur une transaction), ni si le détenteur est hors
+    // groupe (detenteurId null, même avec un nom externe renseigné) : un tiers
+    // hors groupe n'a jamais de compte ni de lot suivi — voir
+    // TitresLotsService, même règle côté lots.
     public static async Task<(string? Erreur, Guid? CompteId)> ResoudreCompte(
         SqlConnection conn, IDbTransaction tx, Guid? compteIdSaisi,
         Guid? detenteurId, string? detenteurNomExterne,
         Guid societeId, string nomSociete, string? categorie, string role)
     {
+        if (detenteurId is null)
+            return (null, null);
+
         if (compteIdSaisi is not null)
         {
             var compte = await conn.QuerySingleOrDefaultAsync<Compte>(
                 $"SELECT {ColonnesCompte} FROM dbo.Comptes WHERE Id = @compteIdSaisi", new { compteIdSaisi }, tx);
             if (compte is null)
                 return ($"Le compte sélectionné pour le {role} est introuvable.", null);
-            var memeDetenteur = detenteurId is not null ? compte.DetenteurId == detenteurId : compte.DetenteurNomExterne == detenteurNomExterne;
-            if (!memeDetenteur)
+            if (compte.DetenteurId != detenteurId)
                 return ($"Le compte sélectionné pour le {role} n'appartient pas à ce détenteur.", null);
             if (compte.SocieteEmettriceId is not null && compte.SocieteEmettriceId != societeId)
                 return ($"Le compte sélectionné pour le {role} est dédié à une autre société.", null);
@@ -54,9 +59,6 @@ static class ComptesService
                 return ($"Le compte sélectionné pour le {role} est dédié à la Catégorie « {compte.Type} », différente de celle de cette ligne.", null);
             return (null, compte.Id);
         }
-
-        if (detenteurId is null && detenteurNomExterne is null)
-            return (null, null);
 
         var existants = (await conn.QueryAsync<Compte>(
             $"SELECT {ColonnesCompte} FROM dbo.Comptes WHERE " +

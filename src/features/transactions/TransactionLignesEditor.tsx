@@ -9,9 +9,7 @@ interface Props {
   comptes: Compte[];
   societes: Societe[];
   acheteurDetenteurId: string | null;
-  acheteurDetenteurNomExterne: string | null;
   vendeurDetenteurId: string | null;
-  vendeurDetenteurNomExterne: string | null;
   /** Société cible de la transaction (SocieteEmettriceId des Comptes de chaque ligne). */
   societeEmettriceId: string | null;
   idPrefix: string;
@@ -20,7 +18,6 @@ interface Props {
 interface CompteSelectProps {
   comptes: Compte[];
   detenteurId: string | null;
-  detenteurNomExterne: string | null;
   societeEmettriceId: string | null;
   nomSociete: string | null;
   categorie: string;
@@ -44,25 +41,23 @@ interface CompteSelectProps {
  * ResoudreCompte côté backend : rang suivant parmi les comptes déjà
  * existants pour ce détenteur et cette société, toutes Catégories
  * confondues) — un aperçu, pas une réservation : le nom réel est recalculé
- * à l'enregistrement.
+ * à l'enregistrement. Un détenteur hors groupe (ou non renseigné, detenteurId
+ * null) n'a jamais de compte ni de lot suivi — même règle que
+ * ComptesService.ResoudreCompte/TitresLotsService côté serveur : le
+ * sélecteur n'apparaît alors pas du tout.
  */
-function CompteSelect({
-  comptes,
-  detenteurId,
-  detenteurNomExterne,
-  societeEmettriceId,
-  nomSociete,
-  categorie,
-  value,
-  onChange,
-  idPrefix,
-  label,
-}: CompteSelectProps) {
-  const detenteurRenseigne = detenteurId !== null || Boolean(detenteurNomExterne?.trim());
+function CompteSelect({ comptes, detenteurId, societeEmettriceId, nomSociete, categorie, value, onChange, idPrefix, label }: CompteSelectProps) {
+  if (detenteurId === null) {
+    return (
+      <div className="form-field">
+        <label>Compte ({label})</label>
+        <p className="form-field-na">Pas de compte : détenteur hors groupe (ou non renseigné), titres non suivis.</p>
+      </div>
+    );
+  }
+
   const categorieNormalisee = categorie.trim() || null;
-  const detenteurNomExterneNormalise = detenteurNomExterne?.trim() ?? null;
-  const memeDetenteur = (c: Compte) =>
-    detenteurId !== null ? c.detenteurId === detenteurId : c.detenteurNomExterne === detenteurNomExterneNormalise;
+  const memeDetenteur = (c: Compte) => c.detenteurId === detenteurId;
 
   const comptesFiltres = comptes.filter(
     (c) =>
@@ -78,12 +73,7 @@ function CompteSelect({
   return (
     <div className="form-field">
       <label htmlFor={`${idPrefix}-compte`}>Compte ({label})</label>
-      <select
-        id={`${idPrefix}-compte`}
-        value={value}
-        disabled={!detenteurRenseigne}
-        onChange={(e) => onChange(e.target.value)}
-      >
+      <select id={`${idPrefix}-compte`} value={value} onChange={(e) => onChange(e.target.value)}>
         {comptesFiltres.map((c) => (
           <option key={c.id} value={c.id}>
             {c.nom}
@@ -108,9 +98,7 @@ export function TransactionLignesEditor({
   comptes,
   societes,
   acheteurDetenteurId,
-  acheteurDetenteurNomExterne,
   vendeurDetenteurId,
-  vendeurDetenteurNomExterne,
   societeEmettriceId,
   idPrefix,
 }: Props) {
@@ -161,7 +149,6 @@ export function TransactionLignesEditor({
             <CompteSelect
               comptes={comptes}
               detenteurId={acheteurDetenteurId}
-              detenteurNomExterne={acheteurDetenteurNomExterne}
               societeEmettriceId={societeEmettriceId}
               nomSociete={nomSociete}
               categorie={ligne.categorie}
@@ -173,7 +160,6 @@ export function TransactionLignesEditor({
             <CompteSelect
               comptes={comptes}
               detenteurId={vendeurDetenteurId}
-              detenteurNomExterne={vendeurDetenteurNomExterne}
               societeEmettriceId={societeEmettriceId}
               nomSociete={nomSociete}
               categorie={ligne.categorie}
