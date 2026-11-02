@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Compte, Societe, Transaction, TypeTitre } from "../../types";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../../types";
 import { champsVersTransaction, champsVides, validerChamps } from "../../utils/transactionChamps";
 import { TransactionChampsFields } from "./TransactionChamps";
 
@@ -7,13 +7,15 @@ interface Props {
   societes: Societe[];
   types: TypeTitre[];
   comptes: Compte[];
+  historiqueTotaux: HistoriqueTotalSociete[];
+  actions: Titre[];
   onAdd: (transaction: Omit<Transaction, "id">) => Promise<boolean>;
   /** Appelé après un ajout réussi (ex. pour fermer la fenêtre temporaire qui contient ce formulaire). */
   onSuccess?: () => void;
 }
 
 /** Formulaire d'ajout d'une transaction (une ou plusieurs lignes par Catégorie). */
-export function TransactionForm({ societes, types, comptes, onAdd, onSuccess }: Props) {
+export function TransactionForm({ societes, types, comptes, historiqueTotaux, actions, onAdd, onSuccess }: Props) {
   const [champs, setChamps] = useState(champsVides());
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -51,6 +53,8 @@ export function TransactionForm({ societes, types, comptes, onAdd, onSuccess }: 
         societes={societes}
         types={types}
         comptes={comptes}
+        historiqueTotaux={historiqueTotaux}
+        actions={actions}
         idPrefix="tx"
       />
 

@@ -1,5 +1,7 @@
-import type { Compte, Societe, TypeTitre } from "../../types";
+import type { Compte, HistoriqueTotalSociete, Societe, TypeTitre } from "../../types";
 import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
+import { formatPourcentage } from "../../utils/format";
+import { apercuPourcentageActions } from "../../utils/participations";
 import type { LigneChamps } from "../../utils/transactionChamps";
 
 interface Props {
@@ -12,6 +14,9 @@ interface Props {
   vendeurDetenteurId: string | null;
   /** Société cible de la transaction (SocieteEmettriceId des Comptes de chaque ligne). */
   societeEmettriceId: string | null;
+  /** Date de la transaction, pour l'aperçu de % (total émis en vigueur à cette date). */
+  date: string;
+  historiqueTotaux: HistoriqueTotalSociete[];
   idPrefix: string;
 }
 
@@ -100,6 +105,8 @@ export function TransactionLignesEditor({
   acheteurDetenteurId,
   vendeurDetenteurId,
   societeEmettriceId,
+  date,
+  historiqueTotaux,
   idPrefix,
 }: Props) {
   const nomSociete = societes.find((s) => s.id === societeEmettriceId)?.nom ?? null;
@@ -145,6 +152,14 @@ export function TransactionLignesEditor({
                 onChange={(e) => modifierLigne(i, { nombreActions: e.target.value })}
                 required
               />
+              {societeEmettriceId &&
+                ligne.nombreActions &&
+                (() => {
+                  const pct = apercuPourcentageActions(Number(ligne.nombreActions), societeEmettriceId, date, historiqueTotaux);
+                  return pct === null ? null : (
+                    <p className="form-field-hint form-field-hint-pourcentage">≈ {formatPourcentage(pct)} du capital</p>
+                  );
+                })()}
             </div>
             <CompteSelect
               comptes={comptes}

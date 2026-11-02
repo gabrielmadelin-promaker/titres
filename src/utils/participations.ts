@@ -60,6 +60,11 @@ function extrairePourcentageCapital(nombre: number | null, cibleId: string, date
   return (nombre / total) * 100;
 }
 
+/** Aperçu en direct du % capital qu'une quantité d'actions représenterait (formulaire de transaction, avant enregistrement). */
+export function apercuPourcentageActions(nombre: number | null, cibleId: string, date: string, historique: HistoriqueTotalSociete[]): number | null {
+  return extrairePourcentageCapital(nombre, cibleId, date, historique);
+}
+
 function extrairePourcentageDroitVote(
   nombre: number | null,
   cibleId: string,
@@ -72,6 +77,16 @@ function extrairePourcentageDroitVote(
   const total = ligne?.[champTotal];
   if (!total) return null;
   return (nombre / total) * 100;
+}
+
+/** Aperçu en direct du % DV théorique qu'une quantité représenterait (formulaire de transaction, avant enregistrement). */
+export function apercuPourcentageDroitVoteTheorique(nombre: number | null, cibleId: string, date: string, historique: HistoriqueTotalSociete[]): number | null {
+  return extrairePourcentageDroitVote(nombre, cibleId, date, historique, "nombreTotalDroitVoteTheorique");
+}
+
+/** Aperçu en direct du % DV exerçable qu'une quantité représenterait (formulaire de transaction, avant enregistrement). */
+export function apercuPourcentageDroitVoteExercable(nombre: number | null, cibleId: string, date: string, historique: HistoriqueTotalSociete[]): number | null {
+  return extrairePourcentageDroitVote(nombre, cibleId, date, historique, "nombreTotalDroitVoteExercable");
 }
 
 /**

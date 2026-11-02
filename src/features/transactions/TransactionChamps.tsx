@@ -1,5 +1,8 @@
-import type { Compte, Societe, TypeTitre } from "../../types";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, TypeTitre } from "../../types";
 import { DEVISES } from "../../utils/devises";
+import { formatMontant, formatPourcentage } from "../../utils/format";
+import { apercuPourcentageDroitVoteExercable, apercuPourcentageDroitVoteTheorique } from "../../utils/participations";
+import { apercuPlusValue } from "../../utils/plusValuePreview";
 import type { TransactionChamps } from "../../utils/transactionChamps";
 import { TransactionLignesEditor } from "./TransactionLignesEditor";
 
@@ -9,13 +12,50 @@ interface Props {
   societes: Societe[];
   types: TypeTitre[];
   comptes: Compte[];
+  historiqueTotaux: HistoriqueTotalSociete[];
+  actions: Titre[];
   idPrefix: string;
 }
 
 /** Champs de saisie d'une transaction, partagés entre le formulaire d'ajout et la ligne de modification. */
-export function TransactionChampsFields({ champs, onChange, societes, types, comptes, idPrefix }: Props) {
+export function TransactionChampsFields({ champs, onChange, societes, types, comptes, historiqueTotaux, actions, idPrefix }: Props) {
   const societesTriees = [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   const vendeurNA = champs.vendeurNA;
+  const acheteurId = champs.acheteurExterne ? null : champs.acheteurId || null;
+  const vendeurId = champs.vendeurExterne || vendeurNA ? null : champs.vendeurId || null;
+
+  const nombreDvTheorique = champs.nombreDroitVoteTheorique ? Number(champs.nombreDroitVoteTheorique) : null;
+  const pctDvTheorique =
+    champs.cibleId && nombreDvTheorique !== null
+      ? apercuPourcentageDroitVoteTheorique(nombreDvTheorique, champs.cibleId, champs.date, historiqueTotaux)
+      : null;
+  const nombreDvExercable = champs.nombreDroitVoteExercable ? Number(champs.nombreDroitVoteExercable) : null;
+  const pctDvExercable =
+    champs.cibleId && nombreDvExercable !== null
+      ? apercuPourcentageDroitVoteExercable(nombreDvExercable, champs.cibleId, champs.date, historiqueTotaux)
+      : null;
+
+  // Somme des plus-values projetées de chaque ligne (chacune avec son
+  // propre Compte/Catégorie) — un simple aperçu : le serveur fait autorité
+  // à l'enregistrement (voir apercuPlusValue).
+  const prixAction = champs.prixAction ? Number(champs.prixAction) : null;
+  const plusValueProjetee =
+    champs.cibleId && prixAction !== null
+      ? champs.lignes.reduce<number | null>((somme, ligne) => {
+          const valeur = apercuPlusValue(
+            actions,
+            champs.cibleId,
+            ligne.categorie,
+            acheteurId,
+            ligne.compteAcheteurId,
+            vendeurId,
+            ligne.compteVendeurId,
+            Number(ligne.nombreActions) || 0,
+            prixAction,
+          );
+          return valeur === null ? somme : (somme ?? 0) + valeur;
+        }, null)
+      : null;
 
   function set<K extends keyof TransactionChamps>(cle: K, valeur: TransactionChamps[K]) {
     onChange({ ...champs, [cle]: valeur });
@@ -155,9 +195,11 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
         types={types}
         comptes={comptes}
         societes={societes}
-        acheteurDetenteurId={champs.acheteurExterne ? null : champs.acheteurId || null}
-        vendeurDetenteurId={champs.vendeurExterne ? null : champs.vendeurId || null}
+        acheteurDetenteurId={acheteurId}
+        vendeurDetenteurId={vendeurId}
         societeEmettriceId={champs.cibleId || null}
+        date={champs.date}
+        historiqueTotaux={historiqueTotaux}
         idPrefix={`${idPrefix}-ligne`}
       />
 
@@ -171,6 +213,9 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
           value={champs.nombreDroitVoteTheorique}
           onChange={(e) => set("nombreDroitVoteTheorique", e.target.value)}
         />
+        {pctDvTheorique !== null && (
+          <p className="form-field-hint form-field-hint-pourcentage">≈ {formatPourcentage(pctDvTheorique)} des DV théoriques</p>
+        )}
       </div>
 
       <div className="form-field">
@@ -183,6 +228,9 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
           value={champs.nombreDroitVoteExercable}
           onChange={(e) => set("nombreDroitVoteExercable", e.target.value)}
         />
+        {pctDvExercable !== null && (
+          <p className="form-field-hint form-field-hint-pourcentage">≈ {formatPourcentage(pctDvExercable)} des DV exerçables</p>
+        )}
       </div>
 
       <div className="form-field">
@@ -208,6 +256,11 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
             ))}
           </select>
         </div>
+        {plusValueProjetee !== null && (
+          <p className="form-field-hint form-field-hint-plusvalue">
+            Plus-value projetée : {formatMontant(plusValueProjetee, champs.devise)}
+          </p>
+        )}
       </div>
     </>
   );

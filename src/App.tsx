@@ -450,6 +450,8 @@ function App() {
                   societes={societes}
                   types={types}
                   comptes={comptes}
+                  historiqueTotaux={historiqueTotaux}
+                  actions={actions}
                   onAdd={ajouterTransaction}
                   onSuccess={() => setModaleTransactionOuverte(false)}
                 />
@@ -461,6 +463,7 @@ function App() {
                 historiqueTotaux={historiqueTotaux}
                 types={types}
                 comptes={comptes}
+                actions={actions}
                 onDelete={supprimerTransaction}
                 onUpdate={modifierTransaction}
               />

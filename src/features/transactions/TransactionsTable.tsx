@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { Compte, HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../../types";
 import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../../utils/format";
 import { extraireValeurTransaction } from "../../utils/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
@@ -13,6 +13,7 @@ interface Props {
   historiqueTotaux: HistoriqueTotalSociete[];
   types: TypeTitre[];
   comptes: Compte[];
+  actions: Titre[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, champs: Omit<Transaction, "id">) => void;
 }
@@ -22,11 +23,13 @@ interface TransactionEditRowProps {
   societes: Societe[];
   types: TypeTitre[];
   comptes: Compte[];
+  historiqueTotaux: HistoriqueTotalSociete[];
+  actions: Titre[];
   onSave: (champs: Omit<Transaction, "id">) => void;
   onCancel: () => void;
 }
 
-function TransactionEditRow({ transaction, societes, types, comptes, onSave, onCancel }: TransactionEditRowProps) {
+function TransactionEditRow({ transaction, societes, types, comptes, historiqueTotaux, actions, onSave, onCancel }: TransactionEditRowProps) {
   const [champs, setChamps] = useState(() => champsDepuisTransaction(transaction));
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -48,6 +51,8 @@ function TransactionEditRow({ transaction, societes, types, comptes, onSave, onC
         societes={societes}
         types={types}
         comptes={comptes}
+        historiqueTotaux={historiqueTotaux}
+        actions={actions}
         idPrefix={`tx-edit-${transaction.id}`}
       />
       {erreur && <p className="form-error">{erreur}</p>}
@@ -97,7 +102,7 @@ function plusValueTotal(t: Transaction): number | null {
 }
 
 /** Liste des transactions, avec édition en ligne et export xlsx. */
-export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, onDelete, onUpdate }: Props) {
+export function TransactionsTable({ transactions, societes, historiqueTotaux, types, comptes, actions, onDelete, onUpdate }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "date", sens: "desc" });
   const [filtreAcheteurId, setFiltreAcheteurId] = useState("");
   const [filtreCibleId, setFiltreCibleId] = useState("");
@@ -361,6 +366,8 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                           societes={societes}
                           types={types}
                           comptes={comptes}
+                          historiqueTotaux={historiqueTotaux}
+                          actions={actions}
                           onCancel={() => setLigneEditee(null)}
                           onSave={(champs) => {
                             onUpdate(t.id, champs);
