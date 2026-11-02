@@ -133,7 +133,7 @@ static class TitresLotsService
     public static async Task RecalculerTousLesLots(SqlConnection conn, IDbTransaction tx)
     {
         var lignes = await conn.QueryAsync<LigneTransactionPourRecalculTitres>(
-            "SELECT t.Id AS TransactionId, t.[Date], t.CibleId, t.PrixAction, " +
+            "SELECT t.Id AS TransactionId, CONVERT(varchar(10), t.[Date], 23) AS Date, t.CibleId, t.PrixAction, " +
             "t.AcheteurId, t.AcheteurNomExterne, t.VendeurId, t.VendeurNomExterne, " +
             "tl.Categorie, tl.NombreActions, tl.CompteAcheteurId, tl.CompteVendeurId " +
             "FROM dbo.TransactionLignes tl JOIN dbo.Transactions t ON t.Id = tl.TransactionId " +
