@@ -174,11 +174,11 @@ export interface Titre {
 }
 
 /**
- * Cours de clôture de la veille d'une Société cotée, via l'API EODHD (voir
- * CoursService côté serveur) — codeMnemonique doit être au format EODHD
- * (symbole + suffixe de marché, ex. "MC.PA", "AAPL.US"). clotureVeille et
- * date sont null en cas d'erreur (voir erreur) ou si l'API n'a pas pu être
- * appelée (token non configuré).
+ * Cours de clôture de la veille d'une Société cotée, via Yahoo Finance
+ * (voir CoursService côté serveur) — codeMnemonique doit être au format
+ * Yahoo Finance (symbole + suffixe de marché, ex. "MC.PA", "ASML.AS" ; pas
+ * de suffixe pour les valeurs US, ex. "AAPL"). clotureVeille et date sont
+ * null en cas d'erreur (voir erreur).
  */
 export interface CoursCloture {
   codeMnemonique: string;

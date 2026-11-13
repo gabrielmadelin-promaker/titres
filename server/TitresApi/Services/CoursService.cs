@@ -1,31 +1,39 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
-// Cours de clôture de la veille des Sociétés cotées, via l'API EODHD
-// (https://eodhd.com), sur la base du CodeMnemonique de la Société — qui
-// doit être au format attendu par EODHD (symbole + suffixe de marché, ex.
-// "MC.PA" pour LVMH sur Euronext Paris, "AAPL.US" pour Apple sur le
-// Nasdaq), pas simplement le ticker seul.
+// Cours de clôture de la veille des Sociétés cotées, via l'endpoint "chart"
+// non officiel de Yahoo Finance — gratuit et sans clé API, contrairement à
+// EODHD dont même le palier gratuit (20 appels/jour) est impraticable pour
+// une liste de sociétés rafraîchie à chaque affichage. CodeMnemonique doit
+// être au format attendu par Yahoo Finance (symbole + suffixe de marché,
+// ex. "MC.PA" pour Euronext Paris, "ASML.AS" pour Amsterdam, "SAP.DE" pour
+// l'Allemagne — pas de suffixe pour les valeurs US, ex. "AAPL"). Cet
+// endpoint n'est pas documenté officiellement par Yahoo et peut changer ou
+// être bloqué sans préavis — à surveiller si les cours cessent de remonter.
 static class CoursService
 {
-    // Une seule instance partagée pour toute la durée de vie du service
-    // (évite l'épuisement de sockets d'un HttpClient recréé à chaque appel).
-    static readonly HttpClient Http = new();
+    static readonly HttpClient Http = CreerHttpClient();
+
+    static HttpClient CreerHttpClient()
+    {
+        var http = new HttpClient();
+        // Sans User-Agent de navigateur, Yahoo répond parfois 403 — aucune
+        // authentification réelle n'est en jeu, juste éviter d'avoir l'air
+        // d'un script par défaut.
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        return http;
+    }
 
     // Cache en mémoire par code : la clôture de la veille ne change qu'une
     // fois par jour (à la fermeture du marché) — évite de rappeler l'API à
-    // chaque rendu du tableau des Sociétés, et reste sous les quotas
-    // d'appels d'un abonnement EODHD standard. Expire à minuit UTC suivant
+    // chaque rendu du tableau des Sociétés. Expire à minuit UTC suivant
     // (perdu au redémarrage du service — sans conséquence, un nouvel appel
     // suffit à le reconstituer).
     static readonly Dictionary<string, (CoursCloture Valeur, DateTime Expiration)> Cache = new();
     static readonly object Verrou = new();
 
-    public static string? ApiTokenEodhd(this IConfiguration configuration) =>
-        configuration["Eodhd:ApiToken"] is { Length: > 0 } token ? token : null;
-
-    /// Clôture de la dernière séance cotée avant aujourd'hui, pour un CodeMnemonique donné.
-    public static async Task<CoursCloture> ObtenirClotureVeille(IConfiguration configuration, string codeMnemonique)
+    public static async Task<CoursCloture> ObtenirClotureVeille(string codeMnemonique)
     {
         lock (Verrou)
         {
@@ -33,10 +41,7 @@ static class CoursService
                 return entree.Valeur;
         }
 
-        var token = configuration.ApiTokenEodhd();
-        var resultat = token is null
-            ? new CoursCloture(codeMnemonique, null, null, "Token API EODHD non configuré (Eodhd:ApiToken dans appsettings.Production.json).")
-            : await InterrogerEodhd(token, codeMnemonique);
+        var resultat = await InterrogerYahoo(codeMnemonique);
 
         lock (Verrou)
         {
@@ -45,29 +50,46 @@ static class CoursService
         return resultat;
     }
 
-    static async Task<CoursCloture> InterrogerEodhd(string token, string codeMnemonique)
+    static async Task<CoursCloture> InterrogerYahoo(string codeMnemonique)
     {
         try
         {
-            // period=d + order=d (plus récent d'abord), 10 lignes de marge pour
-            // retomber sur la dernière séance cotée avant aujourd'hui même après
-            // un week-end ou un jour férié.
-            var url = $"https://eodhd.com/api/eod/{Uri.EscapeDataString(codeMnemonique)}" +
-                $"?api_token={Uri.EscapeDataString(token)}&fmt=json&period=d&order=d&limit=10";
-            var lignes = await Http.GetFromJsonAsync<List<LigneEod>>(url);
-            var aujourdHui = DateOnly.FromDateTime(DateTime.UtcNow);
-            var ligne = lignes?.FirstOrDefault(l => DateOnly.TryParse(l.Date, out var d) && d < aujourdHui);
-            return ligne is null
-                ? new CoursCloture(codeMnemonique, null, null, "Aucune clôture antérieure à aujourd'hui trouvée (code mnémonique inconnu d'EODHD ?).")
-                : new CoursCloture(codeMnemonique, ligne.Close, ligne.Date, null);
+            var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(codeMnemonique)}?interval=1d&range=1d";
+            var reponse = await Http.GetFromJsonAsync<ReponseYahoo>(url);
+
+            var erreur = reponse?.Chart?.Error?.Description;
+            if (erreur is not null)
+                return new CoursCloture(codeMnemonique, null, null, $"Yahoo Finance : {erreur}");
+
+            var meta = reponse?.Chart?.Result?.FirstOrDefault()?.Meta;
+            if (meta?.ChartPreviousClose is not decimal cloture)
+                return new CoursCloture(codeMnemonique, null, null, "Aucune clôture renvoyée par Yahoo Finance (code mnémonique inconnu ?).");
+
+            // Horodatage de la dernière cotation connue, pas précisément
+            // celui de chartPreviousClose (Yahoo ne le fournit pas
+            // explicitement) — à titre indicatif seulement.
+            var date = meta.RegularMarketTime is long epoque
+                ? DateTimeOffset.FromUnixTimeSeconds(epoque).UtcDateTime.ToString("yyyy-MM-dd")
+                : null;
+            return new CoursCloture(codeMnemonique, cloture, date, null);
         }
         catch (Exception e)
         {
-            return new CoursCloture(codeMnemonique, null, null, $"Erreur EODHD : {e.Message}");
+            return new CoursCloture(codeMnemonique, null, null, $"Erreur Yahoo Finance : {e.Message}");
         }
     }
 
-    record LigneEod(
-        [property: JsonPropertyName("date")] string Date,
-        [property: JsonPropertyName("close")] decimal Close);
+    record ReponseYahoo([property: JsonPropertyName("chart")] ChartYahoo? Chart);
+
+    record ChartYahoo(
+        [property: JsonPropertyName("result")] List<ResultatYahoo>? Result,
+        [property: JsonPropertyName("error")] ErreurYahoo? Error);
+
+    record ResultatYahoo([property: JsonPropertyName("meta")] MetaYahoo? Meta);
+
+    record MetaYahoo(
+        [property: JsonPropertyName("chartPreviousClose")] decimal? ChartPreviousClose,
+        [property: JsonPropertyName("regularMarketTime")] long? RegularMarketTime);
+
+    record ErreurYahoo([property: JsonPropertyName("description")] string? Description);
 }

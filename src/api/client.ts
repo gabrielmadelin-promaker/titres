@@ -183,7 +183,7 @@ export function fetchActions(): Promise<Titre[]> {
   return request("/titres/actions");
 }
 
-/** Cours de clôture de la veille pour une liste de codes mnémoniques (API EODHD, voir CoursService côté serveur). */
+/** Cours de clôture de la veille pour une liste de codes mnémoniques (Yahoo Finance, voir CoursService côté serveur). */
 export function fetchCoursCloture(codes: string[]): Promise<CoursCloture[]> {
   if (codes.length === 0) return Promise.resolve([]);
   return request(`/cours?codes=${encodeURIComponent(codes.join(","))}`);

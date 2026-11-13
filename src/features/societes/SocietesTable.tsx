@@ -215,8 +215,8 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
           type="text"
           value={codeMnemonique}
           onChange={(e) => setCodeMnemonique(e.target.value)}
-          placeholder="Ex : MC.PA (EODHD)"
-          title="Pour la colonne Clôture veille (API EODHD) : symbole + suffixe de marché, ex. MC.PA, AAPL.US."
+          placeholder="Ex : MC.PA (Yahoo Finance)"
+          title="Pour la colonne Clôture veille (Yahoo Finance) : symbole + suffixe de marché, ex. MC.PA, ASML.AS (pas de suffixe pour les valeurs US, ex. AAPL)."
         />
       </div>
       <div className="form-field">
@@ -282,7 +282,7 @@ export function SocietesTable({
     });
   }
 
-  // Un seul appel groupé (API EODHD, via le serveur) pour tous les codes
+  // Un seul appel groupé (Yahoo Finance, via le serveur) pour tous les codes
   // mnémoniques renseignés — pas un par Société, quel que soit le nombre de
   // lignes du tableau.
   const codesMnemoniques = useMemo(

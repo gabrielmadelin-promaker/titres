@@ -206,9 +206,10 @@ record Utilisateur(Guid Id, string Email, string MotDePasse, string Role, DateTi
 
 record UtilisateurInput(string? Email, string? Role);
 
-// Cours de clôture de la veille pour une Société cotée, via l'API EODHD
+// Cours de clôture de la veille pour une Société cotée, via Yahoo Finance
 // (voir CoursService) — CodeMnemonique doit être au format attendu par
-// EODHD (symbole + suffixe de marché, ex. "MC.PA", "AAPL.US"). ClotureVeille
-// et Date sont null en cas d'erreur (voir Erreur) ou si CodeMnemonique n'est
-// pas renseigné.
+// Yahoo Finance (symbole + suffixe de marché, ex. "MC.PA", "ASML.AS" ;
+// pas de suffixe pour les valeurs US, ex. "AAPL"). ClotureVeille et Date
+// sont null en cas d'erreur (voir Erreur) ou si CodeMnemonique n'est pas
+// renseigné.
 record CoursCloture(string CodeMnemonique, decimal? ClotureVeille, string? Date, string? Erreur);

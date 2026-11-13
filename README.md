@@ -68,9 +68,9 @@ séparément. En résumé, sur le serveur :
 3. Télécharger et extraire le zip de la branche `api-dist` quelque part sur
    le serveur, créer `appsettings.Production.json` à côté de `TitresApi.exe`
    (voir `server/TitresApi/appsettings.Production.json.example`) avec la
-   chaîne de connexion réelle et, pour afficher les cours de clôture sur
-   l'écran Sociétés, un token API EODHD (https://eodhd.com — `Eodhd:ApiToken`),
-   puis l'enregistrer comme service Windows (port `8091`).
+   chaîne de connexion réelle, puis l'enregistrer comme service Windows
+   (port `8091`). Les cours de clôture sur l'écran Sociétés (Yahoo Finance)
+   ne nécessitent aucune clé à configurer.
 4. Ouvrir les ports `8090` et `8091` dans le pare-feu Windows si besoin
    d'un accès depuis d'autres postes.
 
