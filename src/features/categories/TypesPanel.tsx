@@ -5,25 +5,28 @@ import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
 
 interface Props {
   types: TypeTitre[];
-  onAdd: (nom: string) => Promise<boolean>;
+  onAdd: (nom: string, rentreDansCapital?: boolean) => Promise<boolean>;
+  onUpdate: (id: string, nom: string, rentreDansCapital: boolean) => void;
   onDelete: (id: string) => void;
 }
 
 interface FormAjoutProps {
-  onAdd: (nom: string) => Promise<boolean>;
+  onAdd: (nom: string, rentreDansCapital?: boolean) => Promise<boolean>;
   onSuccess: () => void;
 }
 
 function FormAjout({ onAdd, onSuccess }: FormAjoutProps) {
   const [nom, setNom] = useState("");
+  const [rentreDansCapital, setRentreDansCapital] = useState(true);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const nomPropre = nom.trim();
     if (!nomPropre) return;
-    const reussi = await onAdd(nomPropre);
+    const reussi = await onAdd(nomPropre, rentreDansCapital);
     if (reussi) {
       setNom("");
+      setRentreDansCapital(true);
       onSuccess();
     }
   }
@@ -42,6 +45,12 @@ function FormAjout({ onAdd, onSuccess }: FormAjoutProps) {
           autoFocus
         />
       </div>
+      <div className="form-field-checkbox">
+        <label>
+          <input type="checkbox" checked={rentreDansCapital} onChange={(e) => setRentreDansCapital(e.target.checked)} />
+          Rentre dans le capital
+        </label>
+      </div>
       <button type="submit" className="btn btn-primary">
         Ajouter
       </button>
@@ -50,7 +59,7 @@ function FormAjout({ onAdd, onSuccess }: FormAjoutProps) {
 }
 
 /** Gestion de la liste des Catégories de titres : sert de suggestions sur les champs Catégorie, qui restent du texte libre. */
-export function TypesPanel({ types, onAdd, onDelete }: Props) {
+export function TypesPanel({ types, onAdd, onUpdate, onDelete }: Props) {
   const [modaleOuverte, setModaleOuverte] = useState(false);
 
   const typesTries = [...types].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
@@ -73,6 +82,14 @@ export function TypesPanel({ types, onAdd, onDelete }: Props) {
           {typesTries.map((t) => (
             <li key={t.id} className="badge-supprimable">
               {t.nom}
+              <label className="form-field-toggle categorie-toggle-capital" title="Rentre dans le capital">
+                <input
+                  type="checkbox"
+                  checked={t.rentreDansCapital}
+                  onChange={(e) => onUpdate(t.id, t.nom, e.target.checked)}
+                />
+                Capital
+              </label>
               <button type="button" aria-label={`Supprimer la catégorie ${t.nom}`} onClick={() => onDelete(t.id)}>
                 ×
               </button>

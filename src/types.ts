@@ -1,10 +1,10 @@
 export interface Societe {
   id: string;
   nom: string;
-  /** Valeur nominale de l'action, dans la devise de la société. */
-  valeurNominale: number | null;
-  /** Devise (code ISO 4217, ex. EUR, USD) de valeurNominale — sans incidence tant qu'elle est null. */
-  devise: string;
+  /** Code ISIN du titre, facultatif. */
+  isin: string | null;
+  /** Code mnémonique (ticker) affiché sur le marché, facultatif. */
+  codeMnemonique: string | null;
   pays: string | null;
   siegeSocial: string | null;
   siren: string | null;
@@ -16,6 +16,8 @@ export interface LigneActionsParType {
   /** Lettre de catégorie (A/B/C...), ou null pour une quantité non ventilée (donnée ancienne). */
   type: string | null;
   quantite: number;
+  /** Valeur nominale de cette Catégorie à cette date d'effet (devise : voir HistoriqueTotalSociete.devise). */
+  valeurNominale: number | null;
 }
 
 /**
@@ -44,6 +46,8 @@ export interface HistoriqueTotalSociete {
   dateEffet: string;
   nombreTotalDroitVoteTheorique: number | null;
   nombreTotalDroitVoteExercable: number | null;
+  /** Devise (code ISO 4217) de la valeur nominale par Catégorie (actionsParType) — une seule pour toute la ligne. */
+  devise: string;
   actionsParType: LigneActionsParType[];
 }
 
@@ -56,6 +60,8 @@ export interface HistoriqueTotalSociete {
 export interface TypeTitre {
   id: string;
   nom: string;
+  /** Si faux, les quantités de cette Catégorie n'entrent pas dans le total d'actions (dénominateur du % Capital). */
+  rentreDansCapital: boolean;
 }
 
 /**
@@ -94,6 +100,10 @@ export interface LigneTransaction {
   compteAcheteurId: string | null;
   /** Compte du vendeur concerné par cette ligne, facultatif (généré automatiquement si non choisi). */
   compteVendeurId: string | null;
+  /** Écriture seule : nom à donner au compte acheteur s'il doit être créé (ignoré sinon) — jamais renvoyé par l'API. */
+  nomCompteAcheteur?: string | null;
+  /** Écriture seule : nom à donner au compte vendeur s'il doit être créé (ignoré sinon) — jamais renvoyé par l'API. */
+  nomCompteVendeur?: string | null;
   /**
    * Calculée par l'API, en euros — jamais saisie, jamais stockée en base :
    * recalculée à chaque lecture. Basée sur le FIFO réel des lots d'Actions

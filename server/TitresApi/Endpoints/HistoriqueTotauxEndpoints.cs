@@ -24,6 +24,9 @@ static class HistoriqueTotauxEndpoints
             var dateEffet = input.DateEffet;
             if (string.IsNullOrWhiteSpace(dateEffet))
                 return Results.BadRequest("La date d'effet est requise.");
+            var (erreurDevise, devise) = Devises.Normaliser(input.Devise);
+            if (erreurDevise is not null)
+                return Results.BadRequest(erreurDevise);
 
             var lignesActions = (input.ActionsParType ?? []).Where(l => l.Quantite != 0).ToList();
             var id = Guid.NewGuid();
@@ -34,15 +37,15 @@ static class HistoriqueTotauxEndpoints
             try
             {
                 await conn.ExecuteAsync(
-                    "INSERT INTO dbo.HistoriqueTotauxSociete (Id, SocieteId, DateEffet, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable) " +
-                    "VALUES (@Id, @SocieteId, @DateEffet, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable)",
-                    new { Id = id, input.SocieteId, DateEffet = dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable },
+                    "INSERT INTO dbo.HistoriqueTotauxSociete (Id, SocieteId, DateEffet, NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable, Devise) " +
+                    "VALUES (@Id, @SocieteId, @DateEffet, @NombreTotalDroitVoteTheorique, @NombreTotalDroitVoteExercable, @devise)",
+                    new { Id = id, input.SocieteId, DateEffet = dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable, devise },
                     sqlTx);
 
                 foreach (var ligne in lignesActions)
                     await conn.ExecuteAsync(
-                        "INSERT INTO dbo.HistoriqueTotalActionsType (Id, HistoriqueTotalSocieteId, Type, Quantite) VALUES (NEWID(), @id, @Type, @Quantite)",
-                        new { id, ligne.Type, ligne.Quantite }, sqlTx);
+                        "INSERT INTO dbo.HistoriqueTotalActionsType (Id, HistoriqueTotalSocieteId, Type, Quantite, ValeurNominale) VALUES (NEWID(), @id, @Type, @Quantite, @ValeurNominale)",
+                        new { id, ligne.Type, ligne.Quantite, ligne.ValeurNominale }, sqlTx);
 
                 var erreurComptes = await ComptesService.AssurerComptesParType(conn, sqlTx, input.SocieteId, lignesActions);
                 if (erreurComptes is not null)
@@ -64,7 +67,7 @@ static class HistoriqueTotauxEndpoints
                 throw;
             }
 
-            var cree = new HistoriqueTotalSociete(id, input.SocieteId, dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable, lignesActions);
+            var cree = new HistoriqueTotalSociete(id, input.SocieteId, dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable, devise, lignesActions);
             return Results.Created($"/api/historique-totaux-societe/{id}", cree);
         });
 
@@ -73,6 +76,9 @@ static class HistoriqueTotauxEndpoints
             var dateEffet = input.DateEffet;
             if (string.IsNullOrWhiteSpace(dateEffet))
                 return Results.BadRequest("La date d'effet est requise.");
+            var (erreurDevise, devise) = Devises.Normaliser(input.Devise);
+            if (erreurDevise is not null)
+                return Results.BadRequest(erreurDevise);
 
             var lignesActions = (input.ActionsParType ?? []).Where(l => l.Quantite != 0).ToList();
 
@@ -84,9 +90,9 @@ static class HistoriqueTotauxEndpoints
             {
                 lignes = await conn.ExecuteAsync(
                     "UPDATE dbo.HistoriqueTotauxSociete SET SocieteId = @SocieteId, DateEffet = @DateEffet, " +
-                    "NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable " +
-                    "WHERE Id = @id",
-                    new { id, input.SocieteId, DateEffet = dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable },
+                    "NombreTotalDroitVoteTheorique = @NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable = @NombreTotalDroitVoteExercable, " +
+                    "Devise = @devise WHERE Id = @id",
+                    new { id, input.SocieteId, DateEffet = dateEffet, input.NombreTotalDroitVoteTheorique, input.NombreTotalDroitVoteExercable, devise },
                     sqlTx);
 
                 if (lignes > 0)
@@ -94,8 +100,8 @@ static class HistoriqueTotauxEndpoints
                     await conn.ExecuteAsync("DELETE FROM dbo.HistoriqueTotalActionsType WHERE HistoriqueTotalSocieteId = @id", new { id }, sqlTx);
                     foreach (var ligne in lignesActions)
                         await conn.ExecuteAsync(
-                            "INSERT INTO dbo.HistoriqueTotalActionsType (Id, HistoriqueTotalSocieteId, Type, Quantite) VALUES (NEWID(), @id, @Type, @Quantite)",
-                            new { id, ligne.Type, ligne.Quantite }, sqlTx);
+                            "INSERT INTO dbo.HistoriqueTotalActionsType (Id, HistoriqueTotalSocieteId, Type, Quantite, ValeurNominale) VALUES (NEWID(), @id, @Type, @Quantite, @ValeurNominale)",
+                            new { id, ligne.Type, ligne.Quantite, ligne.ValeurNominale }, sqlTx);
 
                     var erreurComptes = await ComptesService.AssurerComptesParType(conn, sqlTx, input.SocieteId, lignesActions);
                     if (erreurComptes is not null)

@@ -183,15 +183,25 @@ function App() {
     }
   }
 
-  async function ajouterType(nom: string) {
+  async function ajouterType(nom: string, rentreDansCapital = true) {
     try {
-      const cree = await api.creerType(nom);
+      const cree = await api.creerType(nom, rentreDansCapital);
       setTypes((prev) => [...prev, cree]);
       setErreur(null);
       return true;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter ce type");
       return false;
+    }
+  }
+
+  async function modifierType(id: string, nom: string, rentreDansCapital: boolean) {
+    try {
+      await api.modifierType(id, nom, rentreDansCapital);
+      setTypes((prev) => prev.map((t) => (t.id === id ? { ...t, nom, rentreDansCapital } : t)));
+      setErreur(null);
+    } catch (e) {
+      gererErreur(e, "Impossible de modifier ce type");
     }
   }
 
@@ -496,6 +506,7 @@ function App() {
                 societes={societes}
                 historiqueTotaux={historiqueTotaux}
                 transactions={transactions}
+                types={types}
                 comptes={comptes}
                 titres={actions}
               />
@@ -524,7 +535,7 @@ function App() {
                     Catégories de titres (ex. Action ordinaire, Action de préférence...), utilisées en suggestions sur
                     les champs Catégorie des transactions et des totaux de société.
                   </p>
-                  <TypesPanel types={types} onAdd={ajouterType} onDelete={supprimerType} />
+                  <TypesPanel types={types} onAdd={ajouterType} onUpdate={modifierType} onDelete={supprimerType} />
                 </>
               )}
 

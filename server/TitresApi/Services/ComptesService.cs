@@ -37,10 +37,15 @@ static class ComptesService
     // groupe (detenteurId null, même avec un nom externe renseigné) : un tiers
     // hors groupe n'a jamais de compte ni de lot suivi — voir
     // TitresLotsService, même règle côté lots.
+    // nomPersonnalise : nom à donner au nouveau compte s'il doit effectivement
+    // en être créé un (ignoré dans tous les autres cas — compte existant
+    // réutilisé, ou compteIdSaisi fourni) ; vide ou non fourni, le nom
+    // auto-généré habituel est utilisé.
     public static async Task<(string? Erreur, Guid? CompteId)> ResoudreCompte(
         SqlConnection conn, IDbTransaction tx, Guid? compteIdSaisi,
         Guid? detenteurId, string? detenteurNomExterne,
-        Guid societeId, string nomSociete, string? categorie, string role)
+        Guid societeId, string nomSociete, string? categorie, string role,
+        string? nomPersonnalise = null)
     {
         if (detenteurId is null)
             return (null, null);
@@ -78,7 +83,7 @@ static class ComptesService
             "AND SocieteEmettriceId = @societeId",
             new { detenteurId, detenteurNomExterne, societeId }, tx);
         var nouveauCompteId = Guid.NewGuid();
-        var nom = $"{nomSociete} - {categorie ?? "Non catégorisé"} - {n + 1}";
+        var nom = string.IsNullOrWhiteSpace(nomPersonnalise) ? $"{nomSociete} - {categorie ?? "Non catégorisé"} - {n + 1}" : nomPersonnalise.Trim();
         await conn.ExecuteAsync(
             "INSERT INTO dbo.Comptes (Id, DetenteurId, DetenteurNomExterne, SocieteEmettriceId, Type, Nom) " +
             "VALUES (@Id, @detenteurId, @detenteurNomExterne, @societeId, @categorie, @nom)",

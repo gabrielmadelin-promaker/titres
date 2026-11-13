@@ -9,6 +9,10 @@ export interface LigneChamps {
   compteAcheteurId: string;
   /** Compte du vendeur concerné, facultatif ("" = non renseigné, généré automatiquement). */
   compteVendeurId: string;
+  /** Nom à donner au compte acheteur s'il doit être créé (ignoré si compteAcheteurId est renseigné) — vide = nom auto-généré habituel. */
+  nomCompteAcheteur: string;
+  /** Nom à donner au compte vendeur s'il doit être créé (ignoré si compteVendeurId est renseigné) — vide = nom auto-généré habituel. */
+  nomCompteVendeur: string;
 }
 
 /** Représentation "brute" (chaînes de formulaire) des champs d'une transaction, partagée entre l'ajout et la modification. */
@@ -40,7 +44,7 @@ function today(): string {
 }
 
 function ligneVide(): LigneChamps {
-  return { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "" };
+  return { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "", nomCompteAcheteur: "", nomCompteVendeur: "" };
 }
 
 /** Formulaire vierge, prêt pour l'ajout d'une nouvelle transaction (date du jour, une ligne vide). */
@@ -82,6 +86,8 @@ export function champsDepuisTransaction(t: Transaction): TransactionChamps {
             nombreActions: l.nombreActions.toString(),
             compteAcheteurId: l.compteAcheteurId ?? "",
             compteVendeurId: l.compteVendeurId ?? "",
+            nomCompteAcheteur: "",
+            nomCompteVendeur: "",
           }))
         : [ligneVide()],
     nombreDroitVoteTheorique: t.nombreDroitVoteTheorique?.toString() ?? "",
@@ -150,6 +156,8 @@ export function champsVersTransaction(c: TransactionChamps): Omit<Transaction, "
         nombreActions: Number(l.nombreActions),
         compteAcheteurId: l.compteAcheteurId || null,
         compteVendeurId: l.compteVendeurId || null,
+        nomCompteAcheteur: l.compteAcheteurId ? null : l.nomCompteAcheteur.trim() || null,
+        nomCompteVendeur: l.compteVendeurId ? null : l.nomCompteVendeur.trim() || null,
         plusValue: null,
       }),
     ),

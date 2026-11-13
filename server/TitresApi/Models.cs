@@ -3,61 +3,70 @@
 // ici, voir Services/ pour les règles métier et Endpoints/ pour les
 // opérations HTTP qui les exposent.
 
-// Devise (code ISO 4217, ex. EUR, USD) : sans incidence tant que
-// ValeurNominale est null, jamais null elle-même (toujours "EUR" par défaut
-// si non précisée, voir SocietesEndpoints).
-record Societe(Guid Id, string Nom, decimal? ValeurNominale, string Devise, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
+// Isin/CodeMnemonique : identifiants de place du titre (facultatifs,
+// jamais validés au format — texte libre).
+record Societe(Guid Id, string Nom, string? Isin, string? CodeMnemonique, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
 record SocieteInput(
     string? Nom,
-    decimal? ValeurNominale = null,
-    string? Devise = null,
+    string? Isin = null,
+    string? CodeMnemonique = null,
     string? Pays = null,
     string? SiegeSocial = null,
     string? Siren = null,
     string? Lei = null);
 
-record SocieteUpdate(string? Nom, decimal? ValeurNominale, string? Devise, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
+record SocieteUpdate(string? Nom, string? Isin, string? CodeMnemonique, string? Pays, string? SiegeSocial, string? Siren, string? Lei);
 
 // Une ligne (= un Type) de la ventilation du nombre d'actions d'une société
-// à une date d'effet donnée (voir HistoriqueTotalSociete).
-record LigneActionsParType(string? Type, decimal Quantite);
+// à une date d'effet donnée (voir HistoriqueTotalSociete). ValeurNominale
+// est propre à cette Catégorie (pas à la société, voir Societe) — sa
+// devise est celle du parent, HistoriqueTotalSociete.Devise.
+record LigneActionsParType(string? Type, decimal Quantite, decimal? ValeurNominale = null);
 
 // Projection brute d'une ligne de dbo.HistoriqueTotalActionsType, avec
 // l'id de son parent — utilisée uniquement pour regrouper les lignes par
 // ligne d'historique dans HistoriqueTotauxService.ChargerHistoriqueTotaux.
-record LigneActionsParTypeAvecParent(Guid HistoriqueTotalSocieteId, string? Type, decimal Quantite);
+record LigneActionsParTypeAvecParent(Guid HistoriqueTotalSocieteId, string? Type, decimal Quantite, decimal? ValeurNominale);
 
 // Le total émis par une société à une date d'effet donnée — voir
 // dbo.HistoriqueTotauxSociete. Le nombre total d'actions n'est pas une
 // colonne : c'est la somme de ActionsParType (voir dbo.HistoriqueTotalActionsType),
 // jamais stockée directement (même principe que PlusValue sur Transactions).
 // Seuls les droits de vote théorique/exerçable restent un nombre global.
+// Devise : celle de la ValeurNominale par Catégorie (ActionsParType), une
+// seule pour toute la ligne — jamais null (toujours "EUR" par défaut si non
+// précisée, voir HistoriqueTotauxEndpoints).
 record HistoriqueTotalSociete(
     Guid Id, Guid SocieteId, string DateEffet,
     decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable,
+    string Devise,
     IReadOnlyList<LigneActionsParType> ActionsParType);
 
 record HistoriqueTotalSocieteInput(
     Guid SocieteId, string? DateEffet,
     decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable,
+    string? Devise,
     List<LigneActionsParType>? ActionsParType);
 
 // Projection (sans le détail par Type) d'une ligne de dbo.HistoriqueTotauxSociete,
 // utilisée pour construire HistoriqueTotalSociete dans HistoriqueTotauxService.ChargerHistoriqueTotaux.
 record HistoriqueTotalSocieteSansDetail(
-    Guid Id, Guid SocieteId, string DateEffet, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
+    Guid Id, Guid SocieteId, string DateEffet, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable, string Devise);
 
 // Projection du total en vigueur à une date donnée (voir TransactionsService.ValiderBornesParticipation) :
 // Id sert à retrouver la somme des lignes HistoriqueTotalActionsType correspondantes.
 record TotauxSociete(Guid Id, decimal? NombreTotalDroitVoteTheorique, decimal? NombreTotalDroitVoteExercable);
 
-// Une catégorie de titre (A, B, C...) — voir dbo.Types. Sert uniquement de
-// suggestions sur les champs Categorie (Transactions/Actions), qui restent
-// du texte libre.
-record TypeTitre(Guid Id, string Nom);
+// Une catégorie de titre (A, B, C...) — voir dbo.Types. Sert de suggestions
+// sur les champs Categorie (Transactions/Actions), qui restent du texte
+// libre. RentreDansCapital : si faux, les quantités de cette Catégorie
+// n'entrent pas dans le total d'actions utilisé comme dénominateur du %
+// Capital (voir TransactionsService.ValiderBornesParticipation et
+// participations.ts côté frontend) — vrai par défaut.
+record TypeTitre(Guid Id, string Nom, bool RentreDansCapital);
 
-record TypeTitreInput(string? Nom);
+record TypeTitreInput(string? Nom, bool RentreDansCapital = true);
 
 // Regroupement nommé des titres détenus par un actionnaire, dédié à une
 // seule Société émettrice ET une seule Catégorie — voir dbo.Comptes.
@@ -107,7 +116,13 @@ record TransactionInput(
 // chaque lecture, par ligne (voir PlusValueService.CalculerPlusValues).
 record LigneTransaction(Guid Id, string? Categorie, decimal NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId, decimal? PlusValue);
 
-record LigneTransactionInput(string? Categorie, decimal? NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId);
+// NomCompteAcheteur/NomCompteVendeur : nom à donner au compte s'il doit être
+// créé pour ce camp (ignoré si CompteXId est renseigné, ou si le compte
+// existe déjà pour ce détenteur/société/Catégorie) — voir ComptesService.ResoudreCompte.
+// Laissé vide, le nom auto-généré habituel est utilisé.
+record LigneTransactionInput(
+    string? Categorie, decimal? NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId,
+    string? NomCompteAcheteur = null, string? NomCompteVendeur = null);
 
 // Projection brute d'une ligne de dbo.TransactionLignes, avec l'id de son
 // parent — utilisée uniquement pour regrouper les lignes par transaction

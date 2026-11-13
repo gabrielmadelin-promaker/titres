@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Societe, Transaction } from "../../types";
-import { formatDate, formatDecimal, formatMontant } from "../../utils/format";
+import { formatDate, formatMontant, formatNombreActions } from "../../utils/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
 import { exporterXlsx } from "../../utils/xlsxExport";
 
@@ -200,7 +200,7 @@ export function PlusValuesPanel({ societes, transactions }: Props) {
                   <td>{acheteurTexte(l)}</td>
                   <td>{vendeurTexte(l)}</td>
                   <td>{l.categorie ?? "—"}</td>
-                  <td className="num">{formatDecimal(l.nombreActions)}</td>
+                  <td className="num">{formatNombreActions(l.nombreActions)}</td>
                   <td className="num">{l.prixAction === null ? "—" : formatMontant(l.prixAction, l.devise)}</td>
                   <td className={`num ${l.plusValue < 0 ? "valeur-negative" : ""}`}>{formatMontant(l.plusValue, l.devise)}</td>
                 </tr>

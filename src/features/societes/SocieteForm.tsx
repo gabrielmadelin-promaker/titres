@@ -25,13 +25,14 @@ function today(): string {
 /** Formulaire d'ajout d'une société, avec une première ligne de totaux optionnelle. */
 export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: Props) {
   const [nom, setNom] = useState("");
-  const [valeurNominale, setValeurNominale] = useState(champVide());
-  const [devise, setDevise] = useState(DEVISE_PAR_DEFAUT);
+  const [isin, setIsin] = useState(champVide());
+  const [codeMnemonique, setCodeMnemonique] = useState(champVide());
   const [pays, setPays] = useState(champVide());
   const [siegeSocial, setSiegeSocial] = useState(champVide());
   const [siren, setSiren] = useState(champVide());
   const [lei, setLei] = useState(champVide());
   const [dateEffetTotaux, setDateEffetTotaux] = useState(today());
+  const [deviseTotaux, setDeviseTotaux] = useState(DEVISE_PAR_DEFAUT);
   const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>([]);
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(champVide());
   const [nombreTotalDroitVoteExercable, setNombreTotalDroitVoteExercable] = useState(champVide());
@@ -45,8 +46,8 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
     // pouvoir ajuster sa saisie plutôt que de tout ressaisir depuis zéro.
     const societeId = await onAdd({
       nom: nomPropre,
-      valeurNominale: valeurNominale ? Number(valeurNominale) : null,
-      devise,
+      isin: isin.trim() || null,
+      codeMnemonique: codeMnemonique.trim() || null,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
@@ -63,6 +64,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
       await onAddHistoriqueTotal({
         societeId,
         dateEffet: dateEffetTotaux || today(),
+        devise: deviseTotaux,
         actionsParType: lignesActions,
         nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
         nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
@@ -70,13 +72,14 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
     }
 
     setNom("");
-    setValeurNominale(champVide());
-    setDevise(DEVISE_PAR_DEFAUT);
+    setIsin(champVide());
+    setCodeMnemonique(champVide());
     setPays(champVide());
     setSiegeSocial(champVide());
     setSiren(champVide());
     setLei(champVide());
     setDateEffetTotaux(today());
+    setDeviseTotaux(DEVISE_PAR_DEFAUT);
     setActionsParType([]);
     setNombreTotalDroitVoteTheorique(champVide());
     setNombreTotalDroitVoteExercable(champVide());
@@ -98,24 +101,19 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
       </div>
 
       <div className="form-field">
-        <label htmlFor="societe-valeur-nominale">Valeur nominale de l'action</label>
-        <div className="form-field-montant">
-          <input
-            id="societe-valeur-nominale"
-            type="number"
-            step="0.0001"
-            min="0"
-            value={valeurNominale}
-            onChange={(e) => setValeurNominale(e.target.value)}
-          />
-          <select aria-label="Devise de la valeur nominale" value={devise} onChange={(e) => setDevise(e.target.value)}>
-            {DEVISES.map((d) => (
-              <option key={d.code} value={d.code}>
-                {d.code}
-              </option>
-            ))}
-          </select>
-        </div>
+        <label htmlFor="societe-isin">Code ISIN</label>
+        <input id="societe-isin" type="text" value={isin} onChange={(e) => setIsin(e.target.value)} placeholder="Ex : FR0000039299" />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="societe-code-mnemonique">Code mnémonique</label>
+        <input
+          id="societe-code-mnemonique"
+          type="text"
+          value={codeMnemonique}
+          onChange={(e) => setCodeMnemonique(e.target.value)}
+          placeholder="Ex : BOL"
+        />
       </div>
 
       <div className="form-field">
@@ -159,6 +157,17 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
           value={dateEffetTotaux}
           onChange={(e) => setDateEffetTotaux(e.target.value)}
         />
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="societe-totaux-devise">Devise de la valeur nominale</label>
+        <select id="societe-totaux-devise" value={deviseTotaux} onChange={(e) => setDeviseTotaux(e.target.value)}>
+          {DEVISES.map((d) => (
+            <option key={d.code} value={d.code}>
+              {d.code}
+            </option>
+          ))}
+        </select>
       </div>
 
       <ActionsParTypeEditor lignes={actionsParType} onChange={setActionsParType} types={types} idPrefix="societe-ajout" />

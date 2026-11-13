@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../../types";
-import { formatDate, formatDecimal, formatMontant, formatPourcentage } from "../../utils/format";
+import { formatDate, formatDecimal, formatMontant, formatNombreActions, formatPourcentage } from "../../utils/format";
 import { extraireValeurTransaction } from "../../utils/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
 import { champsDepuisTransaction, champsVersTransaction, validerChamps } from "../../utils/transactionChamps";
@@ -122,7 +122,7 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
         const comptesTexte = [compteAcheteur && `ach. : ${compteAcheteur}`, compteVendeur && `vend. : ${compteVendeur}`]
           .filter(Boolean)
           .join(", ");
-        return `${l.categorie ?? "(non précisé)"} : ${formatDecimal(l.nombreActions)}${comptesTexte ? ` (${comptesTexte})` : ""}`;
+        return `${l.categorie ?? "(non précisé)"} : ${formatNombreActions(l.nombreActions)}${comptesTexte ? ` (${comptesTexte})` : ""}`;
       })
       .join(" ; ");
   }
@@ -179,11 +179,11 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
         case "detail":
           return detailLignes(t);
         case "capital":
-          return extraireValeurTransaction(t, "capital", historiqueTotaux) ?? -Infinity;
+          return extraireValeurTransaction(t, "capital", historiqueTotaux, types) ?? -Infinity;
         case "dvTheorique":
-          return extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? -Infinity;
+          return extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux, types) ?? -Infinity;
         case "dvExercable":
-          return extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? -Infinity;
+          return extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux, types) ?? -Infinity;
         case "prixAction":
           return t.prixAction ?? -Infinity;
         case "plusValue":
@@ -211,9 +211,9 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
         "Nombre de droits de vote théorique": t.nombreDroitVoteTheorique ?? "",
         "Nombre de droits de vote exerçable": t.nombreDroitVoteExercable ?? "",
         "Détail par Catégorie": detailLignes(t),
-        "Capital (%)": extraireValeurTransaction(t, "capital", historiqueTotaux) ?? "",
-        "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux) ?? "",
-        "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux) ?? "",
+        "Capital (%)": extraireValeurTransaction(t, "capital", historiqueTotaux, types) ?? "",
+        "Droit de vote théorique (%)": extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux, types) ?? "",
+        "Droit de vote exerçable (%)": extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux, types) ?? "",
         "Prix de l'action": t.prixAction ?? "",
         Devise: t.devise,
         "Plus-value": plusValueTotal(t) ?? "",
@@ -328,18 +328,18 @@ export function TransactionsTable({ transactions, societes, historiqueTotaux, ty
                     <td>{celluleAcheteur(t)}</td>
                     <td>{nomDe(t.cibleId)}</td>
                     <td>{celluleVendeur(t)}</td>
-                    <td className="num">{formatDecimal(nombreActionsTotal(t))}</td>
+                    <td className="num">{formatNombreActions(nombreActionsTotal(t))}</td>
                     <td className="num">{formatOuTiret(t.nombreDroitVoteTheorique, formatDecimal)}</td>
                     <td className="num">{formatOuTiret(t.nombreDroitVoteExercable, formatDecimal)}</td>
                     <td>{detailLignes(t)}</td>
                     <td className="num">
-                      {formatOuTiret(extraireValeurTransaction(t, "capital", historiqueTotaux), formatPourcentage)}
+                      {formatOuTiret(extraireValeurTransaction(t, "capital", historiqueTotaux, types), formatPourcentage)}
                     </td>
                     <td className="num">
-                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux), formatPourcentage)}
+                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteTheorique", historiqueTotaux, types), formatPourcentage)}
                     </td>
                     <td className="num">
-                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux), formatPourcentage)}
+                      {formatOuTiret(extraireValeurTransaction(t, "droitVoteExercable", historiqueTotaux, types), formatPourcentage)}
                     </td>
                     <td className="num">{formatOuTiret(t.prixAction, (v) => formatMontant(v, t.devise))}</td>
                     <td className="num">{formatOuTiret(plusValueTotal(t), (v) => formatMontant(v, t.devise))}</td>

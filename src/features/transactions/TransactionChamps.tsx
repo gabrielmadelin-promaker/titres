@@ -245,7 +245,7 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
             id={`${idPrefix}-prix`}
             type="number"
             min="0"
-            step="0.01"
+            step="0.0001"
             value={champs.prixAction}
             onChange={(e) => set("prixAction", e.target.value)}
           />

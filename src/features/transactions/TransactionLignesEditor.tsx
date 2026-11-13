@@ -28,6 +28,9 @@ interface CompteSelectProps {
   categorie: string;
   value: string;
   onChange: (id: string) => void;
+  /** Nom personnalisé à donner au nouveau compte, à la place du nom auto-généré (ignoré si value n'est pas "" — un compte existant est choisi). */
+  nomPersonnalise: string;
+  onChangeNomPersonnalise: (nom: string) => void;
   idPrefix: string;
   label: string;
 }
@@ -46,12 +49,26 @@ interface CompteSelectProps {
  * ResoudreCompte côté backend : rang suivant parmi les comptes déjà
  * existants pour ce détenteur et cette société, toutes Catégories
  * confondues) — un aperçu, pas une réservation : le nom réel est recalculé
- * à l'enregistrement. Un détenteur hors groupe (ou non renseigné, detenteurId
- * null) n'a jamais de compte ni de lot suivi — même règle que
- * ComptesService.ResoudreCompte/TitresLotsService côté serveur : le
- * sélecteur n'apparaît alors pas du tout.
+ * à l'enregistrement, sauf si un nom personnalisé est saisi dans le champ
+ * qui apparaît alors juste en dessous — remplace le nom auto-généré, voir
+ * ComptesService.ResoudreCompte côté serveur. Un détenteur hors groupe (ou
+ * non renseigné, detenteurId null) n'a jamais de compte ni de lot suivi —
+ * même règle que ComptesService.ResoudreCompte/TitresLotsService côté
+ * serveur : le sélecteur n'apparaît alors pas du tout.
  */
-function CompteSelect({ comptes, detenteurId, societeEmettriceId, nomSociete, categorie, value, onChange, idPrefix, label }: CompteSelectProps) {
+function CompteSelect({
+  comptes,
+  detenteurId,
+  societeEmettriceId,
+  nomSociete,
+  categorie,
+  value,
+  onChange,
+  nomPersonnalise,
+  onChangeNomPersonnalise,
+  idPrefix,
+  label,
+}: CompteSelectProps) {
   if (detenteurId === null) {
     return (
       <div className="form-field">
@@ -86,6 +103,15 @@ function CompteSelect({ comptes, detenteurId, societeEmettriceId, nomSociete, ca
         ))}
         <option value="">+ Nouveau compte ({nomNouveauCompte})</option>
       </select>
+      {value === "" && (
+        <input
+          type="text"
+          value={nomPersonnalise}
+          onChange={(e) => onChangeNomPersonnalise(e.target.value)}
+          placeholder={`Nom du nouveau compte (${nomNouveauCompte})`}
+          aria-label={`Nom personnalisé du nouveau compte ${label}`}
+        />
+      )}
     </div>
   );
 }
@@ -120,7 +146,10 @@ export function TransactionLignesEditor({
   }
 
   function ajouterLigne() {
-    onChange([...lignes, { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "" }]);
+    onChange([
+      ...lignes,
+      { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "", nomCompteAcheteur: "", nomCompteVendeur: "" },
+    ]);
   }
 
   return (
@@ -147,7 +176,7 @@ export function TransactionLignesEditor({
                 {societeEmettriceId &&
                   ligne.nombreActions &&
                   (() => {
-                    const pct = apercuPourcentageActions(Number(ligne.nombreActions), societeEmettriceId, date, historiqueTotaux);
+                    const pct = apercuPourcentageActions(Number(ligne.nombreActions), societeEmettriceId, date, historiqueTotaux, types);
                     return pct === null ? null : <span className="label-hint label-hint-pourcentage"> ({formatPourcentage(pct)})</span>;
                   })()}
               </label>
@@ -169,6 +198,8 @@ export function TransactionLignesEditor({
               categorie={ligne.categorie}
               value={ligne.compteAcheteurId}
               onChange={(id) => modifierLigne(i, { compteAcheteurId: id })}
+              nomPersonnalise={ligne.nomCompteAcheteur}
+              onChangeNomPersonnalise={(nom) => modifierLigne(i, { nomCompteAcheteur: nom })}
               idPrefix={`${idPrefix}-${i}-compte-acheteur`}
               label="acheteur"
             />
@@ -180,6 +211,8 @@ export function TransactionLignesEditor({
               categorie={ligne.categorie}
               value={ligne.compteVendeurId}
               onChange={(id) => modifierLigne(i, { compteVendeurId: id })}
+              nomPersonnalise={ligne.nomCompteVendeur}
+              onChangeNomPersonnalise={(nom) => modifierLigne(i, { nomCompteVendeur: nom })}
               idPrefix={`${idPrefix}-${i}-compte-vendeur`}
               label="vendeur"
             />

@@ -16,17 +16,17 @@ static class HistoriqueTotauxService
     {
         var parents = (await conn.QueryAsync<HistoriqueTotalSocieteSansDetail>(
             "SELECT Id, SocieteId, CONVERT(varchar(10), DateEffet, 23) AS DateEffet, " +
-            "NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable " +
+            "NombreTotalDroitVoteTheorique, NombreTotalDroitVoteExercable, Devise " +
             "FROM dbo.HistoriqueTotauxSociete ORDER BY DateEffet")).ToList();
         var lignes = await conn.QueryAsync<LigneActionsParTypeAvecParent>(
-            "SELECT HistoriqueTotalSocieteId, Type, Quantite FROM dbo.HistoriqueTotalActionsType");
+            "SELECT HistoriqueTotalSocieteId, Type, Quantite, ValeurNominale FROM dbo.HistoriqueTotalActionsType");
         var lignesParParent = lignes
             .GroupBy(l => l.HistoriqueTotalSocieteId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<LigneActionsParType>)g.Select(l => new LigneActionsParType(l.Type, l.Quantite)).ToList());
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<LigneActionsParType>)g.Select(l => new LigneActionsParType(l.Type, l.Quantite, l.ValeurNominale)).ToList());
 
         return parents
             .Select(p => new HistoriqueTotalSociete(
-                p.Id, p.SocieteId, p.DateEffet, p.NombreTotalDroitVoteTheorique, p.NombreTotalDroitVoteExercable,
+                p.Id, p.SocieteId, p.DateEffet, p.NombreTotalDroitVoteTheorique, p.NombreTotalDroitVoteExercable, p.Devise,
                 lignesParParent.GetValueOrDefault(p.Id, Array.Empty<LigneActionsParType>())))
             .ToList();
     }

@@ -1,4 +1,4 @@
-import type { HistoriqueTotalSociete, Transaction } from "../types";
+import type { HistoriqueTotalSociete, Transaction, TypeTitre } from "../types";
 
 export type Metrique =
   | "capital"
@@ -30,10 +30,17 @@ function ligneADate(historique: HistoriqueTotalSociete[], societeId: string, dat
  * Le nombre total d'actions n'est pas un champ direct sur une ligne
  * d'historique : c'est la somme de ses lignes actionsParType (ventilation
  * par Type, voir HistoriqueTotalSociete dans types.ts). Null si la ligne
- * n'a aucune ligne de détail, ou si leur somme est nulle.
+ * n'a aucune ligne de détail, ou si leur somme est nulle. Une Catégorie
+ * marquée "ne rentre pas dans le capital" (TypeTitre.rentreDansCapital ===
+ * false) est exclue de la somme — une Catégorie absente de `types` est
+ * comptée par défaut (comportement préservé pour des données historiques).
  */
-function totalActions(ligne: HistoriqueTotalSociete): number | null {
-  const somme = ligne.actionsParType.reduce((s, l) => s + l.quantite, 0);
+function totalActions(ligne: HistoriqueTotalSociete, types: TypeTitre[]): number | null {
+  const rentreDansCapital = new Map(types.map((t) => [t.nom, t.rentreDansCapital]));
+  const somme = ligne.actionsParType.reduce(
+    (s, l) => s + (rentreDansCapital.get(l.type ?? "") === false ? 0 : l.quantite),
+    0,
+  );
   return somme > 0 ? somme : null;
 }
 
@@ -52,17 +59,29 @@ function totalActions(ligne: HistoriqueTotalSociete): number | null {
  * anciennes transactions en quantité équivalente avant que les colonnes ne
  * soient retirées).
  */
-function extrairePourcentageCapital(nombre: number | null, cibleId: string, date: string, historique: HistoriqueTotalSociete[]): number | null {
+function extrairePourcentageCapital(
+  nombre: number | null,
+  cibleId: string,
+  date: string,
+  historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
+): number | null {
   if (nombre === null) return null;
   const ligne = ligneADate(historique, cibleId, date);
-  const total = ligne && totalActions(ligne);
+  const total = ligne && totalActions(ligne, types);
   if (!total) return null;
   return (nombre / total) * 100;
 }
 
 /** Aperçu en direct du % capital qu'une quantité d'actions représenterait (formulaire de transaction, avant enregistrement). */
-export function apercuPourcentageActions(nombre: number | null, cibleId: string, date: string, historique: HistoriqueTotalSociete[]): number | null {
-  return extrairePourcentageCapital(nombre, cibleId, date, historique);
+export function apercuPourcentageActions(
+  nombre: number | null,
+  cibleId: string,
+  date: string,
+  historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
+): number | null {
+  return extrairePourcentageCapital(nombre, cibleId, date, historique, types);
 }
 
 function extrairePourcentageDroitVote(
@@ -109,10 +128,13 @@ function nombreActionsTotal(t: Transaction): number {
  */
 const METRIQUES: Record<
   Metrique,
-  { extraire: (t: Transaction, historique: HistoriqueTotalSociete[]) => number | null; chainable: boolean }
+  {
+    extraire: (t: Transaction, historique: HistoriqueTotalSociete[], types: TypeTitre[]) => number | null;
+    chainable: boolean;
+  }
 > = {
   capital: {
-    extraire: (t, historique) => extrairePourcentageCapital(nombreActionsTotal(t), t.cibleId, t.date, historique),
+    extraire: (t, historique, types) => extrairePourcentageCapital(nombreActionsTotal(t), t.cibleId, t.date, historique, types),
     chainable: true,
   },
   droitVoteTheorique: {
@@ -137,8 +159,13 @@ const METRIQUES: Record<
  * l'affichage brut d'une transaction (tableau des transactions),
  * indépendamment de tout agrégat par actionnaire.
  */
-export function extraireValeurTransaction(t: Transaction, metrique: Metrique, historique: HistoriqueTotalSociete[]): number | null {
-  return METRIQUES[metrique].extraire(t, historique);
+export function extraireValeurTransaction(
+  t: Transaction,
+  metrique: Metrique,
+  historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
+): number | null {
+  return METRIQUES[metrique].extraire(t, historique, types);
 }
 
 export interface Participation {
@@ -168,6 +195,7 @@ export function calculerParticipations(
   transactions: Transaction[],
   metrique: Metrique,
   historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
   dateLimite?: string,
 ): Participation[] {
   const extraire = METRIQUES[metrique].extraire;
@@ -187,7 +215,7 @@ export function calculerParticipations(
   }
 
   for (const t of transactionsPertinentes) {
-    const valeur = extraire(t, historique);
+    const valeur = extraire(t, historique, types);
     if (valeur === null || valeur === undefined) continue;
     // Un acheteur hors groupe (acheteurId null, nom libre) n'est pas une
     // société suivie : impossible de le faire figurer comme actionnaire
@@ -217,9 +245,10 @@ function construireDirect(
   transactions: Transaction[],
   metrique: Metrique,
   historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
   dateLimite?: string,
 ): Map<string, Map<string, number>> {
-  const directs = calculerParticipations(transactions, metrique, historique, dateLimite);
+  const directs = calculerParticipations(transactions, metrique, historique, types, dateLimite);
   const direct = new Map<string, Map<string, number>>();
   directs.forEach((p) => {
     if (!direct.has(p.acheteurId)) direct.set(p.acheteurId, new Map());
@@ -249,9 +278,10 @@ export function calculerParticipationsDetaillees(
   transactions: Transaction[],
   metrique: Metrique,
   historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
   dateLimite?: string,
 ): ParticipationDetaillee[] {
-  const direct = construireDirect(transactions, metrique, historique, dateLimite);
+  const direct = construireDirect(transactions, metrique, historique, types, dateLimite);
 
   if (!METRIQUES[metrique].chainable) {
     const resultat: ParticipationDetaillee[] = [];
@@ -331,9 +361,10 @@ export function calculerCheminsParticipation(
   cibleId: string,
   metrique: Metrique,
   historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
   dateLimite?: string,
 ): CheminParticipation[] {
-  const direct = construireDirect(transactions, metrique, historique, dateLimite);
+  const direct = construireDirect(transactions, metrique, historique, types, dateLimite);
 
   if (!METRIQUES[metrique].chainable) {
     const valeur = direct.get(acheteurId)?.get(cibleId);
@@ -394,6 +425,7 @@ export function valeurGlobale(
   transactions: Transaction[],
   metrique: Metrique,
   historique: HistoriqueTotalSociete[],
+  types: TypeTitre[],
   dateLimite?: string,
 ): number | null {
   const extraire = METRIQUES[metrique].extraire;
@@ -403,7 +435,7 @@ export function valeurGlobale(
   let somme = 0;
   let trouve = false;
   for (const t of pertinentes) {
-    const valeur = extraire(t, historique);
+    const valeur = extraire(t, historique, types);
     if (valeur === null || valeur === undefined) continue;
     trouve = true;
     if (t.acheteurId !== null) somme += valeur;

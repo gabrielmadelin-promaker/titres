@@ -92,12 +92,14 @@ static class TransactionsService
         foreach (var ligne in input.Lignes!)
         {
             var (erreurA, compteAcheteurId) = await ComptesService.ResoudreCompte(
-                conn, tx, ligne.CompteAcheteurId, input.AcheteurId, acheteurNomExterne, input.CibleId, nomCible, ligne.Categorie, "acheteur");
+                conn, tx, ligne.CompteAcheteurId, input.AcheteurId, acheteurNomExterne, input.CibleId, nomCible, ligne.Categorie, "acheteur",
+                ligne.NomCompteAcheteur);
             if (erreurA is not null)
                 return (erreurA, null);
 
             var (erreurV, compteVendeurId) = await ComptesService.ResoudreCompte(
-                conn, tx, ligne.CompteVendeurId, input.VendeurId, vendeurNomExterne, input.CibleId, nomCible, ligne.Categorie, "vendeur");
+                conn, tx, ligne.CompteVendeurId, input.VendeurId, vendeurNomExterne, input.CibleId, nomCible, ligne.Categorie, "vendeur",
+                ligne.NomCompteVendeur);
             if (erreurV is not null)
                 return (erreurV, null);
 
@@ -125,11 +127,17 @@ static class TransactionsService
             "FROM dbo.HistoriqueTotauxSociete WHERE SocieteId = @cibleId AND DateEffet <= @date ORDER BY DateEffet DESC",
             new { cibleId = input.CibleId, date = input.Date });
         // Le total d'actions n'est pas une colonne : c'est la somme des lignes
-        // de détail par Type de cette ligne d'historique (voir HistoriqueTotauxService.ChargerHistoriqueTotaux).
+        // de détail par Type de cette ligne d'historique (voir HistoriqueTotauxService.ChargerHistoriqueTotaux),
+        // à l'exclusion des Catégories marquées RentreDansCapital = 0 dans
+        // dbo.Types (par nom — une Catégorie non répertoriée y est comptée
+        // par défaut, comme avant l'ajout de ce indicateur).
         var totalActions = totaux is null
             ? null
             : await conn.ExecuteScalarAsync<decimal?>(
-                "SELECT SUM(Quantite) FROM dbo.HistoriqueTotalActionsType WHERE HistoriqueTotalSocieteId = @id", new { id = totaux.Id });
+                "SELECT SUM(hpt.Quantite) FROM dbo.HistoriqueTotalActionsType hpt " +
+                "LEFT JOIN dbo.Types ty ON ty.Nom = hpt.Type " +
+                "WHERE hpt.HistoriqueTotalSocieteId = @id AND ISNULL(ty.RentreDansCapital, 1) = 1",
+                new { id = totaux.Id });
 
         var lignes = (await conn.QueryAsync<LigneParticipation>(
             "SELECT t.AcheteurId, t.VendeurId, " +

@@ -11,9 +11,11 @@ interface Props {
 /**
  * Éditeur du nombre d'actions d'une société ventilé par Type (ex. 10 de
  * Type A + 20 de Type B + 30 de Type C = 60 — voir HistoriqueTotalSociete
- * dans types.ts) : une ligne par Type, total calculé en lecture seule.
- * Partagé entre SocieteForm (totaux à la création) et HistoriqueTotauxPanel
- * (totaux par date d'effet).
+ * dans types.ts) : une ligne par Type, total calculé en lecture seule. Porte
+ * aussi la Valeur nominale de chaque Catégorie (propre à la Catégorie, pas
+ * à la société — sa devise est celle, unique, de toute la ligne de Totaux,
+ * voir HistoriqueTotalSociete.devise). Partagé entre SocieteForm (totaux à
+ * la création) et HistoriqueTotauxPanel (totaux par date d'effet).
  */
 export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Props) {
   const total = lignes.reduce((s, l) => s + (Number.isFinite(l.quantite) ? l.quantite : 0), 0);
@@ -27,7 +29,7 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
   }
 
   function ajouterLigne() {
-    onChange([...lignes, { type: null, quantite: 0 }]);
+    onChange([...lignes, { type: null, quantite: 0, valeurNominale: null }]);
   }
 
   return (
@@ -52,6 +54,15 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
             onChange={(e) => modifierLigne(i, { quantite: e.target.value ? Number(e.target.value) : 0 })}
             placeholder="Nombre d'actions"
             aria-label={`Quantité de la ligne ${i + 1}`}
+          />
+          <input
+            type="number"
+            step="0.0001"
+            min="0"
+            value={ligne.valeurNominale ?? ""}
+            onChange={(e) => modifierLigne(i, { valeurNominale: e.target.value ? Number(e.target.value) : null })}
+            placeholder="Valeur nominale"
+            aria-label={`Valeur nominale de la ligne ${i + 1}`}
           />
           <button type="button" className="btn btn-secondary btn-small" onClick={() => retirerLigne(i)} aria-label="Retirer cette ligne">
             ×

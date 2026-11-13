@@ -6,6 +6,10 @@ const decimalFormatter = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 4,
 });
 
+const nombreActionsFormatter = new Intl.NumberFormat("fr-FR", {
+  maximumFractionDigits: 2,
+});
+
 // Un formateur par devise (construit à la demande, puis réutilisé) : Intl.NumberFormat
 // est coûteux à instancier, inutile de le refaire à chaque appel de formatMontant.
 const montantFormatters = new Map<string, Intl.NumberFormat>();
@@ -13,7 +17,7 @@ const montantFormatters = new Map<string, Intl.NumberFormat>();
 function montantFormatter(devise: string): Intl.NumberFormat {
   let formatter = montantFormatters.get(devise);
   if (!formatter) {
-    formatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: devise, maximumFractionDigits: 2 });
+    formatter = new Intl.NumberFormat("fr-FR", { style: "currency", currency: devise, maximumFractionDigits: 4 });
     montantFormatters.set(devise, formatter);
   }
   return formatter;
@@ -30,12 +34,17 @@ export function formatPourcentage(value: number): string {
   return `${percentFormatter.format(value)} %`;
 }
 
-/** Nombre décimal quelconque (ex. nombre d'actions, valeur nominale), jusqu'à 4 décimales. */
+/** Nombre décimal quelconque (ex. valeur nominale, droits de vote), jusqu'à 4 décimales. */
 export function formatDecimal(value: number): string {
   return decimalFormatter.format(value);
 }
 
-/** Montant dans la devise donnée (ex. prix d'action, plus-value) — EUR par défaut. */
+/** Nombre d'actions/titres, jusqu'à 2 décimales. */
+export function formatNombreActions(value: number): string {
+  return nombreActionsFormatter.format(value);
+}
+
+/** Montant dans la devise donnée (ex. prix d'action, plus-value), jusqu'à 4 décimales — EUR par défaut. */
 export function formatMontant(value: number, devise = "EUR"): string {
   return montantFormatter(devise).format(value);
 }

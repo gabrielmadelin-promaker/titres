@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../../types";
-import { formatDate, formatDecimal } from "../../utils/format";
+import { DEVISE_PAR_DEFAUT, DEVISES } from "../../utils/devises";
+import { formatDate, formatDecimal, formatNombreActions } from "../../utils/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
 import { exporterXlsx } from "../../utils/xlsxExport";
 import { ActionsParTypeEditor } from "./ActionsParTypeEditor";
@@ -28,8 +29,12 @@ function champVide(): string {
   return "";
 }
 
-function totalActions(lignes: LigneActionsParType[]): number {
-  return lignes.reduce((s, l) => s + l.quantite, 0);
+// Exclut les Catégories marquées "ne rentre pas dans le capital" (même
+// règle que utils/participations.ts, dupliquée ici car ce total est propre
+// à ce composant — pas de dérivation à partir de transactions).
+function totalActions(lignes: LigneActionsParType[], types: TypeTitre[]): number {
+  const rentreDansCapital = new Map(types.map((t) => [t.nom, t.rentreDansCapital]));
+  return lignes.reduce((s, l) => s + (rentreDansCapital.get(l.type ?? "") === false ? 0 : l.quantite), 0);
 }
 
 interface ChampsFormulaireProps {
@@ -37,6 +42,8 @@ interface ChampsFormulaireProps {
   setSocieteId: (v: string) => void;
   dateEffet: string;
   setDateEffet: (v: string) => void;
+  devise: string;
+  setDevise: (v: string) => void;
   actionsParType: LigneActionsParType[];
   setActionsParType: (v: LigneActionsParType[]) => void;
   nombreTotalDroitVoteTheorique: string;
@@ -56,6 +63,8 @@ function ChampsFormulaire({
   setSocieteId,
   dateEffet,
   setDateEffet,
+  devise,
+  setDevise,
   actionsParType,
   setActionsParType,
   nombreTotalDroitVoteTheorique,
@@ -85,6 +94,16 @@ function ChampsFormulaire({
       <div className="form-field">
         <label>Date d'effet</label>
         <input type="date" value={dateEffet} onChange={(e) => setDateEffet(e.target.value)} required />
+      </div>
+      <div className="form-field">
+        <label>Devise de la valeur nominale</label>
+        <select value={devise} onChange={(e) => setDevise(e.target.value)}>
+          {DEVISES.map((d) => (
+            <option key={d.code} value={d.code}>
+              {d.code}
+            </option>
+          ))}
+        </select>
       </div>
       <ActionsParTypeEditor lignes={actionsParType} onChange={setActionsParType} types={types} idPrefix={idPrefix} />
       <div className="form-field">
@@ -128,6 +147,7 @@ interface FormAjoutProps {
 function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille, derniereLigne }: FormAjoutProps) {
   const [societeId, setSocieteId] = useState(societeIdVerrouille ?? champVide());
   const [dateEffet, setDateEffet] = useState(champVide());
+  const [devise, setDevise] = useState(derniereLigne?.devise ?? DEVISE_PAR_DEFAUT);
   const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>(derniereLigne?.actionsParType ?? []);
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(
     derniereLigne?.nombreTotalDroitVoteTheorique?.toString() ?? champVide(),
@@ -142,6 +162,7 @@ function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille, derniere
     const reussi = await onAdd({
       societeId,
       dateEffet,
+      devise,
       actionsParType: actionsParType.filter((l) => l.quantite !== 0),
       nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
       nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
@@ -160,6 +181,8 @@ function FormAjout({ societesTriees, types, onAdd, societeIdVerrouille, derniere
         setSocieteId={setSocieteId}
         dateEffet={dateEffet}
         setDateEffet={setDateEffet}
+        devise={devise}
+        setDevise={setDevise}
         actionsParType={actionsParType}
         setActionsParType={setActionsParType}
         nombreTotalDroitVoteTheorique={nombreTotalDroitVoteTheorique}
@@ -190,6 +213,7 @@ interface LigneEditionProps {
 function LigneEdition({ ligne, societesTriees, types, onSave, onCancel, societeIdVerrouille }: LigneEditionProps) {
   const [societeId, setSocieteId] = useState(ligne.societeId);
   const [dateEffet, setDateEffet] = useState(ligne.dateEffet);
+  const [devise, setDevise] = useState(ligne.devise);
   const [actionsParType, setActionsParType] = useState<LigneActionsParType[]>(ligne.actionsParType);
   const [nombreTotalDroitVoteTheorique, setNombreTotalDroitVoteTheorique] = useState(
     ligne.nombreTotalDroitVoteTheorique?.toString() ?? "",
@@ -204,6 +228,7 @@ function LigneEdition({ ligne, societesTriees, types, onSave, onCancel, societeI
     onSave({
       societeId,
       dateEffet,
+      devise,
       actionsParType: actionsParType.filter((l) => l.quantite !== 0),
       nombreTotalDroitVoteTheorique: nombreTotalDroitVoteTheorique ? Number(nombreTotalDroitVoteTheorique) : null,
       nombreTotalDroitVoteExercable: nombreTotalDroitVoteExercable ? Number(nombreTotalDroitVoteExercable) : null,
@@ -217,6 +242,8 @@ function LigneEdition({ ligne, societesTriees, types, onSave, onCancel, societeI
         setSocieteId={setSocieteId}
         dateEffet={dateEffet}
         setDateEffet={setDateEffet}
+        devise={devise}
+        setDevise={setDevise}
         actionsParType={actionsParType}
         setActionsParType={setActionsParType}
         nombreTotalDroitVoteTheorique={nombreTotalDroitVoteTheorique}
@@ -272,7 +299,7 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
         case "dateEffet":
           return h.dateEffet;
         case "totalActions":
-          return totalActions(h.actionsParType);
+          return totalActions(h.actionsParType, types);
         case "nombreTotalDroitVoteTheorique":
           return h.nombreTotalDroitVoteTheorique ?? -Infinity;
         case "nombreTotalDroitVoteExercable":
@@ -280,7 +307,7 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
       }
     };
     return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
-  }, [filtrees, tri, nomParId]);
+  }, [filtrees, tri, nomParId, types]);
 
   function exporter() {
     return exporterXlsx(
@@ -289,8 +316,13 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
       triees.map((h) => ({
         ...(societeIdVerrouille ? {} : { Société: nomDe(h.societeId) }),
         "Date d'effet": h.dateEffet,
-        "Nombre total d'actions": totalActions(h.actionsParType) || "",
+        Devise: h.devise,
+        "Nombre total d'actions": totalActions(h.actionsParType, types) || "",
         "Détail par Catégorie": h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${l.quantite}`).join(", "),
+        "Valeur nominale par Catégorie": h.actionsParType
+          .filter((l) => l.valeurNominale !== null)
+          .map((l) => `${l.type ?? "(non précisé)"} : ${l.valeurNominale}`)
+          .join(", "),
         "Nombre total de droits de vote théorique": h.nombreTotalDroitVoteTheorique ?? "",
         "Nombre total de droits de vote exerçable": h.nombreTotalDroitVoteExercable ?? "",
       })),
@@ -355,6 +387,7 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
                   Total actions{flecheTri(tri, "totalActions")}
                 </th>
                 <th>Détail par Catégorie</th>
+                <th>Valeur nominale par Catégorie</th>
                 <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "nombreTotalDroitVoteTheorique"))}>
                   Total DV théorique{flecheTri(tri, "nombreTotalDroitVoteTheorique")}
                 </th>
@@ -370,11 +403,21 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
                   <tr>
                     {!societeIdVerrouille && <td>{nomDe(h.societeId)}</td>}
                     <td>{formatDate(h.dateEffet)}</td>
-                    <td className="num">{totalActions(h.actionsParType) === 0 ? "—" : formatDecimal(totalActions(h.actionsParType))}</td>
+                    <td className="num">
+                      {totalActions(h.actionsParType, types) === 0 ? "—" : formatNombreActions(totalActions(h.actionsParType, types))}
+                    </td>
                     <td>
                       {h.actionsParType.length === 0
                         ? "—"
-                        : h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${formatDecimal(l.quantite)}`).join(", ")}
+                        : h.actionsParType.map((l) => `${l.type ?? "(non précisé)"} : ${formatNombreActions(l.quantite)}`).join(", ")}
+                    </td>
+                    <td>
+                      {h.actionsParType.filter((l) => l.valeurNominale !== null).length === 0
+                        ? "—"
+                        : h.actionsParType
+                            .filter((l) => l.valeurNominale !== null)
+                            .map((l) => `${l.type ?? "(non précisé)"} : ${formatDecimal(l.valeurNominale!)} ${h.devise}`)
+                            .join(", ")}
                     </td>
                     <td className="num">
                       {h.nombreTotalDroitVoteTheorique === null ? "—" : formatDecimal(h.nombreTotalDroitVoteTheorique)}
@@ -399,7 +442,7 @@ export function HistoriqueTotauxPanel({ societes, historique, types, onAdd, onUp
                   </tr>
                   {ligneEditee === h.id && (
                     <tr>
-                      <td colSpan={societeIdVerrouille ? 6 : 7}>
+                      <td colSpan={societeIdVerrouille ? 7 : 8}>
                         <LigneEdition
                           ligne={h}
                           societesTriees={societesTriees}

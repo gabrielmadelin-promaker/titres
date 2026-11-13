@@ -1,7 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import type { HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
-import { DEVISES } from "../../utils/devises";
-import { formatDecimal, formatPourcentage } from "../../utils/format";
+import { formatDecimal, formatNombreActions, formatPourcentage } from "../../utils/format";
 import { valeurGlobale } from "../../utils/participations";
 import { PAYS } from "../../utils/pays";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
@@ -22,13 +21,16 @@ interface Props {
 
 type Colonne =
   | "nom"
-  | "valeurNominale"
+  | "isin"
+  | "codeMnemonique"
   | "pays"
   | "siegeSocial"
   | "siren"
   | "lei"
   | "totalActions"
   | "capital"
+  | "dvTheoriqueTotal"
+  | "dvExercableTotal"
   | "dvTheorique"
   | "dvExercable";
 
@@ -40,8 +42,8 @@ interface SocieteEditRowProps {
 
 function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
   const [nom, setNom] = useState(societe.nom);
-  const [valeurNominale, setValeurNominale] = useState(societe.valeurNominale?.toString() ?? "");
-  const [devise, setDevise] = useState(societe.devise);
+  const [isin, setIsin] = useState(societe.isin ?? "");
+  const [codeMnemonique, setCodeMnemonique] = useState(societe.codeMnemonique ?? "");
   const [pays, setPays] = useState(societe.pays ?? "");
   const [siegeSocial, setSiegeSocial] = useState(societe.siegeSocial ?? "");
   const [siren, setSiren] = useState(societe.siren ?? "");
@@ -53,8 +55,8 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
     if (!nomPropre) return;
     onSave({
       nom: nomPropre,
-      valeurNominale: valeurNominale ? Number(valeurNominale) : null,
-      devise,
+      isin: isin.trim() || null,
+      codeMnemonique: codeMnemonique.trim() || null,
       pays: pays || null,
       siegeSocial: siegeSocial.trim() || null,
       siren: siren.trim() || null,
@@ -69,23 +71,12 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
         <input type="text" value={nom} onChange={(e) => setNom(e.target.value)} required />
       </div>
       <div className="form-field">
-        <label>Valeur nominale</label>
-        <div className="form-field-montant">
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            value={valeurNominale}
-            onChange={(e) => setValeurNominale(e.target.value)}
-          />
-          <select aria-label="Devise de la valeur nominale" value={devise} onChange={(e) => setDevise(e.target.value)}>
-            {DEVISES.map((d) => (
-              <option key={d.code} value={d.code}>
-                {d.code}
-              </option>
-            ))}
-          </select>
-        </div>
+        <label>Code ISIN</label>
+        <input type="text" value={isin} onChange={(e) => setIsin(e.target.value)} />
+      </div>
+      <div className="form-field">
+        <label>Code mnémonique</label>
+        <input type="text" value={codeMnemonique} onChange={(e) => setCodeMnemonique(e.target.value)} />
       </div>
       <div className="form-field">
         <label>Pays</label>
@@ -142,12 +133,14 @@ export function SocietesTable({
     () =>
       societes.map((s) => ({
         societe: s,
-        totalActions: valeurGlobale(s.id, transactions, "nombreActions", historiqueTotaux),
-        capital: valeurGlobale(s.id, transactions, "capital", historiqueTotaux),
-        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", historiqueTotaux),
-        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", historiqueTotaux),
+        totalActions: valeurGlobale(s.id, transactions, "nombreActions", historiqueTotaux, types),
+        dvTheoriqueTotal: valeurGlobale(s.id, transactions, "nombreDroitVoteTheorique", historiqueTotaux, types),
+        dvExercableTotal: valeurGlobale(s.id, transactions, "nombreDroitVoteExercable", historiqueTotaux, types),
+        capital: valeurGlobale(s.id, transactions, "capital", historiqueTotaux, types),
+        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", historiqueTotaux, types),
+        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", historiqueTotaux, types),
       })),
-    [societes, transactions, historiqueTotaux],
+    [societes, transactions, historiqueTotaux, types],
   );
 
   const triees = useMemo(() => {
@@ -156,8 +149,10 @@ export function SocietesTable({
       switch (tri.colonne) {
         case "nom":
           return l.societe.nom;
-        case "valeurNominale":
-          return l.societe.valeurNominale ?? -Infinity;
+        case "isin":
+          return l.societe.isin ?? "";
+        case "codeMnemonique":
+          return l.societe.codeMnemonique ?? "";
         case "pays":
           return l.societe.pays ?? "";
         case "siegeSocial":
@@ -168,6 +163,10 @@ export function SocietesTable({
           return l.societe.lei ?? "";
         case "totalActions":
           return l.totalActions ?? -Infinity;
+        case "dvTheoriqueTotal":
+          return l.dvTheoriqueTotal ?? -Infinity;
+        case "dvExercableTotal":
+          return l.dvExercableTotal ?? -Infinity;
         case "capital":
           return l.capital ?? -Infinity;
         case "dvTheorique":
@@ -185,13 +184,15 @@ export function SocietesTable({
       "Sociétés",
       triees.map((l) => ({
         Société: l.societe.nom,
-        "Valeur nominale": l.societe.valeurNominale ?? "",
-        Devise: l.societe.devise,
+        "Code ISIN": l.societe.isin ?? "",
+        "Code mnémonique": l.societe.codeMnemonique ?? "",
         Pays: l.societe.pays ?? "",
         "Siège social": l.societe.siegeSocial ?? "",
         SIREN: l.societe.siren ?? "",
         LEI: l.societe.lei ?? "",
         "Total nombre d'actions": l.totalActions ?? "",
+        "Total DV théorique": l.dvTheoriqueTotal ?? "",
+        "Total DV exerçable": l.dvExercableTotal ?? "",
         "Capital (%)": l.capital ?? "",
         "Droit de vote théorique (%)": l.dvTheorique ?? "",
         "Droit de vote exerçable (%)": l.dvExercable ?? "",
@@ -220,8 +221,11 @@ export function SocietesTable({
               <th className="th-tri" onClick={() => setTri(basculerTri(tri, "nom"))}>
                 Société{flecheTri(tri, "nom")}
               </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "valeurNominale"))}>
-                Valeur nominale{flecheTri(tri, "valeurNominale")}
+              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "isin"))}>
+                Code ISIN{flecheTri(tri, "isin")}
+              </th>
+              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "codeMnemonique"))}>
+                Code mnémonique{flecheTri(tri, "codeMnemonique")}
               </th>
               <th className="th-tri" onClick={() => setTri(basculerTri(tri, "pays"))}>
                 Pays{flecheTri(tri, "pays")}
@@ -238,6 +242,12 @@ export function SocietesTable({
               <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "totalActions"))}>
                 Total actions{flecheTri(tri, "totalActions")}
               </th>
+              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvTheoriqueTotal"))}>
+                Total DV théorique{flecheTri(tri, "dvTheoriqueTotal")}
+              </th>
+              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvExercableTotal"))}>
+                Total DV exerçable{flecheTri(tri, "dvExercableTotal")}
+              </th>
               <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "capital"))}>
                 Capital %{flecheTri(tri, "capital")}
               </th>
@@ -251,18 +261,19 @@ export function SocietesTable({
             </tr>
           </thead>
           <tbody>
-            {triees.map(({ societe, totalActions, capital, dvTheorique, dvExercable }) => (
+            {triees.map(({ societe, totalActions, dvTheoriqueTotal, dvExercableTotal, capital, dvTheorique, dvExercable }) => (
               <Fragment key={societe.id}>
                 <tr>
                   <td>{societe.nom}</td>
-                  <td className="num">
-                    {societe.valeurNominale === null ? "—" : `${formatDecimal(societe.valeurNominale)} ${societe.devise}`}
-                  </td>
+                  <td>{societe.isin ?? "—"}</td>
+                  <td>{societe.codeMnemonique ?? "—"}</td>
                   <td>{societe.pays ?? "—"}</td>
                   <td>{societe.siegeSocial ?? "—"}</td>
                   <td>{societe.siren ?? "—"}</td>
                   <td>{societe.lei ?? "—"}</td>
-                  <td className="num">{totalActions === null ? "—" : formatDecimal(totalActions)}</td>
+                  <td className="num">{totalActions === null ? "—" : formatNombreActions(totalActions)}</td>
+                  <td className="num">{dvTheoriqueTotal === null ? "—" : formatDecimal(dvTheoriqueTotal)}</td>
+                  <td className="num">{dvExercableTotal === null ? "—" : formatDecimal(dvExercableTotal)}</td>
                   <td className={`num ${capital !== null && capital > 100 ? "warning" : ""}`}>
                     {capital === null ? "—" : formatPourcentage(capital)}
                   </td>
@@ -292,7 +303,7 @@ export function SocietesTable({
                 </tr>
                 {ligneEditee === societe.id && (
                   <tr>
-                    <td colSpan={11}>
+                    <td colSpan={14}>
                       <SocieteEditRow
                         societe={societe}
                         onCancel={() => setLigneEditee(null)}
@@ -306,7 +317,7 @@ export function SocietesTable({
                 )}
                 {totauxOuverts === societe.id && (
                   <tr>
-                    <td colSpan={11}>
+                    <td colSpan={14}>
                       <HistoriqueTotauxPanel
                         societes={societes}
                         historique={historiqueTotaux}

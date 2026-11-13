@@ -14,16 +14,15 @@ USE CalculDesTitres;
 GO
 
 CREATE TABLE dbo.Societes (
-    Id            UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
-    Nom           NVARCHAR(200)    NOT NULL,
-    ValeurNominale DECIMAL(18,4)   NULL,
-    -- Devise de ValeurNominale (code ISO 4217, ex. EUR, USD) ; sans incidence
-    -- tant que ValeurNominale est NULL.
-    Devise        NVARCHAR(3)      NOT NULL CONSTRAINT DF_Societes_Devise DEFAULT 'EUR',
-    Pays          NVARCHAR(100)    NULL,
-    SiegeSocial   NVARCHAR(300)    NULL,
-    Siren         NVARCHAR(20)     NULL,
-    Lei           NVARCHAR(20)     NULL
+    Id             UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Societes PRIMARY KEY DEFAULT NEWID(),
+    Nom            NVARCHAR(200)    NOT NULL,
+    -- Identifiants de place : code ISIN et code mnémonique (ticker) du titre.
+    Isin           NVARCHAR(12)     NULL,
+    CodeMnemonique NVARCHAR(20)     NULL,
+    Pays           NVARCHAR(100)    NULL,
+    SiegeSocial    NVARCHAR(300)    NULL,
+    Siren          NVARCHAR(20)     NULL,
+    Lei            NVARCHAR(20)     NULL
 );
 GO
 
@@ -45,6 +44,11 @@ CREATE TABLE dbo.HistoriqueTotauxSociete (
     DateEffet                      DATE             NOT NULL,
     NombreTotalDroitVoteTheorique  DECIMAL(18,4)    NULL,
     NombreTotalDroitVoteExercable  DECIMAL(18,4)    NULL,
+    -- Devise (code ISO 4217) de la ValeurNominale par Catégorie ventilée
+    -- dans HistoriqueTotalActionsType plus bas : une seule par date d'effet,
+    -- une société n'émettant pas ses classes d'actions dans des devises
+    -- différentes en pratique.
+    Devise                         NVARCHAR(3)      NOT NULL CONSTRAINT DF_HistoriqueTotauxSociete_Devise DEFAULT 'EUR',
     CONSTRAINT UQ_HistoriqueTotauxSociete_SocieteDate UNIQUE (SocieteId, DateEffet)
 );
 GO
@@ -56,8 +60,10 @@ GO
 -- nourrir des suggestions sur ces champs, qui restent du texte libre (pas
 -- une liste fermée) — ajout possible depuis l'application.
 CREATE TABLE dbo.Types (
-    Id  UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Types PRIMARY KEY DEFAULT NEWID(),
-    Nom NVARCHAR(50)     NOT NULL,
+    Id                UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Types PRIMARY KEY DEFAULT NEWID(),
+    Nom               NVARCHAR(50)     NOT NULL,
+    -- Si faux, cette Catégorie n'entre pas dans le total d'actions (dénominateur du % Capital).
+    RentreDansCapital BIT              NOT NULL CONSTRAINT DF_Types_RentreDansCapital DEFAULT 1,
     CONSTRAINT UQ_Types_Nom UNIQUE (Nom)
 );
 GO
@@ -102,6 +108,8 @@ CREATE TABLE dbo.HistoriqueTotalActionsType (
                                  REFERENCES dbo.HistoriqueTotauxSociete (Id) ON DELETE CASCADE,
     Type                     NVARCHAR(50)     NULL,
     Quantite                 DECIMAL(18,4)    NOT NULL,
+    -- Valeur nominale de cette Catégorie à cette date d'effet (devise : voir HistoriqueTotauxSociete.Devise).
+    ValeurNominale           DECIMAL(18,4)    NULL,
     CONSTRAINT UQ_HistoriqueTotalActionsType UNIQUE (HistoriqueTotalSocieteId, Type)
 );
 GO

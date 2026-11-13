@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
-import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction } from "../../types";
-import { formatDecimal, formatPourcentage } from "../../utils/format";
+import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../../types";
+import { formatNombreActions, formatPourcentage } from "../../utils/format";
 import {
   calculerCheminsParticipation,
   calculerParticipationsDetaillees,
@@ -14,6 +14,7 @@ interface Props {
   societes: Societe[];
   historiqueTotaux: HistoriqueTotalSociete[];
   transactions: Transaction[];
+  types: TypeTitre[];
   comptes: Compte[];
   /** Lots de titres (dbo.Actions) : seule source du détail par Compte — pas de suivi par Compte pour les droits de vote. */
   titres: Titre[];
@@ -27,7 +28,7 @@ interface GroupeMetrique {
 }
 
 const GROUPES: GroupeMetrique[] = [
-  { metrique: "nombreActions", libelle: "Nombre d'actions", chainable: false, formatValeur: formatDecimal },
+  { metrique: "nombreActions", libelle: "Nombre d'actions", chainable: false, formatValeur: formatNombreActions },
   { metrique: "capital", libelle: "Capital (%)", chainable: true, formatValeur: formatPourcentage },
   {
     metrique: "droitVoteTheorique",
@@ -74,6 +75,7 @@ function largeurPourGroupe(g: GroupeMetrique, afficherDetail: boolean): number {
 interface DetailCheminsProps {
   transactions: Transaction[];
   historiqueTotaux: HistoriqueTotalSociete[];
+  types: TypeTitre[];
   acheteurId: string;
   cibleId: string;
   metrique: Metrique;
@@ -82,10 +84,10 @@ interface DetailCheminsProps {
 }
 
 /** Cascade des chemins de détention (direct + indirects) qui composent la valeur totale d'une métrique. */
-function DetailChemins({ transactions, historiqueTotaux, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
+function DetailChemins({ transactions, historiqueTotaux, types, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
   const chemins = useMemo(
-    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique, historiqueTotaux),
-    [transactions, historiqueTotaux, acheteurId, cibleId, metrique],
+    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique, historiqueTotaux, types),
+    [transactions, historiqueTotaux, types, acheteurId, cibleId, metrique],
   );
   const affiches = chemins.slice(0, MAX_CHEMINS_AFFICHES);
   const reste = chemins.slice(MAX_CHEMINS_AFFICHES);
@@ -160,7 +162,7 @@ function detailParCompte(titres: Titre[], comptes: Compte[], acheteurId: string,
 }
 
 /** Qui détient combien du capital de qui, y compris indirectement via des chaînes de participation. */
-export function ParticipationsTable({ societes, historiqueTotaux, transactions, comptes, titres }: Props) {
+export function ParticipationsTable({ societes, historiqueTotaux, transactions, types, comptes, titres }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "acheteur", sens: "asc" });
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");
   const [filtreDetenueId, setFiltreDetenueId] = useState("");
@@ -200,11 +202,11 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
   const parMetrique = useMemo(() => {
     const map = new Map<Metrique, Map<string, ParticipationDetaillee>>();
     for (const g of GROUPES) {
-      const detail = calculerParticipationsDetaillees(transactions, g.metrique, historiqueTotaux);
+      const detail = calculerParticipationsDetaillees(transactions, g.metrique, historiqueTotaux, types);
       map.set(g.metrique, new Map(detail.map((d) => [`${d.acheteurId}::${d.cibleId}`, d])));
     }
     return map;
-  }, [transactions, historiqueTotaux]);
+  }, [transactions, historiqueTotaux, types]);
 
   // La liste des couples (actionnaire, cible) à afficher est l'union de ce
   // que chaque métrique a pu produire — une métrique facultative (nombre
@@ -477,6 +479,7 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                         <DetailChemins
                           transactions={transactions}
                           historiqueTotaux={historiqueTotaux}
+                          types={types}
                           acheteurId={p.acheteurId}
                           cibleId={p.cibleId}
                           metrique={ouvert.metrique}
@@ -519,7 +522,7 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                                         {l.nom}
                                         {l.categorie && <span className="chemins-pct"> ({l.categorie})</span>}
                                       </span>
-                                      <span className="chemins-contribution">{formatDecimal(l.quantite)}</span>
+                                      <span className="chemins-contribution">{formatNombreActions(l.quantite)}</span>
                                     </li>
                                   ))}
                                 </ul>
@@ -527,7 +530,7 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                             )}
                             {quantiteSansCompte > 0 && (
                               <p className="chemins-reste">
-                                + {formatDecimal(quantiteSansCompte)} titre{quantiteSansCompte > 1 ? "s" : ""}{" "}
+                                + {formatNombreActions(quantiteSansCompte)} titre{quantiteSansCompte > 1 ? "s" : ""}{" "}
                                 {nomDe(p.acheteurId)} → {nomDe(p.cibleId)} sur des lots sans Compte rattaché
                                 (probablement antérieurs à l'introduction des Comptes) — non attribuable à un Compte
                                 précis sans correction des données.

@@ -127,8 +127,13 @@ export function fetchTypes(): Promise<TypeTitre[]> {
 }
 
 /** Ajoute une catégorie suggérée. */
-export function creerType(nom: string): Promise<TypeTitre> {
-  return request("/types", { method: "POST", body: JSON.stringify({ nom }) });
+export function creerType(nom: string, rentreDansCapital = true): Promise<TypeTitre> {
+  return request("/types", { method: "POST", body: JSON.stringify({ nom, rentreDansCapital }) });
+}
+
+/** Modifie le nom et/ou le booléen "Rentre dans le capital" d'une catégorie existante. */
+export function modifierType(id: string, nom: string, rentreDansCapital: boolean): Promise<void> {
+  return request(`/types/${id}`, { method: "PUT", body: JSON.stringify({ nom, rentreDansCapital }) });
 }
 
 /** Supprime une catégorie suggérée (sans effet sur les transactions/totaux qui la référencent déjà en texte libre). */
