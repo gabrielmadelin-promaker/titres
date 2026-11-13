@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState } from "react";
-import type { HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import * as api from "../../api/client";
+import type { CoursCloture, HistoriqueTotalSociete, Societe, Transaction, TypeTitre } from "../../types";
 import { formatDecimal, formatNombreActions, formatPourcentage } from "../../utils/format";
 import { valeurGlobale } from "../../utils/participations";
 import { PAYS } from "../../utils/pays";
@@ -19,8 +20,24 @@ interface Props {
   onDeleteHistoriqueTotal: (id: string) => void;
 }
 
-type Colonne =
-  | "nom"
+/** Une ligne affichée dans le tableau : la Société, et toutes les valeurs dérivées (totaux, %, cours). */
+interface LigneAffichee {
+  societe: Societe;
+  totalActions: number | null;
+  cloturePrecedente: number | null;
+  coursErreur: string | null;
+  valorisation: number | null;
+  dvTheoriqueTotal: number | null;
+  dvExercableTotal: number | null;
+  capital: number | null;
+  dvTheorique: number | null;
+  dvExercable: number | null;
+}
+
+// Les colonnes facultatives (masquables individuellement, voir COLONNES
+// ci-dessous) — "nom" (toujours affichée en premier) et les boutons
+// d'action (toujours en dernier) ne sont pas de celles-ci.
+type ColonneId =
   | "isin"
   | "codeMnemonique"
   | "pays"
@@ -28,11 +45,129 @@ type Colonne =
   | "siren"
   | "lei"
   | "totalActions"
-  | "capital"
+  | "cloturePrecedente"
+  | "valorisation"
   | "dvTheoriqueTotal"
   | "dvExercableTotal"
+  | "capital"
   | "dvTheorique"
   | "dvExercable";
+
+type Colonne = "nom" | ColonneId;
+
+interface ColonneDef {
+  id: ColonneId;
+  label: string;
+  num?: boolean;
+  /** Valeur brute : sert à la fois au tri et à l'export xlsx (nombre non formaté, ou chaîne/"" pour une colonne texte). */
+  valeur: (l: LigneAffichee) => string | number | null;
+  afficher: (l: LigneAffichee) => ReactNode;
+  classeCellule?: (l: LigneAffichee) => string;
+}
+
+// Colonnes configurables : chacune peut être masquée/affichée via la case
+// "Colonnes affichées" (voir colonnesVisibles ci-dessous), choix mémorisé
+// dans le navigateur (localStorage) d'un affichage à l'autre.
+const COLONNES: ColonneDef[] = [
+  { id: "isin", label: "Code ISIN", valeur: (l) => l.societe.isin ?? "", afficher: (l) => l.societe.isin ?? "—" },
+  {
+    id: "codeMnemonique",
+    label: "Code mnémonique",
+    valeur: (l) => l.societe.codeMnemonique ?? "",
+    afficher: (l) => l.societe.codeMnemonique ?? "—",
+  },
+  { id: "pays", label: "Pays", valeur: (l) => l.societe.pays ?? "", afficher: (l) => l.societe.pays ?? "—" },
+  {
+    id: "siegeSocial",
+    label: "Siège social",
+    valeur: (l) => l.societe.siegeSocial ?? "",
+    afficher: (l) => l.societe.siegeSocial ?? "—",
+  },
+  { id: "siren", label: "SIREN", valeur: (l) => l.societe.siren ?? "", afficher: (l) => l.societe.siren ?? "—" },
+  { id: "lei", label: "LEI", valeur: (l) => l.societe.lei ?? "", afficher: (l) => l.societe.lei ?? "—" },
+  {
+    id: "totalActions",
+    label: "Total actions",
+    num: true,
+    valeur: (l) => l.totalActions,
+    afficher: (l) => (l.totalActions === null ? "—" : formatNombreActions(l.totalActions)),
+  },
+  {
+    id: "cloturePrecedente",
+    label: "Clôture veille",
+    num: true,
+    valeur: (l) => l.cloturePrecedente,
+    afficher: (l) =>
+      l.cloturePrecedente === null ? (
+        <span title={l.coursErreur ?? "Code mnémonique non renseigné."}>—</span>
+      ) : (
+        formatDecimal(l.cloturePrecedente)
+      ),
+  },
+  {
+    id: "valorisation",
+    label: "Valorisation (actions × clôture veille)",
+    num: true,
+    valeur: (l) => l.valorisation,
+    afficher: (l) => (l.valorisation === null ? "—" : formatDecimal(l.valorisation)),
+  },
+  {
+    id: "dvTheoriqueTotal",
+    label: "Total DV théorique",
+    num: true,
+    valeur: (l) => l.dvTheoriqueTotal,
+    afficher: (l) => (l.dvTheoriqueTotal === null ? "—" : formatDecimal(l.dvTheoriqueTotal)),
+  },
+  {
+    id: "dvExercableTotal",
+    label: "Total DV exerçable",
+    num: true,
+    valeur: (l) => l.dvExercableTotal,
+    afficher: (l) => (l.dvExercableTotal === null ? "—" : formatDecimal(l.dvExercableTotal)),
+  },
+  {
+    id: "capital",
+    label: "Capital %",
+    num: true,
+    valeur: (l) => l.capital,
+    afficher: (l) => (l.capital === null ? "—" : formatPourcentage(l.capital)),
+    classeCellule: (l) => (l.capital !== null && l.capital > 100 ? "warning" : ""),
+  },
+  {
+    id: "dvTheorique",
+    label: "DV théorique %",
+    num: true,
+    valeur: (l) => l.dvTheorique,
+    afficher: (l) => (l.dvTheorique === null ? "—" : formatPourcentage(l.dvTheorique)),
+  },
+  {
+    id: "dvExercable",
+    label: "DV exerçable %",
+    num: true,
+    valeur: (l) => l.dvExercable,
+    afficher: (l) => (l.dvExercable === null ? "—" : formatPourcentage(l.dvExercable)),
+  },
+];
+
+const CLE_COLONNES_VISIBLES = "titres_societes_colonnes_visibles";
+
+function lireColonnesVisibles(): Set<ColonneId> {
+  try {
+    const brut = localStorage.getItem(CLE_COLONNES_VISIBLES);
+    if (brut) return new Set(JSON.parse(brut) as ColonneId[]);
+  } catch {
+    // Stockage indisponible (navigation privée...) : repli sur "tout affiché".
+  }
+  return new Set(COLONNES.map((c) => c.id));
+}
+
+function ecrireColonnesVisibles(colonnes: Set<ColonneId>) {
+  try {
+    localStorage.setItem(CLE_COLONNES_VISIBLES, JSON.stringify([...colonnes]));
+  } catch {
+    // Sans conséquence : le choix ne survivra pas à un rechargement.
+  }
+}
 
 interface SocieteEditRowProps {
   societe: Societe;
@@ -76,7 +211,13 @@ function SocieteEditRow({ societe, onSave, onCancel }: SocieteEditRowProps) {
       </div>
       <div className="form-field">
         <label>Code mnémonique</label>
-        <input type="text" value={codeMnemonique} onChange={(e) => setCodeMnemonique(e.target.value)} />
+        <input
+          type="text"
+          value={codeMnemonique}
+          onChange={(e) => setCodeMnemonique(e.target.value)}
+          placeholder="Ex : MC.PA (EODHD)"
+          title="Pour la colonne Clôture veille (API EODHD) : symbole + suffixe de marché, ex. MC.PA, AAPL.US."
+        />
       </div>
       <div className="form-field">
         <label>Pays</label>
@@ -128,52 +269,81 @@ export function SocietesTable({
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "nom", sens: "asc" });
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
   const [totauxOuverts, setTotauxOuverts] = useState<string | null>(null);
+  const [colonnesVisibles, setColonnesVisibles] = useState<Set<ColonneId>>(lireColonnesVisibles);
+  const [coursParCode, setCoursParCode] = useState<Map<string, CoursCloture>>(new Map());
 
-  const lignes = useMemo(
-    () =>
-      societes.map((s) => ({
-        societe: s,
-        totalActions: valeurGlobale(s.id, transactions, "nombreActions", historiqueTotaux, types),
-        dvTheoriqueTotal: valeurGlobale(s.id, transactions, "nombreDroitVoteTheorique", historiqueTotaux, types),
-        dvExercableTotal: valeurGlobale(s.id, transactions, "nombreDroitVoteExercable", historiqueTotaux, types),
-        capital: valeurGlobale(s.id, transactions, "capital", historiqueTotaux, types),
-        dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", historiqueTotaux, types),
-        dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", historiqueTotaux, types),
-      })),
-    [societes, transactions, historiqueTotaux, types],
+  function basculerColonne(id: ColonneId) {
+    setColonnesVisibles((prev) => {
+      const suivant = new Set(prev);
+      if (suivant.has(id)) suivant.delete(id);
+      else suivant.add(id);
+      ecrireColonnesVisibles(suivant);
+      return suivant;
+    });
+  }
+
+  // Un seul appel groupé (API EODHD, via le serveur) pour tous les codes
+  // mnémoniques renseignés — pas un par Société, quel que soit le nombre de
+  // lignes du tableau.
+  const codesMnemoniques = useMemo(
+    () => [...new Set(societes.map((s) => s.codeMnemonique?.trim()).filter((c): c is string => !!c))].sort(),
+    [societes],
   );
+  const cleCodes = codesMnemoniques.join(",");
+
+  useEffect(() => {
+    if (codesMnemoniques.length === 0) {
+      setCoursParCode(new Map());
+      return;
+    }
+    let annule = false;
+    api
+      .fetchCoursCloture(codesMnemoniques)
+      .then((cours) => {
+        if (!annule) setCoursParCode(new Map(cours.map((c) => [c.codeMnemonique, c])));
+      })
+      .catch(() => {
+        // Sans conséquence pour le reste du tableau : les cellules Clôture
+        // veille/Valorisation restent simplement à "—" pour cette session.
+      });
+    return () => {
+      annule = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleCodes]);
+
+  const lignes = useMemo<LigneAffichee[]>(
+    () =>
+      societes.map((s) => {
+        const totalActions = valeurGlobale(s.id, transactions, "nombreActions", historiqueTotaux, types);
+        const cours = s.codeMnemonique ? coursParCode.get(s.codeMnemonique.trim()) : undefined;
+        const cloturePrecedente = cours?.clotureVeille ?? null;
+        return {
+          societe: s,
+          totalActions,
+          cloturePrecedente,
+          coursErreur: cours?.erreur ?? null,
+          valorisation: totalActions !== null && cloturePrecedente !== null ? totalActions * cloturePrecedente : null,
+          dvTheoriqueTotal: valeurGlobale(s.id, transactions, "nombreDroitVoteTheorique", historiqueTotaux, types),
+          dvExercableTotal: valeurGlobale(s.id, transactions, "nombreDroitVoteExercable", historiqueTotaux, types),
+          capital: valeurGlobale(s.id, transactions, "capital", historiqueTotaux, types),
+          dvTheorique: valeurGlobale(s.id, transactions, "droitVoteTheorique", historiqueTotaux, types),
+          dvExercable: valeurGlobale(s.id, transactions, "droitVoteExercable", historiqueTotaux, types),
+        };
+      }),
+    [societes, transactions, historiqueTotaux, types, coursParCode],
+  );
+
+  const colonnesAffichees = COLONNES.filter((c) => colonnesVisibles.has(c.id));
 
   const triees = useMemo(() => {
     const facteur = tri.sens === "asc" ? 1 : -1;
-    const cle = (l: (typeof lignes)[number]): string | number => {
-      switch (tri.colonne) {
-        case "nom":
-          return l.societe.nom;
-        case "isin":
-          return l.societe.isin ?? "";
-        case "codeMnemonique":
-          return l.societe.codeMnemonique ?? "";
-        case "pays":
-          return l.societe.pays ?? "";
-        case "siegeSocial":
-          return l.societe.siegeSocial ?? "";
-        case "siren":
-          return l.societe.siren ?? "";
-        case "lei":
-          return l.societe.lei ?? "";
-        case "totalActions":
-          return l.totalActions ?? -Infinity;
-        case "dvTheoriqueTotal":
-          return l.dvTheoriqueTotal ?? -Infinity;
-        case "dvExercableTotal":
-          return l.dvExercableTotal ?? -Infinity;
-        case "capital":
-          return l.capital ?? -Infinity;
-        case "dvTheorique":
-          return l.dvTheorique ?? -Infinity;
-        case "dvExercable":
-          return l.dvExercable ?? -Infinity;
-      }
+    const cle = (l: LigneAffichee): string | number => {
+      if (tri.colonne === "nom") return l.societe.nom;
+      const colonne = COLONNES.find((c) => c.id === tri.colonne);
+      if (!colonne) return "";
+      const v = colonne.valeur(l);
+      return v ?? (colonne.num ? -Infinity : "");
     };
     return [...lignes].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
   }, [lignes, tri]);
@@ -182,27 +352,19 @@ export function SocietesTable({
     return exporterXlsx(
       "societes.xlsx",
       "Sociétés",
-      triees.map((l) => ({
-        Société: l.societe.nom,
-        "Code ISIN": l.societe.isin ?? "",
-        "Code mnémonique": l.societe.codeMnemonique ?? "",
-        Pays: l.societe.pays ?? "",
-        "Siège social": l.societe.siegeSocial ?? "",
-        SIREN: l.societe.siren ?? "",
-        LEI: l.societe.lei ?? "",
-        "Total nombre d'actions": l.totalActions ?? "",
-        "Total DV théorique": l.dvTheoriqueTotal ?? "",
-        "Total DV exerçable": l.dvExercableTotal ?? "",
-        "Capital (%)": l.capital ?? "",
-        "Droit de vote théorique (%)": l.dvTheorique ?? "",
-        "Droit de vote exerçable (%)": l.dvExercable ?? "",
-      })),
+      triees.map((l) => {
+        const ligne: Record<string, string | number> = { Société: l.societe.nom };
+        for (const c of colonnesAffichees) ligne[c.label] = c.valeur(l) ?? "";
+        return ligne;
+      }),
     );
   }
 
   if (societes.length === 0) {
     return <p className="empty">Aucune société pour le moment.</p>;
   }
+
+  const colSpanLignesEtendues = 2 + colonnesAffichees.length;
 
   return (
     <div>
@@ -214,6 +376,19 @@ export function SocietesTable({
           </button>
         </div>
       </div>
+
+      <div className="table-colonnes">
+        <span className="table-colonnes-titre">Colonnes affichées</span>
+        {COLONNES.map((c) => (
+          <div className="form-field-checkbox" key={c.id}>
+            <label>
+              <input type="checkbox" checked={colonnesVisibles.has(c.id)} onChange={() => basculerColonne(c.id)} />
+              {c.label}
+            </label>
+          </div>
+        ))}
+      </div>
+
       <div className="table-scroll">
         <table className="table">
           <thead>
@@ -221,108 +396,73 @@ export function SocietesTable({
               <th className="th-tri" onClick={() => setTri(basculerTri(tri, "nom"))}>
                 Société{flecheTri(tri, "nom")}
               </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "isin"))}>
-                Code ISIN{flecheTri(tri, "isin")}
-              </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "codeMnemonique"))}>
-                Code mnémonique{flecheTri(tri, "codeMnemonique")}
-              </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "pays"))}>
-                Pays{flecheTri(tri, "pays")}
-              </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "siegeSocial"))}>
-                Siège social{flecheTri(tri, "siegeSocial")}
-              </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "siren"))}>
-                SIREN{flecheTri(tri, "siren")}
-              </th>
-              <th className="th-tri" onClick={() => setTri(basculerTri(tri, "lei"))}>
-                LEI{flecheTri(tri, "lei")}
-              </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "totalActions"))}>
-                Total actions{flecheTri(tri, "totalActions")}
-              </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvTheoriqueTotal"))}>
-                Total DV théorique{flecheTri(tri, "dvTheoriqueTotal")}
-              </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvExercableTotal"))}>
-                Total DV exerçable{flecheTri(tri, "dvExercableTotal")}
-              </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "capital"))}>
-                Capital %{flecheTri(tri, "capital")}
-              </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvTheorique"))}>
-                DV théorique %{flecheTri(tri, "dvTheorique")}
-              </th>
-              <th className="th-tri num" onClick={() => setTri(basculerTri(tri, "dvExercable"))}>
-                DV exerçable %{flecheTri(tri, "dvExercable")}
-              </th>
+              {colonnesAffichees.map((c) => (
+                <th
+                  key={c.id}
+                  className={`th-tri ${c.num ? "num" : ""}`}
+                  onClick={() => setTri(basculerTri(tri, c.id))}
+                >
+                  {c.label}
+                  {flecheTri(tri, c.id)}
+                </th>
+              ))}
               <th aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
-            {triees.map(({ societe, totalActions, dvTheoriqueTotal, dvExercableTotal, capital, dvTheorique, dvExercable }) => (
-              <Fragment key={societe.id}>
+            {triees.map((l) => (
+              <Fragment key={l.societe.id}>
                 <tr>
-                  <td>{societe.nom}</td>
-                  <td>{societe.isin ?? "—"}</td>
-                  <td>{societe.codeMnemonique ?? "—"}</td>
-                  <td>{societe.pays ?? "—"}</td>
-                  <td>{societe.siegeSocial ?? "—"}</td>
-                  <td>{societe.siren ?? "—"}</td>
-                  <td>{societe.lei ?? "—"}</td>
-                  <td className="num">{totalActions === null ? "—" : formatNombreActions(totalActions)}</td>
-                  <td className="num">{dvTheoriqueTotal === null ? "—" : formatDecimal(dvTheoriqueTotal)}</td>
-                  <td className="num">{dvExercableTotal === null ? "—" : formatDecimal(dvExercableTotal)}</td>
-                  <td className={`num ${capital !== null && capital > 100 ? "warning" : ""}`}>
-                    {capital === null ? "—" : formatPourcentage(capital)}
-                  </td>
-                  <td className="num">{dvTheorique === null ? "—" : formatPourcentage(dvTheorique)}</td>
-                  <td className="num">{dvExercable === null ? "—" : formatPourcentage(dvExercable)}</td>
+                  <td>{l.societe.nom}</td>
+                  {colonnesAffichees.map((c) => (
+                    <td key={c.id} className={`${c.num ? "num" : ""} ${c.classeCellule?.(l) ?? ""}`}>
+                      {c.afficher(l)}
+                    </td>
+                  ))}
                   <td className="actions">
                     <div className="actions-groupe">
                       <button
                         type="button"
                         className="btn btn-secondary btn-small"
-                        onClick={() => setTotauxOuverts(totauxOuverts === societe.id ? null : societe.id)}
+                        onClick={() => setTotauxOuverts(totauxOuverts === l.societe.id ? null : l.societe.id)}
                       >
                         Totaux
                       </button>
                       <button
                         type="button"
                         className="btn btn-secondary btn-small"
-                        onClick={() => setLigneEditee(ligneEditee === societe.id ? null : societe.id)}
+                        onClick={() => setLigneEditee(ligneEditee === l.societe.id ? null : l.societe.id)}
                       >
                         Modifier
                       </button>
-                      <button type="button" className="btn btn-danger btn-small" onClick={() => onDelete(societe.id)}>
+                      <button type="button" className="btn btn-danger btn-small" onClick={() => onDelete(l.societe.id)}>
                         Supprimer
                       </button>
                     </div>
                   </td>
                 </tr>
-                {ligneEditee === societe.id && (
+                {ligneEditee === l.societe.id && (
                   <tr>
-                    <td colSpan={14}>
+                    <td colSpan={colSpanLignesEtendues}>
                       <SocieteEditRow
-                        societe={societe}
+                        societe={l.societe}
                         onCancel={() => setLigneEditee(null)}
                         onSave={(champs) => {
-                          onUpdate(societe.id, champs);
+                          onUpdate(l.societe.id, champs);
                           setLigneEditee(null);
                         }}
                       />
                     </td>
                   </tr>
                 )}
-                {totauxOuverts === societe.id && (
+                {totauxOuverts === l.societe.id && (
                   <tr>
-                    <td colSpan={14}>
+                    <td colSpan={colSpanLignesEtendues}>
                       <HistoriqueTotauxPanel
                         societes={societes}
                         historique={historiqueTotaux}
                         types={types}
-                        societeIdVerrouille={societe.id}
+                        societeIdVerrouille={l.societe.id}
                         onAdd={onAddHistoriqueTotal}
                         onUpdate={onUpdateHistoriqueTotal}
                         onDelete={onDeleteHistoriqueTotal}

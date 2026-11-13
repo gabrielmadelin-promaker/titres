@@ -1,4 +1,4 @@
-import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../types";
+import type { Compte, CoursCloture, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../types";
 import { lireToken, SessionExpireeError } from "./auth";
 
 // Chemin relatif à l'origine de la page plutôt qu'une URL construite avec un
@@ -181,4 +181,10 @@ export function supprimerTransaction(id: string): Promise<void> {
 // côté client.
 export function fetchActions(): Promise<Titre[]> {
   return request("/titres/actions");
+}
+
+/** Cours de clôture de la veille pour une liste de codes mnémoniques (API EODHD, voir CoursService côté serveur). */
+export function fetchCoursCloture(codes: string[]): Promise<CoursCloture[]> {
+  if (codes.length === 0) return Promise.resolve([]);
+  return request(`/cours?codes=${encodeURIComponent(codes.join(","))}`);
 }

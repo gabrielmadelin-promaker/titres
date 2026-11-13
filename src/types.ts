@@ -172,3 +172,17 @@ export interface Titre {
   /** Transaction à l'origine de l'état actuel de ce lot. */
   transactionOrigineId: string | null;
 }
+
+/**
+ * Cours de clôture de la veille d'une Société cotée, via l'API EODHD (voir
+ * CoursService côté serveur) — codeMnemonique doit être au format EODHD
+ * (symbole + suffixe de marché, ex. "MC.PA", "AAPL.US"). clotureVeille et
+ * date sont null en cas d'erreur (voir erreur) ou si l'API n'a pas pu être
+ * appelée (token non configuré).
+ */
+export interface CoursCloture {
+  codeMnemonique: string;
+  clotureVeille: number | null;
+  date: string | null;
+  erreur: string | null;
+}

@@ -98,5 +98,6 @@ app.MapTransactionsEndpoints();
 app.MapTitresEndpoints();
 app.MapAuthEndpoints();
 app.MapUtilisateursEndpoints();
+app.MapCoursEndpoints();
 
 app.Run();

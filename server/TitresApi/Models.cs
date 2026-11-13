@@ -205,3 +205,10 @@ record UtilisateurAuth(Guid Id, string Email, string MotDePasse, string Role);
 record Utilisateur(Guid Id, string Email, string MotDePasse, string Role, DateTime CreeLe);
 
 record UtilisateurInput(string? Email, string? Role);
+
+// Cours de clôture de la veille pour une Société cotée, via l'API EODHD
+// (voir CoursService) — CodeMnemonique doit être au format attendu par
+// EODHD (symbole + suffixe de marché, ex. "MC.PA", "AAPL.US"). ClotureVeille
+// et Date sont null en cas d'erreur (voir Erreur) ou si CodeMnemonique n'est
+// pas renseigné.
+record CoursCloture(string CodeMnemonique, decimal? ClotureVeille, string? Date, string? Erreur);

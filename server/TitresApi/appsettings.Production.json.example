@@ -3,5 +3,9 @@
 
   "ConnectionStrings": {
     "CalculDesTitres": "Server=10.128.13.13,1433;Database=CalculDesTitres;User Id=titres_app;Password=CHANGE_ME_STRONG_PASSWORD!;TrustServerCertificate=True;"
+  },
+
+  "Eodhd": {
+    "ApiToken": "CHANGE_ME_EODHD_API_TOKEN"
   }
 }
