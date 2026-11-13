@@ -18,7 +18,16 @@ interface Props {
  * la création) et HistoriqueTotauxPanel (totaux par date d'effet).
  */
 export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Props) {
-  const total = lignes.reduce((s, l) => s + (Number.isFinite(l.quantite) ? l.quantite : 0), 0);
+  // Même exclusion que le total utilisé comme dénominateur du % Capital
+  // (voir utils/participations.ts totalActions) : une Catégorie marquée
+  // "ne rentre pas dans le capital" n'entre pas dans ce total non plus —
+  // une Catégorie absente de `types` est comptée par défaut.
+  const rentreDansCapital = new Map(types.map((t) => [t.nom, t.rentreDansCapital]));
+  const total = lignes.reduce(
+    (s, l) =>
+      s + (rentreDansCapital.get(l.type ?? "") === false ? 0 : Number.isFinite(l.quantite) ? l.quantite : 0),
+    0,
+  );
 
   function modifierLigne(index: number, champs: Partial<LigneActionsParType>) {
     onChange(lignes.map((l, i) => (i === index ? { ...l, ...champs } : l)));
