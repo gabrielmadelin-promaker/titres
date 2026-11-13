@@ -151,14 +151,20 @@ const COLONNES: ColonneDef[] = [
 
 const CLE_COLONNES_VISIBLES = "titres_societes_colonnes_visibles";
 
+// Masquées par défaut tant que l'accès réseau sortant vers Yahoo Finance
+// n'est pas ouvert sur le serveur (pare-feu) : sans lui, ces deux colonnes
+// n'affichent que des "—". L'utilisateur peut les réafficher lui-même via
+// les cases à cocher, ce choix est alors mémorisé comme les autres.
+const COLONNES_MASQUEES_PAR_DEFAUT: ColonneId[] = ["cloturePrecedente", "valorisation"];
+
 function lireColonnesVisibles(): Set<ColonneId> {
   try {
     const brut = localStorage.getItem(CLE_COLONNES_VISIBLES);
     if (brut) return new Set(JSON.parse(brut) as ColonneId[]);
   } catch {
-    // Stockage indisponible (navigation privée...) : repli sur "tout affiché".
+    // Stockage indisponible (navigation privée...) : repli sur le défaut ci-dessous.
   }
-  return new Set(COLONNES.map((c) => c.id));
+  return new Set(COLONNES.map((c) => c.id).filter((id) => !COLONNES_MASQUEES_PAR_DEFAUT.includes(id)));
 }
 
 function ecrireColonnesVisibles(colonnes: Set<ColonneId>) {
