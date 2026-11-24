@@ -107,15 +107,21 @@ function App() {
       .finally(() => setChargement(false));
   }, [utilisateurConnecte]);
 
-  // La table des lots d'Actions est régénérée côté serveur à chaque
-  // création/modification/suppression de transaction : impossible de la
-  // mettre à jour de façon optimiste côté client (la logique de synchro
-  // n'est pas dupliquée ici), on la recharge donc après coup.
-  async function rechargerTitres() {
+  // La table des lots d'Actions, et potentiellement de nouveaux Comptes
+  // (voir ComptesService.ResoudreCompte/AssurerComptesParType), sont générés
+  // côté serveur à chaque création/modification/suppression de transaction,
+  // ou à chaque écriture des totaux par Catégorie d'une société : impossible
+  // de les mettre à jour de façon optimiste côté client (la logique de
+  // synchro n'est pas dupliquée ici), on les recharge donc après coup — sans
+  // ça, un Compte tout juste créé reste absent de la liste locale et
+  // s'affiche à tort "(supprimé)" tant que la page n'est pas rechargée.
+  async function rechargerTitresEtComptes() {
     try {
-      setActions(await api.fetchActions());
+      const [actionsAJour, comptesAJour] = await Promise.all([api.fetchActions(), api.fetchComptes()]);
+      setActions(actionsAJour);
+      setComptes(comptesAJour);
     } catch (e) {
-      gererErreur(e, "Impossible de recharger les titres");
+      gererErreur(e, "Impossible de recharger les titres et comptes");
     }
   }
 
@@ -153,6 +159,10 @@ function App() {
       const creee = await api.creerHistoriqueTotal(ligne);
       setHistoriqueTotaux((prev) => [...prev, creee]);
       setErreur(null);
+      // Un Compte peut avoir été créé pour une nouvelle Catégorie (voir
+      // ComptesService.AssurerComptesParType) : la liste locale des Comptes
+      // doit être rechargée, sans quoi il resterait affiché "(supprimé)".
+      await rechargerTitresEtComptes();
       return true;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter cette ligne d'historique");
@@ -166,6 +176,7 @@ function App() {
     try {
       await api.modifierHistoriqueTotal(id, champs);
       setErreur(null);
+      await rechargerTitresEtComptes();
     } catch (e) {
       setHistoriqueTotaux(avant);
       gererErreur(e, "Impossible de modifier cette ligne d'historique");
@@ -274,7 +285,7 @@ function App() {
       const creee = await api.creerTransaction(transaction);
       setTransactions((prev) => [...prev, creee]);
       setErreur(null);
-      await rechargerTitres();
+      await rechargerTitresEtComptes();
       return true;
     } catch (e) {
       gererErreur(e, "Impossible d'ajouter la transaction");
@@ -292,7 +303,7 @@ function App() {
       const misAJour = await api.modifierTransaction(id, champs);
       setTransactions((prev) => prev.map((t) => (t.id === id ? misAJour : t)));
       setErreur(null);
-      await rechargerTitres();
+      await rechargerTitresEtComptes();
     } catch (e) {
       setTransactions(avant);
       gererErreur(e, "Impossible de modifier la transaction");
@@ -305,7 +316,7 @@ function App() {
       await api.supprimerTransaction(id);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       setErreur(null);
-      await rechargerTitres();
+      await rechargerTitresEtComptes();
     } catch (e) {
       gererErreur(e, "Impossible de supprimer la transaction");
     }
@@ -345,7 +356,7 @@ function App() {
     }
     if (creees.length > 0) {
       setTransactions((prev) => [...prev, ...creees]);
-      await rechargerTitres();
+      await rechargerTitresEtComptes();
     }
     return { ajoutees: creees.length, erreurs: erreursImport };
   }
