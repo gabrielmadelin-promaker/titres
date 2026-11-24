@@ -36,6 +36,19 @@ static class ComptesEndpoints
         app.MapDelete("/api/comptes/{id:guid}", async (Guid id) =>
         {
             await using var conn = new SqlConnection(ConnectionString());
+            // Un Compte encore référencé (ligne de transaction, lot de titres) ne
+            // peut pas être supprimé silencieusement : la référence resterait
+            // orpheline (affichée "(supprimé)" côté client) sans que personne ne
+            // comprenne pourquoi le compte a disparu des transactions passées.
+            var nombreReferences = await conn.ExecuteScalarAsync<int>(
+                "SELECT " +
+                "(SELECT COUNT(*) FROM dbo.TransactionLignes WHERE CompteAcheteurId = @id OR CompteVendeurId = @id) + " +
+                "(SELECT COUNT(*) FROM dbo.Actions WHERE CompteId = @id)",
+                new { id });
+            if (nombreReferences > 0)
+                return Results.BadRequest(
+                    $"Impossible de supprimer ce compte : encore utilisé par {nombreReferences} ligne(s) de transaction ou lot(s) de titres.");
+
             await conn.ExecuteAsync("DELETE FROM dbo.Comptes WHERE Id = @id", new { id });
             return Results.NoContent();
         });
