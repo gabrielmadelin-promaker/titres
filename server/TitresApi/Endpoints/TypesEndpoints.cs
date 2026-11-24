@@ -9,7 +9,7 @@ static class TypesEndpoints
     // Enregistre les routes /api/types.
     public static void MapTypesEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         app.MapGet("/api/types", async () =>
         {

@@ -10,7 +10,7 @@ static class ComptesEndpoints
     // Enregistre les routes /api/comptes (consultation, renommage, suppression).
     public static void MapComptesEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         app.MapGet("/api/comptes", async () =>
         {

@@ -1,7 +1,8 @@
 {
   "_comment": "Copiez ce fichier en 'appsettings.Production.json' (sans '.example') à côté de TitresApi.exe sur le serveur, remplissez la chaîne de connexion réelle, puis supprimez ce commentaire. Ce fichier n'est jamais commité (voir .gitignore) : il contient le mot de passe SQL.",
+  "_commentBase": "Le nom de base indiqué ici (après 'Database=') n'est qu'un gabarit sans effet réel : il est toujours remplacé à l'exécution par l'environnement choisi avant connexion (TITRA_DEV, TITRA_RECETTE ou TITRA_PROD — voir Services/Environnements.cs). L'utilisateur SQL renseigné ici doit avoir accès aux 3 bases, qui doivent exister avec le même schéma (sql/schema.sql) sur ce serveur.",
 
   "ConnectionStrings": {
-    "CalculDesTitres": "Server=10.128.13.13,1433;Database=CalculDesTitres;User Id=titres_app;Password=CHANGE_ME_STRONG_PASSWORD!;TrustServerCertificate=True;"
+    "CalculDesTitres": "Server=10.128.13.13,1433;Database=TITRA_DEV;User Id=titres_app;Password=CHANGE_ME_STRONG_PASSWORD!;TrustServerCertificate=True;"
   }
 }

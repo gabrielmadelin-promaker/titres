@@ -11,7 +11,7 @@ static class HistoriqueTotauxEndpoints
     // Enregistre les routes /api/historique-totaux-societe.
     public static void MapHistoriqueTotauxEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         app.MapGet("/api/historique-totaux-societe", async () =>
         {

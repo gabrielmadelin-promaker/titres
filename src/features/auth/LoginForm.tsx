@@ -2,13 +2,16 @@ import { useState } from "react";
 import * as api from "../../api/client";
 import type { UtilisateurConnecte } from "../../api/client";
 import { ecrireToken } from "../../api/auth";
+import type { Environnement } from "../../api/environnement";
 
 interface Props {
   onConnecte: (utilisateur: UtilisateurConnecte) => void;
+  environnement: Environnement;
+  onChangerEnvironnement: () => void;
 }
 
 /** Écran de connexion, affiché tant qu'aucune session valide n'est établie. */
-export function LoginForm({ onConnecte }: Props) {
+export function LoginForm({ onConnecte, environnement, onChangerEnvironnement }: Props) {
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
@@ -37,7 +40,14 @@ export function LoginForm({ onConnecte }: Props) {
     <div className="app">
       <header className="app-header">
         <h1>Calcul des titres</h1>
-        <p className="subtitle">Connectez-vous pour accéder à l'application.</p>
+        <p className="subtitle">
+          Connectez-vous pour accéder à l'application. Environnement : <strong>{environnement}</strong>.
+        </p>
+        <div className="table-toolbar" style={{ justifyContent: "center", marginTop: 12 }}>
+          <button type="button" className="btn btn-secondary btn-small" onClick={onChangerEnvironnement}>
+            Changer d'environnement
+          </button>
+        </div>
       </header>
 
       <div className="panel layout-single">

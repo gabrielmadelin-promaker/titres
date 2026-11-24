@@ -58,11 +58,16 @@ Marche à suivre détaillée (création de la base SQL, du site IIS, du service
 Windows pour l'API, ouverture des ports pare-feu) : voir le runbook fourni
 séparément. En résumé, sur le serveur :
 
-1. Exécuter `sql/schema.sql` sur le serveur SQL Server (crée la base, les
-   tables, le compte applicatif `titres_app`). Toute l'application étant
+1. L'application fonctionne avec 3 environnements, chacun sa propre base de
+   données sur le même serveur SQL Server, choisi par l'utilisateur avant de
+   se connecter : `TITRA_DEV`, `TITRA_RECETTE`, `TITRA_PROD` (voir
+   `server/TitresApi/Services/Environnements.cs`). Exécuter `sql/schema.sql`
+   séparément sur chacune de ces 3 bases (le script crée la base elle-même,
+   les tables, le compte applicatif `titres_app`). Toute l'application étant
    derrière la connexion, décommentez et complétez (email) le bloc de fin de
-   fichier pour créer le tout premier compte — sans lui, impossible de se
-   connecter pour en créer d'autres depuis l'écran "Utilisateurs".
+   fichier pour créer le tout premier compte de chaque environnement — sans
+   lui, impossible de se connecter pour en créer d'autres depuis l'écran
+   "Utilisateurs".
 2. Télécharger et extraire le zip de la branche `iis-dist` dans le dossier
    du site IIS (port `8090`).
 3. Télécharger et extraire le zip de la branche `api-dist` quelque part sur

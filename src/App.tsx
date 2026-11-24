@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import * as api from "./api/client";
 import type { Utilisateur } from "./api/client";
 import { SessionExpireeError } from "./api/auth";
+import { effacerEnvironnement, lireEnvironnement, type Environnement } from "./api/environnement";
+import { SelecteurEnvironnement } from "./features/auth/SelecteurEnvironnement";
 import { ComptesPanel } from "./features/comptes/ComptesPanel";
 import { ImportSocietes } from "./features/societes/ImportSocietes";
 import { ImportTransactions } from "./features/transactions/ImportTransactions";
@@ -50,6 +52,8 @@ function messageErreur(e: unknown): string {
 function App() {
   const { utilisateurConnecte, setUtilisateurConnecte, verificationSession, seDeconnecterLocal, seDeconnecter } =
     useSession();
+
+  const [environnement, setEnvironnement] = useState<Environnement | null>(lireEnvironnement);
 
   const [societes, setSocietes] = useState<Societe[]>([]);
   const [historiqueTotaux, setHistoriqueTotaux] = useState<HistoriqueTotalSociete[]>([]);
@@ -361,6 +365,19 @@ function App() {
     return { ajoutees: creees.length, erreurs: erreursImport };
   }
 
+  // Changer d'environnement invalide aussi le jeton en cours : une session
+  // ouverte sur TITRA_DEV n'a aucun sens pour TITRA_PROD (bases distinctes,
+  // table Utilisateurs/Sessions propre à chacune).
+  function changerEnvironnement() {
+    effacerEnvironnement();
+    seDeconnecterLocal();
+    setEnvironnement(null);
+  }
+
+  if (!environnement) {
+    return <SelecteurEnvironnement onChoisi={setEnvironnement} />;
+  }
+
   if (verificationSession) {
     return (
       <div className="app">
@@ -372,7 +389,7 @@ function App() {
   }
 
   if (!utilisateurConnecte) {
-    return <LoginForm onConnecte={setUtilisateurConnecte} />;
+    return <LoginForm onConnecte={setUtilisateurConnecte} environnement={environnement} onChangerEnvironnement={changerEnvironnement} />;
   }
 
   // Seul le rôle DSI voit et accède à l'écran de gestion des utilisateurs
@@ -388,8 +405,11 @@ function App() {
         </p>
         <div className="table-toolbar" style={{ justifyContent: "center", gap: 12, marginTop: 12 }}>
           <span className="subtitle-panel">
-            Connecté : {utilisateurConnecte.email} · {utilisateurConnecte.role}
+            Connecté : {utilisateurConnecte.email} · {utilisateurConnecte.role} · {environnement}
           </span>
+          <button type="button" className="btn btn-secondary btn-small" onClick={changerEnvironnement}>
+            Changer d'environnement
+          </button>
           <button type="button" className="btn btn-secondary btn-small" onClick={seDeconnecter}>
             Se déconnecter
           </button>

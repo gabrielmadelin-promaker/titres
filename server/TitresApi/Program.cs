@@ -25,25 +25,55 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
+builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
 app.UseCors();
 
-string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+RequeteCourante.Accessor = app.Services.GetRequiredService<IHttpContextAccessor>();
 
+string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
+
+// Chaque requête API cible un environnement précis (TITRA_DEV/TITRA_RECETTE/
+// TITRA_PROD, une base de données chacun — voir Environnements/ConnexionBdd),
+// choisi par l'utilisateur avant de se connecter (voir SelecteurEnvironnement
+// côté frontend) et envoyé dans l'en-tête X-Environnement à chaque appel —
+// y compris le login lui-même, chaque environnement ayant ses propres
+// dbo.Utilisateurs/dbo.Sessions. /api/health reste accessible sans cet
+// en-tête (ping générique de supervision, sans vérification de connectivité
+// base dans ce cas précis) ; OPTIONS et les routes hors /api n'en ont pas
+// besoin non plus.
+//
 // Authentification temporaire, en attendant le SSO : toute l'application
-// (hors health-check et login lui-même) exige un jeton de session valide,
-// vérifié à chaque requête. Pas de rôle vérifié ici : le rôle est pour
-// l'instant seulement enregistré (voir écran "Utilisateurs"), pas encore
-// utilisé pour restreindre quoi que ce soit.
+// (hors health-check et login lui-même) exige en plus un jeton de session
+// valide, vérifié à chaque requête. Pas de rôle vérifié ici : le rôle est
+// pour l'instant seulement enregistré (voir écran "Utilisateurs"), pas
+// encore utilisé pour restreindre quoi que ce soit.
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
-    var estRoutePublique =
-        context.Request.Method == "OPTIONS"
-        || !path.StartsWithSegments("/api")
-        || path.StartsWithSegments("/api/health")
-        || path.StartsWithSegments("/api/auth/login");
+    if (context.Request.Method == "OPTIONS" || !path.StartsWithSegments("/api"))
+    {
+        await next();
+        return;
+    }
+
+    var environnement = context.Request.Headers["X-Environnement"].ToString();
+    var estHealthCheck = path.StartsWithSegments("/api/health");
+    if (estHealthCheck && string.IsNullOrEmpty(environnement))
+    {
+        await next();
+        return;
+    }
+    if (!Environnements.Valides.Contains(environnement))
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsync("En-tête X-Environnement manquant ou invalide.");
+        return;
+    }
+    context.Items["Environnement"] = environnement;
+
+    var estRoutePublique = estHealthCheck || path.StartsWithSegments("/api/auth/login");
     if (estRoutePublique)
     {
         await next();
@@ -76,8 +106,11 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.MapGet("/api/health", async () =>
+app.MapGet("/api/health", async (HttpContext context) =>
 {
+    if (context.Items["Environnement"] is not string)
+        return Results.Ok(new { status = "ok" });
+
     try
     {
         await using var conn = new SqlConnection(ConnectionString());

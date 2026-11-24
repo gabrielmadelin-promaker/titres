@@ -9,7 +9,7 @@ static class AuthEndpoints
     // Enregistre les routes /api/auth/*.
     public static void MapAuthEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         app.MapPost("/api/auth/login", async (LoginInput input) =>
         {

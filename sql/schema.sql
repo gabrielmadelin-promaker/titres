@@ -3,9 +3,18 @@
 -- avec un compte disposant des droits sysadmin / dbcreator, via SQL Server
 -- Management Studio ou sqlcmd.
 --
+-- L'application fonctionne avec 3 environnements, chacun sa propre base de
+-- données sur ce même serveur, choisi par l'utilisateur avant de se
+-- connecter (voir server/TitresApi/Services/Environnements.cs) :
+-- TITRA_DEV, TITRA_RECETTE, TITRA_PROD. Exécuter ce script 3 fois, une par
+-- environnement, en remplaçant à chaque fois "CalculDesTitres" ci-dessous
+-- (CREATE DATABASE + USE) par le nom exact de l'environnement visé.
+--
 -- Remplacez le mot de passe avant d'exécuter, et reportez la même valeur
 -- dans ConnectionStrings:CalculDesTitres de appsettings.Production.json
--- côté API (voir server/TitresApi/appsettings.Production.json.example).
+-- côté API (voir server/TitresApi/appsettings.Production.json.example) —
+-- une seule chaîne de connexion pour les 3 environnements, seul le nom de
+-- la base change à l'exécution, substitué automatiquement par l'API.
 
 CREATE DATABASE CalculDesTitres;
 GO

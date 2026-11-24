@@ -34,7 +34,7 @@ static class UtilisateursEndpoints
     // Enregistre les routes /api/utilisateurs.
     public static void MapUtilisateursEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         app.MapGet("/api/utilisateurs", async (HttpContext ctx) =>
         {

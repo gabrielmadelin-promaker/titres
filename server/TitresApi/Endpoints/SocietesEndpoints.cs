@@ -9,7 +9,7 @@ static class SocietesEndpoints
     // Enregistre les routes /api/societes.
     public static void MapSocietesEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         app.MapGet("/api/societes", async () =>
         {

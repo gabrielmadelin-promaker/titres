@@ -13,7 +13,7 @@ static class TitresEndpoints
     // Enregistre la route /api/titres/actions.
     public static void MapTitresEndpoints(this WebApplication app)
     {
-        string ConnectionString() => app.Configuration.ChaineConnexionTitres();
+        string ConnectionString() => app.Configuration.ChaineConnexionTitres(RequeteCourante.Environnement);
 
         // date (optionnel, "yyyy-MM-dd") : au lieu de l'état actuel de
         // dbo.Actions, reconstitue l'état des lots tel qu'il aurait été à

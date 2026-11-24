@@ -1,5 +1,6 @@
 import type { Compte, CoursCloture, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../types";
 import { lireToken, SessionExpireeError } from "./auth";
+import { lireEnvironnement } from "./environnement";
 
 // Chemin relatif à l'origine de la page plutôt qu'une URL construite avec un
 // port en dur (`:8091`) : cette dernière empêchait tout passage en HTTPS
@@ -12,10 +13,16 @@ const API_BASE = "/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = lireToken();
+  // Chaque appel cible un environnement précis (TITRA_DEV/TITRA_RECETTE/
+  // TITRA_PROD, une base de données chacun — voir Services/Environnements.cs
+  // côté serveur), choisi avant la connexion — y compris le login lui-même,
+  // chaque environnement ayant ses propres utilisateurs.
+  const environnement = lireEnvironnement();
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(environnement ? { "X-Environnement": environnement } : {}),
     },
     ...init,
   });
