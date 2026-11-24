@@ -76,6 +76,7 @@ interface DetailCheminsProps {
   transactions: Transaction[];
   historiqueTotaux: HistoriqueTotalSociete[];
   types: TypeTitre[];
+  dateReference: string;
   acheteurId: string;
   cibleId: string;
   metrique: Metrique;
@@ -84,10 +85,10 @@ interface DetailCheminsProps {
 }
 
 /** Cascade des chemins de détention (direct + indirects) qui composent la valeur totale d'une métrique. */
-function DetailChemins({ transactions, historiqueTotaux, types, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
+function DetailChemins({ transactions, historiqueTotaux, types, dateReference, acheteurId, cibleId, metrique, formatValeur, nomDe }: DetailCheminsProps) {
   const chemins = useMemo(
-    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique, historiqueTotaux, types),
-    [transactions, historiqueTotaux, types, acheteurId, cibleId, metrique],
+    () => calculerCheminsParticipation(transactions, acheteurId, cibleId, metrique, historiqueTotaux, types, dateReference),
+    [transactions, historiqueTotaux, types, dateReference, acheteurId, cibleId, metrique],
   );
   const affiches = chemins.slice(0, MAX_CHEMINS_AFFICHES);
   const reste = chemins.slice(MAX_CHEMINS_AFFICHES);
@@ -161,11 +162,22 @@ function detailParCompte(titres: Titre[], comptes: Compte[], acheteurId: string,
   return { lignes, quantiteSansCompte };
 }
 
+function aujourdHui(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /** Qui détient combien du capital de qui, y compris indirectement via des chaînes de participation. */
 export function ParticipationsTable({ societes, historiqueTotaux, transactions, types, comptes, titres }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "acheteur", sens: "asc" });
   const [filtreActionnaireId, setFiltreActionnaireId] = useState("");
   const [filtreDetenueId, setFiltreDetenueId] = useState("");
+  // Situation à une date donnée : seules les transactions à cette date ou
+  // avant sont prises en compte (voir calculerParticipationsDetaillees),
+  // chacune rapportée au total émis en vigueur à SA PROPRE date — deux
+  // transactions à des dates différentes peuvent donc légitimement
+  // s'appuyer sur des totaux différents si celui-ci a changé entre-temps
+  // (augmentation/réduction de capital). Par défaut, la date du jour.
+  const [dateReference, setDateReference] = useState(aujourdHui);
   const [ouvert, setOuvert] = useState<{ cle: string; metrique: Metrique } | null>(null);
   const [metriquesVisibles, setMetriquesVisibles] = useState<Set<Metrique>>(
     () => new Set(GROUPES.map((g) => g.metrique)),
@@ -202,11 +214,11 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
   const parMetrique = useMemo(() => {
     const map = new Map<Metrique, Map<string, ParticipationDetaillee>>();
     for (const g of GROUPES) {
-      const detail = calculerParticipationsDetaillees(transactions, g.metrique, historiqueTotaux, types);
+      const detail = calculerParticipationsDetaillees(transactions, g.metrique, historiqueTotaux, types, dateReference);
       map.set(g.metrique, new Map(detail.map((d) => [`${d.acheteurId}::${d.cibleId}`, d])));
     }
     return map;
-  }, [transactions, historiqueTotaux, types]);
+  }, [transactions, historiqueTotaux, types, dateReference]);
 
   // La liste des couples (actionnaire, cible) à afficher est l'union de ce
   // que chaque métrique a pu produire — une métrique facultative (nombre
@@ -271,10 +283,6 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
     );
   }
 
-  if (lignesBase.length === 0) {
-    return <p className="empty">Aucune participation pour le moment.</p>;
-  }
-
   return (
     <div>
       <div className="table-toolbar">
@@ -308,6 +316,16 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                 </option>
               ))}
             </select>
+          </div>
+          <div className="form-field">
+            <label htmlFor="part-date-reference">Situation au</label>
+            <input
+              id="part-date-reference"
+              type="date"
+              value={dateReference}
+              onChange={(e) => setDateReference(e.target.value)}
+              title="Seules les transactions à cette date ou avant sont prises en compte, chacune rapportée au total émis en vigueur à sa propre date."
+            />
           </div>
         </div>
         <div className="viz-actions">
@@ -343,13 +361,13 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
           </label>
         </div>
         <div className="form-field-checkbox">
-          <label>
+          <label title="Reflète toujours l'état actuel des lots de titres, quelle que soit la date de référence choisie ci-dessus — aucune reconstitution historique disponible pour ce détail.">
             <input
               type="checkbox"
               checked={afficherDetailComptes}
               onChange={(e) => setAfficherDetailComptes(e.target.checked)}
             />
-            Détail par Compte
+            Détail par Compte (toujours à la situation actuelle)
           </label>
         </div>
       </div>
@@ -480,6 +498,7 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                           transactions={transactions}
                           historiqueTotaux={historiqueTotaux}
                           types={types}
+                          dateReference={dateReference}
                           acheteurId={p.acheteurId}
                           cibleId={p.cibleId}
                           metrique={ouvert.metrique}
