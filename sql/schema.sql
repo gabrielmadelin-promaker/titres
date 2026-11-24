@@ -86,6 +86,7 @@ CREATE TABLE dbo.Comptes (
     SocieteEmettriceId  UNIQUEIDENTIFIER NULL,
     Type                NVARCHAR(50)     NULL,
     Nom                 NVARCHAR(200)    NOT NULL,
+    Numero              NVARCHAR(8)      NULL,
     CONSTRAINT CK_Comptes_Detenteur CHECK (
         (DetenteurId IS NULL AND DetenteurNomExterne IS NOT NULL)
         OR (DetenteurId IS NOT NULL AND DetenteurNomExterne IS NULL)

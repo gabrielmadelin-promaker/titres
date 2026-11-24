@@ -1,5 +1,5 @@
 import type { LigneActionsParType, TypeTitre } from "../../types";
-import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
+import { LONGUEUR_MAX_CATEGORIE, LONGUEUR_MAX_NUMERO_COMPTE } from "../../utils/constantes";
 
 interface Props {
   lignes: LigneActionsParType[];
@@ -14,8 +14,13 @@ interface Props {
  * dans types.ts) : une ligne par Type, total calculé en lecture seule. Porte
  * aussi la Valeur nominale de chaque Catégorie (propre à la Catégorie, pas
  * à la société — sa devise est celle, unique, de toute la ligne de Totaux,
- * voir HistoriqueTotalSociete.devise). Partagé entre SocieteForm (totaux à
- * la création) et HistoriqueTotauxPanel (totaux par date d'effet).
+ * voir HistoriqueTotalSociete.devise), et un Numéro de compte facultatif :
+ * la société est sa propre détentrice pour chaque Catégorie émise (voir
+ * ComptesService.AssurerComptesParType), un Compte est donc assuré pour
+ * chacune ; ce champ n'a d'effet que si ce Compte doit effectivement être
+ * créé (ignoré s'il existe déjà), et laisse le numéro auto-généré habituel
+ * (n+1) si vide. Partagé entre SocieteForm (totaux à la création) et
+ * HistoriqueTotauxPanel (totaux par date d'effet).
  */
 export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Props) {
   // Même exclusion que le total utilisé comme dénominateur du % Capital
@@ -38,7 +43,7 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
   }
 
   function ajouterLigne() {
-    onChange([...lignes, { type: null, quantite: 0, valeurNominale: null }]);
+    onChange([...lignes, { type: null, quantite: 0, valeurNominale: null, numero: null }]);
   }
 
   return (
@@ -72,6 +77,15 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
             onChange={(e) => modifierLigne(i, { valeurNominale: e.target.value ? Number(e.target.value) : null })}
             placeholder="Valeur nominale"
             aria-label={`Valeur nominale de la ligne ${i + 1}`}
+          />
+          <input
+            type="text"
+            maxLength={LONGUEUR_MAX_NUMERO_COMPTE}
+            value={ligne.numero ?? ""}
+            onChange={(e) => modifierLigne(i, { numero: e.target.value || null })}
+            placeholder="Numéro de compte (optionnel)"
+            aria-label={`Numéro de compte de la ligne ${i + 1}`}
+            title="Numéro du Compte de la société émettrice pour cette Catégorie, s'il doit être créé (ignoré s'il existe déjà)."
           />
           <button type="button" className="btn btn-secondary btn-small" onClick={() => retirerLigne(i)} aria-label="Retirer cette ligne">
             ×

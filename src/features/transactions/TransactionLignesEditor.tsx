@@ -1,5 +1,5 @@
 import type { Compte, HistoriqueTotalSociete, Societe, TypeTitre } from "../../types";
-import { LONGUEUR_MAX_CATEGORIE } from "../../utils/constantes";
+import { LONGUEUR_MAX_CATEGORIE, LONGUEUR_MAX_NUMERO_COMPTE } from "../../utils/constantes";
 import { formatPourcentage } from "../../utils/format";
 import { apercuPourcentageActions } from "../../utils/participations";
 import type { LigneChamps } from "../../utils/transactionChamps";
@@ -23,14 +23,15 @@ interface Props {
 interface CompteSelectProps {
   comptes: Compte[];
   detenteurId: string | null;
+  nomDetenteur: string | null;
   societeEmettriceId: string | null;
   nomSociete: string | null;
   categorie: string;
   value: string;
   onChange: (id: string) => void;
-  /** Nom personnalisé à donner au nouveau compte, à la place du nom auto-généré (ignoré si value n'est pas "" — un compte existant est choisi). */
-  nomPersonnalise: string;
-  onChangeNomPersonnalise: (nom: string) => void;
+  /** Numéro personnalisé à donner au nouveau compte, à la place du numéro auto-généré (ignoré si value n'est pas "" — un compte existant est choisi). */
+  numeroPersonnalise: string;
+  onChangeNumeroPersonnalise: (numero: string) => void;
   idPrefix: string;
   label: string;
 }
@@ -44,13 +45,14 @@ interface CompteSelectProps {
  * laquelle — même règle que côté backend, voir ResoudreCompte). Aucune
  * création manuelle ici : un compte se choisit parmi les existants, ou se
  * laisse vide ("Auto") pour être trouvé ou créé automatiquement par l'API
- * à l'enregistrement — jamais nommé à la main. L'option "+ Nouveau
- * compte" prévisualise le nom qui serait généré (même numérotation que
- * ResoudreCompte côté backend : rang suivant parmi les comptes déjà
- * existants pour ce détenteur et cette société, toutes Catégories
- * confondues) — un aperçu, pas une réservation : le nom réel est recalculé
- * à l'enregistrement, sauf si un nom personnalisé est saisi dans le champ
- * qui apparaît alors juste en dessous — remplace le nom auto-généré, voir
+ * à l'enregistrement. L'option "+ Nouveau compte" prévisualise le nom qui
+ * serait généré ("Détenteur - Société émettrice - Catégorie - Numéro",
+ * même numérotation que ResoudreCompte côté backend : rang suivant parmi
+ * les comptes déjà existants pour ce détenteur et cette société, toutes
+ * Catégories confondues) — un aperçu, pas une réservation : le numéro réel
+ * est recalculé à l'enregistrement, sauf si un numéro personnalisé est
+ * saisi dans le champ qui apparaît alors juste en dessous (seul ce segment
+ * final est personnalisable, jamais le reste du nom), voir
  * ComptesService.ResoudreCompte côté serveur. Un détenteur hors groupe (ou
  * non renseigné, detenteurId null) n'a jamais de compte ni de lot suivi —
  * même règle que ComptesService.ResoudreCompte/TitresLotsService côté
@@ -59,13 +61,14 @@ interface CompteSelectProps {
 function CompteSelect({
   comptes,
   detenteurId,
+  nomDetenteur,
   societeEmettriceId,
   nomSociete,
   categorie,
   value,
   onChange,
-  nomPersonnalise,
-  onChangeNomPersonnalise,
+  numeroPersonnalise,
+  onChangeNumeroPersonnalise,
   idPrefix,
   label,
 }: CompteSelectProps) {
@@ -90,7 +93,7 @@ function CompteSelect({
   // Même règle de numérotation que ComptesService.ResoudreCompte côté backend :
   // compte toutes les Catégories pour ce détenteur et cette société exacte.
   const rangProchainCompte = comptes.filter((c) => memeDetenteur(c) && c.societeEmettriceId === societeEmettriceId).length + 1;
-  const nomNouveauCompte = `${nomSociete ?? "(société cible)"} - ${categorieNormalisee ?? "Non catégorisé"} - ${rangProchainCompte}`;
+  const nomNouveauCompte = `${nomDetenteur ?? "(détenteur)"} - ${nomSociete ?? "(société cible)"} - ${categorieNormalisee ?? "Non catégorisé"} - ${rangProchainCompte}`;
 
   return (
     <div className="form-field">
@@ -106,10 +109,11 @@ function CompteSelect({
       {value === "" && (
         <input
           type="text"
-          value={nomPersonnalise}
-          onChange={(e) => onChangeNomPersonnalise(e.target.value)}
-          placeholder={`Nom du nouveau compte (${nomNouveauCompte})`}
-          aria-label={`Nom personnalisé du nouveau compte ${label}`}
+          maxLength={LONGUEUR_MAX_NUMERO_COMPTE}
+          value={numeroPersonnalise}
+          onChange={(e) => onChangeNumeroPersonnalise(e.target.value)}
+          placeholder={`Numéro (${rangProchainCompte})`}
+          aria-label={`Numéro personnalisé du nouveau compte ${label}`}
         />
       )}
     </div>
@@ -136,6 +140,8 @@ export function TransactionLignesEditor({
   idPrefix,
 }: Props) {
   const nomSociete = societes.find((s) => s.id === societeEmettriceId)?.nom ?? null;
+  const nomAcheteurDetenteur = societes.find((s) => s.id === acheteurDetenteurId)?.nom ?? null;
+  const nomVendeurDetenteur = societes.find((s) => s.id === vendeurDetenteurId)?.nom ?? null;
 
   function modifierLigne(index: number, champs: Partial<LigneChamps>) {
     onChange(lignes.map((l, i) => (i === index ? { ...l, ...champs } : l)));
@@ -148,7 +154,7 @@ export function TransactionLignesEditor({
   function ajouterLigne() {
     onChange([
       ...lignes,
-      { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "", nomCompteAcheteur: "", nomCompteVendeur: "" },
+      { categorie: "", nombreActions: "", compteAcheteurId: "", compteVendeurId: "", numeroCompteAcheteur: "", numeroCompteVendeur: "" },
     ]);
   }
 
@@ -193,26 +199,28 @@ export function TransactionLignesEditor({
             <CompteSelect
               comptes={comptes}
               detenteurId={acheteurDetenteurId}
+              nomDetenteur={nomAcheteurDetenteur}
               societeEmettriceId={societeEmettriceId}
               nomSociete={nomSociete}
               categorie={ligne.categorie}
               value={ligne.compteAcheteurId}
               onChange={(id) => modifierLigne(i, { compteAcheteurId: id })}
-              nomPersonnalise={ligne.nomCompteAcheteur}
-              onChangeNomPersonnalise={(nom) => modifierLigne(i, { nomCompteAcheteur: nom })}
+              numeroPersonnalise={ligne.numeroCompteAcheteur}
+              onChangeNumeroPersonnalise={(numero) => modifierLigne(i, { numeroCompteAcheteur: numero })}
               idPrefix={`${idPrefix}-${i}-compte-acheteur`}
               label="acheteur"
             />
             <CompteSelect
               comptes={comptes}
               detenteurId={vendeurDetenteurId}
+              nomDetenteur={nomVendeurDetenteur}
               societeEmettriceId={societeEmettriceId}
               nomSociete={nomSociete}
               categorie={ligne.categorie}
               value={ligne.compteVendeurId}
               onChange={(id) => modifierLigne(i, { compteVendeurId: id })}
-              nomPersonnalise={ligne.nomCompteVendeur}
-              onChangeNomPersonnalise={(nom) => modifierLigne(i, { nomCompteVendeur: nom })}
+              numeroPersonnalise={ligne.numeroCompteVendeur}
+              onChangeNumeroPersonnalise={(numero) => modifierLigne(i, { numeroCompteVendeur: numero })}
               idPrefix={`${idPrefix}-${i}-compte-vendeur`}
               label="vendeur"
             />

@@ -28,8 +28,8 @@ static class ComptesEndpoints
             await using var conn = new SqlConnection(ConnectionString());
             var lignes = await conn.ExecuteAsync(
                 "UPDATE dbo.Comptes SET DetenteurId = @DetenteurId, DetenteurNomExterne = @DetenteurNomExterne, " +
-                "SocieteEmettriceId = @SocieteEmettriceId, Type = @Type, Nom = @Nom WHERE Id = @id",
-                new { id, input.DetenteurId, detenteurNomExterne, input.SocieteEmettriceId, input.Type, Nom = nom });
+                "SocieteEmettriceId = @SocieteEmettriceId, Type = @Type, Nom = @Nom, Numero = @Numero WHERE Id = @id",
+                new { id, input.DetenteurId, detenteurNomExterne, input.SocieteEmettriceId, input.Type, Nom = nom, input.Numero });
             return lignes > 0 ? Results.NoContent() : Results.NotFound();
         });
 

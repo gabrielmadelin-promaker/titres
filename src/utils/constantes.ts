@@ -5,3 +5,7 @@
 // serveur (NVARCHAR(50) : Transactions.TransactionLignes, Comptes, Types,
 // HistoriqueTotalActionsType).
 export const LONGUEUR_MAX_CATEGORIE = 50;
+
+// Doit rester alignée avec dbo.Comptes.Numero (NVARCHAR(8)) et avec
+// ComptesService.LongueurMaxNumero côté serveur.
+export const LONGUEUR_MAX_NUMERO_COMPTE = 8;

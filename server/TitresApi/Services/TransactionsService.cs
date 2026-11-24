@@ -93,13 +93,13 @@ static class TransactionsService
         {
             var (erreurA, compteAcheteurId) = await ComptesService.ResoudreCompte(
                 conn, tx, ligne.CompteAcheteurId, input.AcheteurId, acheteurNomExterne, input.CibleId, nomCible, ligne.Categorie, "acheteur",
-                ligne.NomCompteAcheteur);
+                ligne.NumeroCompteAcheteur);
             if (erreurA is not null)
                 return (erreurA, null);
 
             var (erreurV, compteVendeurId) = await ComptesService.ResoudreCompte(
                 conn, tx, ligne.CompteVendeurId, input.VendeurId, vendeurNomExterne, input.CibleId, nomCible, ligne.Categorie, "vendeur",
-                ligne.NomCompteVendeur);
+                ligne.NumeroCompteVendeur);
             if (erreurV is not null)
                 return (erreurV, null);
 

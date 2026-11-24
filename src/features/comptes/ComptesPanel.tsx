@@ -11,7 +11,7 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-type Colonne = "detenteur" | "societe" | "type" | "nom";
+type Colonne = "detenteur" | "societe" | "type" | "nom" | "numero";
 
 interface ChampsCompteProps {
   detenteurExterne: boolean;
@@ -146,6 +146,9 @@ function LigneEdition({ compte, societesTriees, types, onSave, onCancel }: Ligne
       societeEmettriceId: societeEmettriceId || null,
       type: type.trim() || null,
       nom: nom.trim(),
+      // Pas de champ dédié ici (uniquement personnalisable à la création,
+      // voir TransactionLignesEditor/ActionsParTypeEditor) : conservé tel quel.
+      numero: compte.numero,
     });
   }
 
@@ -207,6 +210,8 @@ export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: P
           return c.type ?? "";
         case "nom":
           return c.nom;
+        case "numero":
+          return c.numero ?? "";
       }
     };
     return [...comptes].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
@@ -243,6 +248,9 @@ export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: P
                 <th className="th-tri" onClick={() => setTri(basculerTri(tri, "nom"))}>
                   Nom du compte{flecheTri(tri, "nom")}
                 </th>
+                <th className="th-tri" onClick={() => setTri(basculerTri(tri, "numero"))}>
+                  Numéro{flecheTri(tri, "numero")}
+                </th>
                 <th aria-label="Actions" />
               </tr>
             </thead>
@@ -262,6 +270,7 @@ export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: P
                     <td>{nomSocieteEmettrice(c)}</td>
                     <td>{c.type ?? "—"}</td>
                     <td>{c.nom}</td>
+                    <td>{c.numero ?? "—"}</td>
                     <td className="actions">
                       <div className="actions-groupe">
                         <button
@@ -279,7 +288,7 @@ export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: P
                   </tr>
                   {ligneEditee === c.id && (
                     <tr>
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <LigneEdition
                           compte={c}
                           societesTriees={societesTriees}

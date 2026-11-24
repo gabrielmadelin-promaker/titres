@@ -21,8 +21,13 @@ record SocieteUpdate(string? Nom, string? Isin, string? CodeMnemonique, string? 
 // Une ligne (= un Type) de la ventilation du nombre d'actions d'une société
 // à une date d'effet donnée (voir HistoriqueTotalSociete). ValeurNominale
 // est propre à cette Catégorie (pas à la société, voir Societe) — sa
-// devise est celle du parent, HistoriqueTotalSociete.Devise.
-record LigneActionsParType(string? Type, decimal Quantite, decimal? ValeurNominale = null);
+// devise est celle du parent, HistoriqueTotalSociete.Devise. Numero : champ
+// d'entrée uniquement (jamais stocké sur HistoriqueTotalActionsType, donc
+// toujours null en lecture) — numéro personnalisé à donner au Compte de la
+// société émettrice pour cette Catégorie s'il doit être créé (voir
+// ComptesService.AssurerComptesParType/ResoudreCompte), ignoré si un Compte
+// existe déjà pour cette Catégorie.
+record LigneActionsParType(string? Type, decimal Quantite, decimal? ValeurNominale = null, string? Numero = null);
 
 // Projection brute d'une ligne de dbo.HistoriqueTotalActionsType, avec
 // l'id de son parent — utilisée uniquement pour regrouper les lignes par
@@ -71,10 +76,14 @@ record TypeTitreInput(string? Nom, bool RentreDansCapital = true);
 // Regroupement nommé des titres détenus par un actionnaire, dédié à une
 // seule Société émettrice ET une seule Catégorie — voir dbo.Comptes.
 // DetenteurId/DetenteurNomExterne : même convention que pour
-// Transactions/Actions (l'un des deux, jamais les deux).
-record Compte(Guid Id, Guid? DetenteurId, string? DetenteurNomExterne, Guid? SocieteEmettriceId, string? Type, string Nom);
+// Transactions/Actions (l'un des deux, jamais les deux). Numero : le
+// segment final du Nom auto-généré ("Détenteur - Société émettrice -
+// Catégorie - Numero", voir ComptesService.ResoudreCompte), conservé à part
+// pour rester modifiable sans retaper tout le Nom — null pour un compte
+// créé avant l'introduction de ce champ (Nom reste alors inchangé).
+record Compte(Guid Id, Guid? DetenteurId, string? DetenteurNomExterne, Guid? SocieteEmettriceId, string? Type, string Nom, string? Numero);
 
-record CompteInput(Guid? DetenteurId, string? DetenteurNomExterne, Guid? SocieteEmettriceId, string? Type, string? Nom);
+record CompteInput(Guid? DetenteurId, string? DetenteurNomExterne, Guid? SocieteEmettriceId, string? Type, string? Nom, string? Numero);
 
 // Une transaction entre deux parties concernant une société cible — les
 // mouvements d'actions eux-mêmes sont dans Lignes (une transaction peut
@@ -116,13 +125,15 @@ record TransactionInput(
 // chaque lecture, par ligne (voir PlusValueService.CalculerPlusValues).
 record LigneTransaction(Guid Id, string? Categorie, decimal NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId, decimal? PlusValue);
 
-// NomCompteAcheteur/NomCompteVendeur : nom à donner au compte s'il doit être
-// créé pour ce camp (ignoré si CompteXId est renseigné, ou si le compte
-// existe déjà pour ce détenteur/société/Catégorie) — voir ComptesService.ResoudreCompte.
-// Laissé vide, le nom auto-généré habituel est utilisé.
+// NumeroCompteAcheteur/NumeroCompteVendeur : numéro à donner au compte s'il
+// doit être créé pour ce camp (ignoré si CompteXId est renseigné, ou si le
+// compte existe déjà pour ce détenteur/société/Catégorie) — voir
+// ComptesService.ResoudreCompte. Laissé vide, le numéro auto-généré
+// habituel (n+1) est utilisé ; le reste du nom ("Détenteur - Société
+// émettrice - Catégorie - ") n'est jamais personnalisable ici.
 record LigneTransactionInput(
     string? Categorie, decimal? NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId,
-    string? NomCompteAcheteur = null, string? NomCompteVendeur = null);
+    string? NumeroCompteAcheteur = null, string? NumeroCompteVendeur = null);
 
 // Projection brute d'une ligne de dbo.TransactionLignes, avec l'id de son
 // parent — utilisée uniquement pour regrouper les lignes par transaction

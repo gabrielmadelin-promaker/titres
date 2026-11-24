@@ -18,6 +18,12 @@ export interface LigneActionsParType {
   quantite: number;
   /** Valeur nominale de cette Catégorie à cette date d'effet (devise : voir HistoriqueTotalSociete.devise). */
   valeurNominale: number | null;
+  /**
+   * Écriture seule : numéro à donner au Compte de la société émettrice pour
+   * cette Catégorie s'il doit être créé (voir Compte.numero) — ignoré si un
+   * Compte existe déjà, jamais renvoyé par l'API (toujours null en lecture).
+   */
+  numero?: string | null;
 }
 
 /**
@@ -84,6 +90,13 @@ export interface Compte {
   /** Catégorie à laquelle ce compte est dédié, facultatif. */
   type: string | null;
   nom: string;
+  /**
+   * Segment final de `nom` ("Détenteur - Société émettrice - Catégorie -
+   * Numero") pour un compte créé automatiquement — conservé à part pour
+   * rester modifiable sans retaper tout le nom. Null pour un compte créé
+   * avant l'introduction de ce champ.
+   */
+  numero: string | null;
 }
 
 /**
@@ -100,10 +113,10 @@ export interface LigneTransaction {
   compteAcheteurId: string | null;
   /** Compte du vendeur concerné par cette ligne, facultatif (généré automatiquement si non choisi). */
   compteVendeurId: string | null;
-  /** Écriture seule : nom à donner au compte acheteur s'il doit être créé (ignoré sinon) — jamais renvoyé par l'API. */
-  nomCompteAcheteur?: string | null;
-  /** Écriture seule : nom à donner au compte vendeur s'il doit être créé (ignoré sinon) — jamais renvoyé par l'API. */
-  nomCompteVendeur?: string | null;
+  /** Écriture seule : numéro à donner au compte acheteur s'il doit être créé (ignoré sinon) — jamais renvoyé par l'API. */
+  numeroCompteAcheteur?: string | null;
+  /** Écriture seule : numéro à donner au compte vendeur s'il doit être créé (ignoré sinon) — jamais renvoyé par l'API. */
+  numeroCompteVendeur?: string | null;
   /**
    * Calculée par l'API, en euros — jamais saisie, jamais stockée en base :
    * recalculée à chaque lecture. Basée sur le FIFO réel des lots d'Actions
