@@ -123,6 +123,29 @@ static class TitresLotsService
         }
     }
 
+    // Base commune aux deux lectures de lignes de transaction ci-dessous
+    // (recalcul réel et reconstitution à une date) — seule la présence du
+    // filtre WHERE sur la date change entre les deux.
+    const string RequeteLignes =
+        "SELECT t.Id AS TransactionId, CONVERT(varchar(10), t.[Date], 23) AS Date, t.CibleId, t.PrixAction, " +
+        "t.AcheteurId, t.AcheteurNomExterne, t.VendeurId, t.VendeurNomExterne, " +
+        "tl.Categorie, tl.NombreActions, tl.CompteAcheteurId, tl.CompteVendeurId " +
+        "FROM dbo.TransactionLignes tl JOIN dbo.Transactions t ON t.Id = tl.TransactionId ";
+
+    // Rejoue l'algorithme FIFO (voir Consommer/Creer/AppliquerLigne
+    // ci-dessus) sur une liste de lignes déjà chronologiquement ordonnée, et
+    // renvoie l'état des lots qui en résulte — pure fonction, sans accès base
+    // de données, partagée par RecalculerTousLesLots (écrit le résultat) et
+    // ObtenirLotsADate (ne fait que le lire, pour une consultation historique).
+    static Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotRecalcul>> CalculerLots(
+        IEnumerable<LigneTransactionPourRecalculTitres> lignes)
+    {
+        var lots = new Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotRecalcul>>();
+        foreach (var l in lignes)
+            AppliquerLigne(lots, l);
+        return lots;
+    }
+
     // Recalcule entièrement dbo.Actions à partir de dbo.TransactionLignes +
     // dbo.Transactions, en rejouant leur historique chronologique — à
     // appeler après tout POST/PUT/DELETE sur /api/transactions, dans la même
@@ -133,16 +156,10 @@ static class TitresLotsService
     public static async Task RecalculerTousLesLots(SqlConnection conn, IDbTransaction tx)
     {
         var lignes = await conn.QueryAsync<LigneTransactionPourRecalculTitres>(
-            "SELECT t.Id AS TransactionId, CONVERT(varchar(10), t.[Date], 23) AS Date, t.CibleId, t.PrixAction, " +
-            "t.AcheteurId, t.AcheteurNomExterne, t.VendeurId, t.VendeurNomExterne, " +
-            "tl.Categorie, tl.NombreActions, tl.CompteAcheteurId, tl.CompteVendeurId " +
-            "FROM dbo.TransactionLignes tl JOIN dbo.Transactions t ON t.Id = tl.TransactionId " +
-            "ORDER BY t.[Date] ASC, t.Id ASC, tl.Id ASC",
+            RequeteLignes + "ORDER BY t.[Date] ASC, t.Id ASC, tl.Id ASC",
             transaction: tx);
 
-        var lots = new Dictionary<(Guid, string?, Guid?, string?, Guid?), List<LotRecalcul>>();
-        foreach (var l in lignes)
-            AppliquerLigne(lots, l);
+        var lots = CalculerLots(lignes);
 
         await conn.ExecuteAsync("DELETE FROM dbo.Actions", transaction: tx);
 
@@ -157,5 +174,32 @@ static class TitresLotsService
                         lot.Quantite, lot.PrixInitial, lot.PrixAcquisition, lot.DateAcquisition, lot.TransactionOrigineId,
                     },
                     tx);
+    }
+
+    // Reconstitue l'état des lots de titres tel qu'il aurait été à une date
+    // donnée (incluse), en ne rejouant que les transactions à cette date ou
+    // avant — un calcul "à blanc", jamais écrit en base (voir
+    // GET /api/titres/actions?date=..., utilisé par l'écran Actionnariat
+    // pour le "Détail par Compte" à une date de référence). dbo.Actions
+    // reste seul à faire autorité pour la situation actuelle, recalculé par
+    // RecalculerTousLesLots à chaque écriture de transaction ; cette méthode
+    // ne le touche jamais.
+    public static async Task<List<Titre>> ObtenirLotsADate(SqlConnection conn, string date)
+    {
+        var lignes = await conn.QueryAsync<LigneTransactionPourRecalculTitres>(
+            RequeteLignes + "WHERE t.[Date] <= @date ORDER BY t.[Date] ASC, t.Id ASC, tl.Id ASC",
+            new { date });
+
+        var lots = CalculerLots(lignes);
+
+        return lots
+            .SelectMany(cleEtListe => cleEtListe.Value.Select(lot =>
+            {
+                var (cibleId, categorie, detenteurId, detenteurNomExterne, compteId) = cleEtListe.Key;
+                return new Titre(
+                    Guid.NewGuid(), cibleId, categorie, detenteurId, detenteurNomExterne, compteId,
+                    lot.Quantite, lot.PrixInitial, lot.PrixAcquisition, lot.DateAcquisition, lot.TransactionOrigineId);
+            }))
+            .ToList();
     }
 }

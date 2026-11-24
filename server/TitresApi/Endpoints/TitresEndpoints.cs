@@ -15,11 +15,22 @@ static class TitresEndpoints
     {
         string ConnectionString() => app.Configuration.ChaineConnexionTitres();
 
-        app.MapGet("/api/titres/actions", async () =>
+        // date (optionnel, "yyyy-MM-dd") : au lieu de l'état actuel de
+        // dbo.Actions, reconstitue l'état des lots tel qu'il aurait été à
+        // cette date (voir TitresLotsService.ObtenirLotsADate) — un calcul "à
+        // blanc", jamais écrit en base, pour la consultation historique
+        // (écran Actionnariat, "Détail par Compte" à une date de référence).
+        app.MapGet("/api/titres/actions", async (string? date) =>
         {
             await using var conn = new SqlConnection(ConnectionString());
-            var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.Actions ORDER BY DateAcquisition DESC");
-            return Results.Ok(titres);
+            if (string.IsNullOrWhiteSpace(date))
+            {
+                var titres = await conn.QueryAsync<Titre>($"SELECT {ColonnesTitre} FROM dbo.Actions ORDER BY DateAcquisition DESC");
+                return Results.Ok(titres);
+            }
+
+            var titresADate = await TitresLotsService.ObtenirLotsADate(conn, date);
+            return Results.Ok(titresADate.OrderByDescending(t => t.DateAcquisition));
         });
     }
 }

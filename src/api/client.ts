@@ -178,9 +178,12 @@ export function supprimerTransaction(id: string): Promise<void> {
 
 // Lecture seule : cette table est alimentée automatiquement par l'API à
 // chaque transaction, jamais saisie à la main — pas de POST/PUT/DELETE
-// côté client.
-export function fetchActions(): Promise<Titre[]> {
-  return request("/titres/actions");
+// côté client. date (optionnel, "yyyy-MM-dd") : reconstitue l'état des lots
+// tel qu'il aurait été à cette date (calcul à la volée côté serveur, jamais
+// écrit en base — voir TitresLotsService.ObtenirLotsADate) plutôt que
+// l'état actuel ; omis, renvoie l'état actuel (dbo.Actions tel quel).
+export function fetchActions(date?: string): Promise<Titre[]> {
+  return request(date ? `/titres/actions?date=${encodeURIComponent(date)}` : "/titres/actions");
 }
 
 /** Cours de clôture de la veille pour une liste de codes mnémoniques (Yahoo Finance, voir CoursService côté serveur). */

@@ -1,6 +1,7 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import * as api from "../../api/client";
 import type { Compte, HistoriqueTotalSociete, Societe, Titre, Transaction, TypeTitre } from "../../types";
-import { formatNombreActions, formatPourcentage } from "../../utils/format";
+import { formatDate, formatNombreActions, formatPourcentage } from "../../utils/format";
 import {
   calculerCheminsParticipation,
   calculerParticipationsDetaillees,
@@ -184,6 +185,48 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
   );
   const [afficherDetail, setAfficherDetail] = useState(false);
   const [afficherDetailComptes, setAfficherDetailComptes] = useState(false);
+  // Les lots (titres) reçus en prop reflètent toujours la situation
+  // actuelle (dbo.Actions) : pour une dateReference autre qu'aujourd'hui, le
+  // "Détail par Compte" doit reconstituer l'état historique des lots à
+  // cette date (voir TitresLotsService.ObtenirLotsADate côté serveur, un
+  // calcul à la volée, jamais écrit en base) — null tant qu'aucune
+  // reconstitution n'est nécessaire (date du jour, ou détail masqué),
+  // auquel cas on réutilise directement `titres`.
+  const [titresADate, setTitresADate] = useState<Titre[] | null>(null);
+  const [chargementTitresADate, setChargementTitresADate] = useState(false);
+  const [erreurTitresADate, setErreurTitresADate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!afficherDetailComptes || dateReference === aujourdHui()) {
+      setTitresADate(null);
+      setChargementTitresADate(false);
+      setErreurTitresADate(null);
+      return;
+    }
+    let annule = false;
+    setChargementTitresADate(true);
+    setTitresADate(null);
+    setErreurTitresADate(null);
+    api
+      .fetchActions(dateReference)
+      .then((t) => {
+        if (annule) return;
+        setTitresADate(t);
+      })
+      .catch(() => {
+        if (annule) return;
+        setTitresADate([]);
+        setErreurTitresADate("Impossible de reconstituer la situation des lots à cette date.");
+      })
+      .finally(() => {
+        if (!annule) setChargementTitresADate(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, [afficherDetailComptes, dateReference]);
+
+  const titresPourDetail = titresADate ?? titres;
 
   function basculerMetrique(metrique: Metrique) {
     setMetriquesVisibles((prev) => {
@@ -361,13 +404,13 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
           </label>
         </div>
         <div className="form-field-checkbox">
-          <label title="Reflète toujours l'état actuel des lots de titres, quelle que soit la date de référence choisie ci-dessus — aucune reconstitution historique disponible pour ce détail.">
+          <label title="À une date de référence passée, reconstitue l'état des lots tel qu'il aurait été à cette date (calcul à la volée, jamais écrit en base).">
             <input
               type="checkbox"
               checked={afficherDetailComptes}
               onChange={(e) => setAfficherDetailComptes(e.target.checked)}
             />
-            Détail par Compte (toujours à la situation actuelle)
+            Détail par Compte
           </label>
         </div>
       </div>
@@ -510,18 +553,36 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
                   )}
                   {afficherDetailComptes &&
                     (() => {
+                      const colSpanDetail = 2 + groupesAffiches.reduce((s, g) => s + colonnesPourGroupe(g, afficherDetail), 0);
+                      if (chargementTitresADate) {
+                        return (
+                          <tr>
+                            <td className="chemins-cellule" colSpan={colSpanDetail}>
+                              <p className="chemins-titre">
+                                Reconstitution de la situation des lots au {formatDate(dateReference)}…
+                              </p>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      if (erreurTitresADate) {
+                        return (
+                          <tr>
+                            <td className="chemins-cellule" colSpan={colSpanDetail}>
+                              <p className="chemins-titre form-error">{erreurTitresADate}</p>
+                            </td>
+                          </tr>
+                        );
+                      }
                       const { lignes: lignesComptes, quantiteSansCompte } = detailParCompte(
-                        titres,
+                        titresPourDetail,
                         comptes,
                         p.acheteurId,
                         p.cibleId,
                       );
                       return (
                         <tr>
-                          <td
-                            className="chemins-cellule"
-                            colSpan={2 + groupesAffiches.reduce((s, g) => s + colonnesPourGroupe(g, afficherDetail), 0)}
-                          >
+                          <td className="chemins-cellule" colSpan={colSpanDetail}>
                             {lignesComptes.length === 0 && quantiteSansCompte === 0 && (
                               <p className="chemins-titre">
                                 Aucun Compte de {nomDe(p.acheteurId)} ne détient de titres {nomDe(p.cibleId)}{" "}
