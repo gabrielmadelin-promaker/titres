@@ -46,14 +46,13 @@ interface CompteSelectProps {
  * création manuelle ici : un compte se choisit parmi les existants, ou se
  * laisse vide ("Auto") pour être trouvé ou créé automatiquement par l'API
  * à l'enregistrement. L'option "+ Nouveau compte" prévisualise le nom qui
- * serait généré ("Détenteur - Société émettrice - Catégorie - Numéro",
- * même numérotation que ResoudreCompte côté backend : rang suivant parmi
- * les comptes déjà existants pour ce détenteur et cette société, toutes
- * Catégories confondues) — un aperçu, pas une réservation : le numéro réel
- * est recalculé à l'enregistrement, sauf si un numéro personnalisé est
- * saisi dans le champ qui apparaît alors juste en dessous (seul ce segment
- * final est personnalisable, jamais le reste du nom), voir
- * ComptesService.ResoudreCompte côté serveur. Un détenteur hors groupe (ou
+ * serait généré ("Détenteur - Société émettrice - Catégorie - Numéro") : le
+ * numéro n'est connu qu'à l'enregistrement (auto-généré par
+ * ComptesService.ResoudreCompte côté backend, sauf numéro personnalisé —
+ * seul ce segment final est modifiable ici, jamais le reste du nom), donc
+ * affiché "à définir" tant que rien n'est saisi dans le champ qui apparaît
+ * juste en dessous, pour ne jamais laisser croire qu'il est déjà déterminé.
+ * Un détenteur hors groupe (ou
  * non renseigné, detenteurId null) n'a jamais de compte ni de lot suivi —
  * même règle que ComptesService.ResoudreCompte/TitresLotsService côté
  * serveur : le sélecteur n'apparaît alors pas du tout.
@@ -90,10 +89,13 @@ function CompteSelect({
       (c.societeEmettriceId === null || c.societeEmettriceId === societeEmettriceId) &&
       (c.type === null || c.type === categorieNormalisee),
   );
-  // Même règle de numérotation que ComptesService.ResoudreCompte côté backend :
-  // compte toutes les Catégories pour ce détenteur et cette société exacte.
-  const rangProchainCompte = comptes.filter((c) => memeDetenteur(c) && c.societeEmettriceId === societeEmettriceId).length + 1;
-  const nomNouveauCompte = `${nomDetenteur ?? "(détenteur)"} - ${nomSociete ?? "(société cible)"} - ${categorieNormalisee ?? "Non catégorisé"} - ${rangProchainCompte}`;
+  // Le numéro réel (auto-généré par défaut, ou personnalisé ici) n'est
+  // connu qu'à l'enregistrement (voir ComptesService.ResoudreCompte côté
+  // backend) : tant qu'aucun numéro personnalisé n'est saisi, afficher une
+  // valeur devinée (ex. un rang) donnerait l'impression à tort que ce
+  // numéro est déjà déterminé.
+  const segmentNumero = numeroPersonnalise.trim() || "à définir";
+  const nomNouveauCompte = `${nomDetenteur ?? "(détenteur)"} - ${nomSociete ?? "(société cible)"} - ${categorieNormalisee ?? "Non catégorisé"} - ${segmentNumero}`;
 
   return (
     <div className="form-field">
@@ -112,7 +114,7 @@ function CompteSelect({
           maxLength={LONGUEUR_MAX_NUMERO_COMPTE}
           value={numeroPersonnalise}
           onChange={(e) => onChangeNumeroPersonnalise(e.target.value)}
-          placeholder={`Numéro (${rangProchainCompte})`}
+          placeholder="Numéro (à définir)"
           aria-label={`Numéro personnalisé du nouveau compte ${label}`}
         />
       )}
