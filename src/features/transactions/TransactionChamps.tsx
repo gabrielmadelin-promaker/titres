@@ -1,5 +1,6 @@
 import type { Compte, HistoriqueTotalSociete, Societe, Titre, TypeTitre } from "../../types";
 import { DEVISES } from "../../utils/devises";
+import { ignorerMolette } from "../../utils/dom";
 import { formatMontant, formatPourcentage } from "../../utils/format";
 import { apercuPourcentageDroitVoteExercable, apercuPourcentageDroitVoteTheorique } from "../../utils/participations";
 import { apercuPlusValue } from "../../utils/plusValuePreview";
@@ -185,6 +186,7 @@ export function TransactionChampsFields({ champs, onChange, societes, types, com
           type="date"
           value={champs.date}
           onChange={(e) => set("date", e.target.value)}
+          onWheel={ignorerMolette}
           required
         />
       </div>

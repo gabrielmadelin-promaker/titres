@@ -192,11 +192,31 @@ function LigneEdition({ compte, societesTriees, types, onSave, onCancel }: Ligne
 export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: Props) {
   const [tri, setTri] = useState<EtatTri<Colonne>>({ colonne: "detenteur", sens: "asc" });
   const [ligneEditee, setLigneEditee] = useState<string | null>(null);
+  const [filtreDetenteur, setFiltreDetenteur] = useState("");
+  const [filtreSocieteEmettriceId, setFiltreSocieteEmettriceId] = useState("");
+  const [filtreType, setFiltreType] = useState("");
+  const [filtreNom, setFiltreNom] = useState("");
+  const [filtreNumero, setFiltreNumero] = useState("");
 
   const societesTriees = useMemo(() => [...societes].sort((a, b) => a.nom.localeCompare(b.nom, "fr")), [societes]);
   const nomParId = useMemo(() => new Map(societes.map((s) => [s.id, s.nom])), [societes]);
   const nomDetenteur = (c: Compte) => (c.detenteurId ? (nomParId.get(c.detenteurId) ?? "(supprimée)") : (c.detenteurNomExterne ?? ""));
   const nomSocieteEmettrice = (c: Compte) => (c.societeEmettriceId ? (nomParId.get(c.societeEmettriceId) ?? "(supprimée)") : "—");
+  const contient = (texte: string, recherche: string) => texte.toLowerCase().includes(recherche.trim().toLowerCase());
+
+  const filtrees = useMemo(
+    () =>
+      comptes.filter(
+        (c) =>
+          (!filtreDetenteur || contient(nomDetenteur(c), filtreDetenteur)) &&
+          (!filtreSocieteEmettriceId || c.societeEmettriceId === filtreSocieteEmettriceId) &&
+          (!filtreType || contient(c.type ?? "", filtreType)) &&
+          (!filtreNom || contient(c.nom, filtreNom)) &&
+          (!filtreNumero || contient(c.numero ?? "", filtreNumero)),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [comptes, filtreDetenteur, filtreSocieteEmettriceId, filtreType, filtreNom, filtreNumero, nomParId],
+  );
 
   const triees = useMemo(() => {
     const facteur = tri.sens === "asc" ? 1 : -1;
@@ -214,9 +234,9 @@ export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: P
           return c.numero ?? "";
       }
     };
-    return [...comptes].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
+    return [...filtrees].sort((a, b) => facteur * comparerValeurs(cle(a), cle(b)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comptes, tri, nomParId]);
+  }, [filtrees, tri, nomParId]);
 
   if (comptes.length === 0) {
     return (
@@ -229,8 +249,68 @@ export function ComptesPanel({ societes, comptes, types, onUpdate, onDelete }: P
 
   return (
     <div>
+      <div className="table-toolbar">
+        <div className="table-filters">
+          <div className="form-field">
+            <label htmlFor="comptes-filtre-detenteur">Détenteur</label>
+            <input
+              id="comptes-filtre-detenteur"
+              type="text"
+              value={filtreDetenteur}
+              onChange={(e) => setFiltreDetenteur(e.target.value)}
+              placeholder="Rechercher..."
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="comptes-filtre-societe">Société émettrice</label>
+            <select
+              id="comptes-filtre-societe"
+              value={filtreSocieteEmettriceId}
+              onChange={(e) => setFiltreSocieteEmettriceId(e.target.value)}
+            >
+              <option value="">Toutes</option>
+              {societesTriees.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label htmlFor="comptes-filtre-type">Catégorie</label>
+            <input
+              id="comptes-filtre-type"
+              type="text"
+              value={filtreType}
+              onChange={(e) => setFiltreType(e.target.value)}
+              placeholder="Rechercher..."
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="comptes-filtre-nom">Nom du compte</label>
+            <input
+              id="comptes-filtre-nom"
+              type="text"
+              value={filtreNom}
+              onChange={(e) => setFiltreNom(e.target.value)}
+              placeholder="Rechercher..."
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="comptes-filtre-numero">Numéro</label>
+            <input
+              id="comptes-filtre-numero"
+              type="text"
+              value={filtreNumero}
+              onChange={(e) => setFiltreNumero(e.target.value)}
+              placeholder="Rechercher..."
+            />
+          </div>
+        </div>
+      </div>
+
       {triees.length === 0 ? (
-        <p className="empty">Aucun compte pour le moment.</p>
+        <p className="empty">Aucun compte ne correspond à ce filtre.</p>
       ) : (
         <div className="table-scroll">
           <table className="table">

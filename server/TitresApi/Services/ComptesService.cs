@@ -45,9 +45,10 @@ static class ComptesService
     // TitresLotsService, même règle côté lots.
     // numeroPersonnalise : numéro à donner au nouveau compte s'il doit
     // effectivement en être créé un (ignoré dans tous les autres cas — compte
-    // existant réutilisé, ou compteIdSaisi fourni) ; vide ou non fourni, le
-    // numéro auto-généré habituel (n+1) est utilisé. Au plus LongueurMaxNumero
-    // caractères (voir dbo.Comptes.Numero) — le reste du nom n'est lui jamais
+    // existant réutilisé, ou compteIdSaisi fourni) ; obligatoire dans ce cas
+    // (erreur si vide — l'utilisateur doit toujours choisir lui-même ce
+    // numéro, jamais de valeur devinée), au plus LongueurMaxNumero caractères
+    // (voir dbo.Comptes.Numero) — le reste du nom n'est lui jamais
     // personnalisable.
     public static async Task<(string? Erreur, Guid? CompteId)> ResoudreCompte(
         SqlConnection conn, IDbTransaction tx, Guid? compteIdSaisi,
@@ -86,16 +87,10 @@ static class ComptesService
             return ($"Plusieurs comptes existent déjà pour le {role} sur cette société et cette Catégorie : choisissez-en un explicitement.", null);
 
         var numero = numeroPersonnalise?.Trim();
-        if (numero is { Length: > LongueurMaxNumero })
+        if (string.IsNullOrEmpty(numero))
+            return ($"Un numéro est requis pour créer le nouveau compte ({role}).", null);
+        if (numero.Length > LongueurMaxNumero)
             return ($"Le numéro de compte du {role} ne peut pas dépasser {LongueurMaxNumero} caractères.", null);
-
-        var n = await conn.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM dbo.Comptes WHERE " +
-            "((@detenteurId IS NOT NULL AND DetenteurId = @detenteurId) OR (@detenteurId IS NULL AND DetenteurNomExterne = @detenteurNomExterne)) " +
-            "AND SocieteEmettriceId = @societeId",
-            new { detenteurId, detenteurNomExterne, societeId }, tx);
-        if (string.IsNullOrWhiteSpace(numero))
-            numero = (n + 1).ToString();
 
         // Le détenteur est forcément une Société suivie à ce stade (un tiers
         // hors groupe est déjà écarté plus haut) : son nom n'est jamais passé

@@ -18,9 +18,11 @@ interface Props {
  * la société est sa propre détentrice pour chaque Catégorie émise (voir
  * ComptesService.AssurerComptesParType), un Compte est donc assuré pour
  * chacune ; ce champ n'a d'effet que si ce Compte doit effectivement être
- * créé (ignoré s'il existe déjà), et laisse le numéro auto-généré habituel
- * (n+1) si vide. Partagé entre SocieteForm (totaux à la création) et
- * HistoriqueTotauxPanel (totaux par date d'effet).
+ * créé (ignoré s'il existe déjà), mais reste obligatoire sur chaque ligne
+ * (le formulaire ne sait pas d'avance si le Compte existe déjà ou sera créé
+ * — voir ComptesService.ResoudreCompte côté backend, qui refuse de toute
+ * façon un numéro vide à la création). Partagé entre SocieteForm (totaux à
+ * la création) et HistoriqueTotauxPanel (totaux par date d'effet).
  */
 export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Props) {
   // Même exclusion que le total utilisé comme dénominateur du % Capital
@@ -83,9 +85,10 @@ export function ActionsParTypeEditor({ lignes, onChange, types, idPrefix }: Prop
             maxLength={LONGUEUR_MAX_NUMERO_COMPTE}
             value={ligne.numero ?? ""}
             onChange={(e) => modifierLigne(i, { numero: e.target.value || null })}
-            placeholder="Numéro de compte (optionnel)"
+            placeholder="Numéro de compte"
             aria-label={`Numéro de compte de la ligne ${i + 1}`}
-            title="Numéro du Compte de la société émettrice pour cette Catégorie, s'il doit être créé (ignoré s'il existe déjà)."
+            title="Numéro du Compte de la société émettrice pour cette Catégorie, s'il doit être créé (ignoré s'il existe déjà) — obligatoire."
+            required
           />
           <button type="button" className="btn btn-secondary btn-small" onClick={() => retirerLigne(i)} aria-label="Retirer cette ligne">
             ×

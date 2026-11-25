@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../../types";
 import { DEVISE_PAR_DEFAUT, DEVISES } from "../../utils/devises";
+import { ignorerMolette } from "../../utils/dom";
 import { PAYS } from "../../utils/pays";
 import { ActionsParTypeEditor } from "../totaux/ActionsParTypeEditor";
 
@@ -156,6 +157,7 @@ export function SocieteForm({ onAdd, onAddHistoriqueTotal, types, onSuccess }: P
           type="date"
           value={dateEffetTotaux}
           onChange={(e) => setDateEffetTotaux(e.target.value)}
+          onWheel={ignorerMolette}
         />
       </div>
 

@@ -46,12 +46,12 @@ interface CompteSelectProps {
  * création manuelle ici : un compte se choisit parmi les existants, ou se
  * laisse vide ("Auto") pour être trouvé ou créé automatiquement par l'API
  * à l'enregistrement. L'option "+ Nouveau compte" prévisualise le nom qui
- * serait généré ("Détenteur - Société émettrice - Catégorie - Numéro") : le
- * numéro n'est connu qu'à l'enregistrement (auto-généré par
- * ComptesService.ResoudreCompte côté backend, sauf numéro personnalisé —
- * seul ce segment final est modifiable ici, jamais le reste du nom), donc
- * affiché "à définir" tant que rien n'est saisi dans le champ qui apparaît
- * juste en dessous, pour ne jamais laisser croire qu'il est déjà déterminé.
+ * serait généré ("Détenteur - Société émettrice - Catégorie - Numéro") : seul
+ * le numéro est personnalisable ici (jamais le reste du nom), obligatoire
+ * dès que cette option est choisie (voir ComptesService.ResoudreCompte côté
+ * backend, qui refuse aussi un numéro vide) — affiché "à définir" tant que
+ * rien n'est saisi dans le champ qui apparaît juste en dessous, pour ne
+ * jamais laisser croire qu'il est déjà déterminé.
  * Un détenteur hors groupe (ou
  * non renseigné, detenteurId null) n'a jamais de compte ni de lot suivi —
  * même règle que ComptesService.ResoudreCompte/TitresLotsService côté
@@ -114,8 +114,9 @@ function CompteSelect({
           maxLength={LONGUEUR_MAX_NUMERO_COMPTE}
           value={numeroPersonnalise}
           onChange={(e) => onChangeNumeroPersonnalise(e.target.value)}
-          placeholder="Numéro (à définir)"
+          placeholder="Numéro (obligatoire)"
           aria-label={`Numéro personnalisé du nouveau compte ${label}`}
+          required
         />
       )}
     </div>

@@ -480,7 +480,7 @@ function App() {
                 <button type="button" className="btn btn-primary" onClick={() => setModaleTransactionOuverte(true)}>
                   + Ajouter une transaction
                 </button>
-                <ImportTransactions societes={societes} onImport={importerTransactions} />
+                <ImportTransactions societes={societes} comptes={comptes} onImport={importerTransactions} />
               </div>
               <Modal
                 title="Ajouter une transaction"

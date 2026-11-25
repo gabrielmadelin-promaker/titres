@@ -128,9 +128,9 @@ record LigneTransaction(Guid Id, string? Categorie, decimal NombreActions, Guid?
 // NumeroCompteAcheteur/NumeroCompteVendeur : numéro à donner au compte s'il
 // doit être créé pour ce camp (ignoré si CompteXId est renseigné, ou si le
 // compte existe déjà pour ce détenteur/société/Catégorie) — voir
-// ComptesService.ResoudreCompte. Laissé vide, le numéro auto-généré
-// habituel (n+1) est utilisé ; le reste du nom ("Détenteur - Société
-// émettrice - Catégorie - ") n'est jamais personnalisable ici.
+// ComptesService.ResoudreCompte, qui refuse une création avec un numéro
+// vide ; le reste du nom ("Détenteur - Société émettrice - Catégorie - ")
+// n'est lui jamais personnalisable ici.
 record LigneTransactionInput(
     string? Categorie, decimal? NombreActions, Guid? CompteAcheteurId, Guid? CompteVendeurId,
     string? NumeroCompteAcheteur = null, string? NumeroCompteVendeur = null);

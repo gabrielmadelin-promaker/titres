@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import type { HistoriqueTotalSociete, LigneActionsParType, Societe, TypeTitre } from "../../types";
 import { DEVISE_PAR_DEFAUT, DEVISES } from "../../utils/devises";
+import { ignorerMolette } from "../../utils/dom";
 import { formatDate, formatDecimal, formatNombreActions } from "../../utils/format";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
 import { exporterXlsx } from "../../utils/xlsxExport";
@@ -93,7 +94,13 @@ function ChampsFormulaire({
       )}
       <div className="form-field">
         <label>Date d'effet</label>
-        <input type="date" value={dateEffet} onChange={(e) => setDateEffet(e.target.value)} required />
+        <input
+          type="date"
+          value={dateEffet}
+          onChange={(e) => setDateEffet(e.target.value)}
+          onWheel={ignorerMolette}
+          required
+        />
       </div>
       <div className="form-field">
         <label>Devise de la valeur nominale</label>

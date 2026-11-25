@@ -1,17 +1,19 @@
 import { useState } from "react";
-import type { Societe, Transaction } from "../../types";
+import type { Compte, Societe, Transaction } from "../../types";
 import { DEVISE_PAR_DEFAUT } from "../../utils/devises";
 import { dateExcelVersIso, lireFeuilleXlsx, nombreColonne, texteColonne, valeurColonne } from "../../utils/xlsxImport";
 
 interface Props {
   societes: Societe[];
+  /** Pour générer un numéro de compte automatique (voir générerNumero) si un nouveau compte doit être créé. */
+  comptes: Compte[];
   onImport: (
     transactions: Omit<Transaction, "id">[],
   ) => Promise<{ ajoutees: number; erreurs: string[] }>;
 }
 
 /** Bouton d'import en masse de transactions depuis un fichier .xlsx. */
-export function ImportTransactions({ societes, onImport }: Props) {
+export function ImportTransactions({ societes, comptes, onImport }: Props) {
   const [enCours, setEnCours] = useState(false);
   const [resultat, setResultat] = useState<string | null>(null);
   const [erreurs, setErreurs] = useState<string[]>([]);
@@ -34,6 +36,24 @@ export function ImportTransactions({ societes, onImport }: Props) {
       const lignes = await lireFeuilleXlsx(fichier);
       const valides: Omit<Transaction, "id">[] = [];
       const lignesErreurs: string[] = [];
+
+      // Le fichier importé ne porte pas de colonne "Numéro de compte" (requis
+      // à la création manuelle, voir TransactionLignesEditor) : pour ne pas
+      // bloquer l'import en masse, on génère ici le même numéro
+      // auto-incrémenté qu'avant que ce champ ne devienne obligatoire côté
+      // saisie manuelle (le rang du compte parmi ceux déjà existants pour ce
+      // détenteur et cette société) — incrémenté localement (propre à cet
+      // import) pour rester correct même si plusieurs lignes de CE fichier
+      // créent chacune un nouveau compte pour le même détenteur/société.
+      const rangsGeneres = new Map<string, number>();
+      function genererNumero(detenteurId: string, societeId: string): string {
+        const cle = `${detenteurId}|${societeId}`;
+        const rang =
+          rangsGeneres.get(cle) ??
+          comptes.filter((c) => c.detenteurId === detenteurId && c.societeEmettriceId === societeId).length;
+        rangsGeneres.set(cle, rang + 1);
+        return String(rang + 1);
+      }
 
       lignes.forEach((ligne, i) => {
         const numeroLigne = i + 2;
@@ -121,6 +141,11 @@ export function ImportTransactions({ societes, onImport }: Props) {
               nombreActions,
               compteAcheteurId: null,
               compteVendeurId: null,
+              // Pas de colonne dédiée dans le fichier : numéro auto-généré si
+              // un nouveau compte doit être créé (voir genererNumero), ignoré
+              // sinon (compte déjà existant réutilisé).
+              numeroCompteAcheteur: acheteur ? genererNumero(acheteur.id, cible.id) : null,
+              numeroCompteVendeur: vendeur ? genererNumero(vendeur.id, cible.id) : null,
               // Calculée côté API, jamais importée.
               plusValue: null,
             },

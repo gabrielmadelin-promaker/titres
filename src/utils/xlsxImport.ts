@@ -37,17 +37,6 @@ export function nombreColonne(ligne: RowObject, ...nomsPossibles: string[]): num
   return Number.isNaN(n) ? null : n;
 }
 
-const VALEURS_VRAIES = new Set(["oui", "yes", "true", "vrai", "1", "x"]);
-
-/** Interprète une colonne booléenne texte/numérique/case Excel ("Oui", "1", "x", TRUE...). */
-export function booleenColonne(ligne: RowObject, ...nomsPossibles: string[]): boolean {
-  const valeur = valeurColonne(ligne, ...nomsPossibles);
-  if (typeof valeur === "boolean") return valeur;
-  if (typeof valeur === "number") return valeur !== 0;
-  if (typeof valeur === "string") return VALEURS_VRAIES.has(valeur.trim().toLowerCase());
-  return false;
-}
-
 /** Convertit une date Excel (objet Date, texte ISO ou jj/mm/aaaa) en chaîne ISO yyyy-mm-dd. */
 export function dateExcelVersIso(valeur: unknown): string | null {
   if (valeur instanceof Date) {

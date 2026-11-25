@@ -9,6 +9,7 @@ import {
   type ParticipationDetaillee,
 } from "../../utils/participations";
 import { basculerTri, comparerValeurs, flecheTri, type EtatTri } from "../../utils/tri";
+import { ignorerMolette } from "../../utils/dom";
 import { exporterXlsx } from "../../utils/xlsxExport";
 
 interface Props {
@@ -367,6 +368,7 @@ export function ParticipationsTable({ societes, historiqueTotaux, transactions, 
               type="date"
               value={dateReference}
               onChange={(e) => setDateReference(e.target.value)}
+              onWheel={ignorerMolette}
               title="Seules les transactions à cette date ou avant sont prises en compte, chacune rapportée au total émis en vigueur à sa propre date."
             />
           </div>
